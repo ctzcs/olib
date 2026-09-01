@@ -1,6 +1,6 @@
 # tween
 
-`tlib/tween` 现在包含三层能力：
+`olib/tween` 现在包含三层能力：
 
 - 基础补间：单条 `Tween(T)` 的插值、delay、loop、pingpong
 - 运行时管理：`Tween_Manager` 统一驱动、暂停、重播、回收
@@ -402,7 +402,7 @@ _ = sequence_append_callback(&mgr, seq, on_done)
 ```odin
 package demo
 
-import tween "tlib:tween"
+import tween "olib:tween"
 
 value_a: f32
 value_b: f32

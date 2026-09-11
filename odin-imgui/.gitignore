@@ -1,4 +1,6 @@
 # Artefacts from building and running examples
+examples/*/build/
+
 examples/*.exe
 examples/*.bin
 examples/*.dll

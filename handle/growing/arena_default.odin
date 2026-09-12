@@ -1,5 +1,5 @@
 #+build !js
-package handle_map_growing
+package growing
 
 import vmem "core:mem/virtual"
 import "base:runtime"

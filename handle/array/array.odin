@@ -1,5 +1,5 @@
 ///可扩容的句柄数组
-package handle_array
+package array
 
 import "base:builtin"
 import "base:runtime"
@@ -28,7 +28,7 @@ Iterator :: struct($T: typeid, $HT: typeid) {
 HANDLE_NONE :: Handle {}
 
 
-add :: proc(ha: ^Pool($T, $HT), v: T) -> HT {
+add :: proc(ha: ^Pool($T, $HT), v: T) -> (res: HT, err: runtime.Allocator_Error) #optional_allocator_error {
     v := v
 
     if builtin.len(ha.freelist) > 0 {
@@ -37,11 +37,19 @@ add :: proc(ha: ^Pool($T, $HT), v: T) -> HT {
         ha.slots[h.idx].value  = v
         ha.slots[h.idx].handle = h
         ha.num += 1
-        return h
+        return h, nil
     }
 
+    needed := max(builtin.len(ha.slots), 1) + 1
+    // Reserve before publishing a slot, so remove and clear never allocate.
+    if builtin.cap(ha.freelist) < needed - 1 {
+        reserve(&ha.freelist, max(needed - 1, 2 * builtin.cap(ha.freelist), 8)) or_return
+    }
+    if builtin.cap(ha.slots) < needed {
+        reserve(&ha.slots, max(needed, 2 * builtin.cap(ha.slots), 8)) or_return
+    }
     if builtin.len(ha.slots) == 0 {
-        append_nothing(&ha.slots) // 0 索引为 dummy
+        append_nothing(&ha.slots) or_return // 0 索引为 dummy
     }
 
     idx: u32 = u32(builtin.len(ha.slots))
@@ -49,9 +57,9 @@ add :: proc(ha: ^Pool($T, $HT), v: T) -> HT {
     h.idx = idx
     h.gen = 1
 
-    append(&ha.slots, Slot(T, HT){ value = v, handle = h })
+    append(&ha.slots, Slot(T, HT){ value = v, handle = h }) or_return
     ha.num += 1
-    return h
+    return h, nil
 }
 
 remove :: proc {
@@ -76,6 +84,32 @@ remove_with_destroy :: proc(ha: ^Pool($T, $HT), h: HT, destroy: proc(value: ^T))
     }
 }
 
+// Removes all live values while retaining slots and generation history.
+// Subsequent adds reuse free slots; old handles stay invalid until generation
+// wraparound. Neither the freelist nor the slot array allocates during clear.
+// The destroy callback must not structurally mutate this pool.
+clear :: proc {
+	clear_without_destroy,
+	clear_with_destroy,
+}
+
+@(private)
+clear_without_destroy :: proc(ha: ^Pool($T, $HT)) {
+	clear_with_destroy(ha, nil)
+}
+
+@(private)
+clear_with_destroy :: proc(ha: ^Pool($T, $HT), destroy: proc(value: ^T)) {
+    // Existing free slots already carry their generation in the freelist.
+    // Only append live slots, so repeated clears cannot duplicate entries.
+    for i := 1; i < builtin.len(ha.slots); i += 1 {
+        h := ha.slots[i].handle
+        if h.idx != 0 {
+            remove_with_destroy(ha, h, destroy)
+        }
+    }
+}
+
 // Resets the container for a new lifecycle while retaining allocated capacity.
 // All previously returned handles must be discarded.
 reset :: proc {
@@ -97,8 +131,8 @@ reset_with_destroy :: proc(ha: ^Pool($T, $HT), destroy: proc(value: ^T)) {
             }
         }
     }
-    clear(&ha.slots)
-    clear(&ha.freelist)
+    runtime.clear(&ha.slots)
+    runtime.clear(&ha.freelist)
     ha.num = 0
 }
 

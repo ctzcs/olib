@@ -50,7 +50,7 @@ tex, err := asset.assets_load_path(&m, "textures/belt.png")   // 先查 manifest
 foster.BatcherQuadTexture(&batcher, asset.assets_get_texture(&m, tex), …)
 ```
 
-Asset_Handle 带 `handle_array` 代数，不依赖 ECS，任何 struct 里放一个即可引用资产。
+Asset_Handle 带 `array` 代数，不依赖 ECS，任何 struct 里放一个即可引用资产。
 
 ## manifest：打包零改动
 

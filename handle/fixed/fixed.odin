@@ -46,7 +46,7 @@ Example (assumes this package is imported under the alias `hm`):
 		e.pos += { 5, 1 }
 	}
 */
-package handle_map_fixed
+package fixed
 
 import "base:intrinsics"
 import "base:builtin"
@@ -90,15 +90,16 @@ Pool :: struct($T: typeid, $HT: typeid, $N: int) {
 	num_unused: u32,
 }
 
-// Clears the handle map using `mem_zero`. It doesn't do `m^ = {}` because that
-// may blow the stack for a handle map with very big `N`
-reset :: proc(m: ^Pool($T, $HT, $N)) {
-	intrinsics.mem_zero(m, size_of(m^))
+// Starts a new lifecycle: discard all old handles. Uses mem_zero to avoid
+// a large stack temporary for inline storage. Optionally destroys live values.
+reset :: proc(m: ^Pool($T, $HT, $N), destroy: proc(value: ^T) = nil) {
+    clear(m, destroy)
+    intrinsics.mem_zero(m, size_of(m^))
 }
 
 // Fixed pools own no heap allocations, so deleting one is equivalent to reset.
-delete :: proc(m: ^Pool($T, $HT, $N)) {
-	reset(m)
+delete :: proc(m: ^Pool($T, $HT, $N), destroy: proc(value: ^T) = nil) {
+    reset(m, destroy)
 }
 
 // Add a value of type `T` to the handle map. Returns a handle you can use as a
@@ -159,21 +160,19 @@ get :: proc(m: ^Pool($T, $HT, $N), h: HT) -> ^T {
 	return nil
 }
 
-// Remove an item from the handle map. You choose which item by passing a handle
-// to this proc. The item is not really destroyed, rather its index is just
-// set on `m.next_unused`. Also, the item's `handle.idx` is set to zero, this
-// is used by the `next` proc in order to skip that item when iterating.
-remove :: proc(m: ^Pool($T, $HT, $N), h: HT) {
-	if h.idx <= 0 || h.idx >= m.num_items {
-		return
-	}
-
-	if item := &m.items[h.idx]; item.handle == h {
-		m.unused_items[h.idx] = m.next_unused
-		m.next_unused = h.idx
-		m.num_unused += 1
-		item.handle.idx = 0
-	}
+// Removes a live value, optionally destroying its resources, and retains its
+// generation for reuse. The callback must not structurally mutate this pool.
+remove :: proc(m: ^Pool($T, $HT, $N), h: HT, destroy: proc(value: ^T) = nil) {
+    item := get(m, h)
+    if item == nil { return }
+    // Save generation before the callback, which may zero the entire value.
+    gen := h.gen
+    if destroy != nil { destroy(item) }
+    m.unused_items[h.idx] = m.next_unused
+    m.next_unused = h.idx
+    m.num_unused += 1
+    item^ = {}
+    item.handle.gen = gen
 }
 
 // Tells you if a handle maps to a valid item. This is done by checking if the
@@ -237,4 +236,19 @@ next :: proc(it: ^Iterator($T, $HT, $N)) -> (val: ^T, h: HT, cond: bool) {
 // }
 skip :: proc(e: $T) -> bool {
 	return e.handle.idx == 0
+}
+
+// Returns a value copy and whether the handle was valid.
+get_value :: proc(m: ^Pool($T, $HT, $N), h: HT) -> (value: T, ok: bool) {
+    if item := get(m, h); item != nil { return item^, true }
+    return {}, false
+}
+
+// Retains slots and generations. Old handles stay invalid until generation
+// wraparound. Callbacks must not structurally mutate this pool.
+clear :: proc(m: ^Pool($T, $HT, $N), destroy: proc(value: ^T) = nil) {
+    for i := 1; i < int(m.num_items); i += 1 {
+        item := &m.items[i]
+        if item.handle.idx != 0 { remove(m, item.handle, destroy) }
+    }
 }

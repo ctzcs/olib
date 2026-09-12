@@ -1,6 +1,6 @@
 package tween
 
-import ha "olib:handle/handle_array"
+import ha "olib:handle/array"
 
 // 对外暴露的节点句柄。
 // 使用 distinct 与其他系统的 Handle 做类型隔离。
@@ -255,7 +255,7 @@ manager_remove_node :: proc(manager: ^Tween_Manager, handle: Tween_Handle) -> bo
 }
 
 manager_reset :: proc(manager: ^Tween_Manager) {
-	ha.reset(&manager.nodes, destroy_node)
+	ha.clear(&manager.nodes, destroy_node)
 	clear(&manager._cleanup_scratch)
 	manager.now = 0
 	manager.delta_time = 0

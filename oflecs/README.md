@@ -103,34 +103,77 @@ Global IDs use their C names, such as `EcsChildOf`, `EcsOnAdd` and `EcsWildcard`
 
 ## Helper API
 
-`helpers.odin` provides shorter names for common operations:
+`helpers.odin` provides shorter names for common operations. The typed procs
+derive the component from the Odin type: the first call for a type registers it
+in that world under the Odin type name and caches the id.
 
 ```odin
 world := oflecs.init()
 defer oflecs.fini(world)
 
-position := oflecs.component(world, "Position", size_of(Position), align_of(Position))
 entity := oflecs.new_entity(world)
-value := Position{10, 20}
-oflecs.set_raw(world, entity, position, &value, size_of(Position))
+oflecs.set(world, entity, Position{10, 20})
+oflecs.get(world, entity, Position).x += 1
 ```
 
-Iteration helpers wrap the native stack iterator, so there is no heap
-allocation and no separate free step. `next` accepts iterators from both
-`each` and `query_iterate`:
+`new_entity` also takes an initial id or a name; `add`, `remove`, `has` and
+`modified` accept either a component ID or an Odin type:
 
 ```odin
-it := oflecs.each(world, position)
+e2 := oflecs.new_entity(world, oflecs.pair(oflecs.EcsChildOf, parent))
+e3 := oflecs.new_entity(world, "Player")
+
+oflecs.add(world, entity, Velocity)   // by type
+oflecs.add(world, entity, tag_id)     // by id (pairs, builtin ids)
+```
+
+Queries are created either from a DSL expression or from a `Query_Terms` spec
+with with/without/optional lists — the latter involves no string parsing:
+
+```odin
+q := oflecs.query(world, "Position, [in] Velocity") // DSL expression
+defer oflecs.query_free(q)
+
+// C++ builder style, as typed component lists:
+q2 := oflecs.query_terms(world, {
+	all      = {Position, Velocity},
+	none     = {Dead},
+	optional = {Mass},
+	read     = {Velocity}, // matched read-only ([in])
+})
+```
+
+**`query` or `each`?** Use `query` for anything iterated every frame: it is a
+cached, reusable object, table matching happens once at creation. Use `each`
+only for one-off, ad-hoc single-component loops (debug dumps, initialization
+sweeps) where managing a query object is overkill — `each` re-evaluates the
+match on every call and caches nothing.
+
+Iteration helpers wrap the native stack iterator, so there is no heap
+allocation and no separate free step. Two entry points produce an `Iter`:
+`each(world, T)` for ad-hoc loops and `iterate(world, q)` for a cached query;
+`next` accepts both:
+
+```odin
+it := oflecs.each(world, Position)      // or: oflecs.iterate(world, q)
 for oflecs.next(&it) {
-	positions := cast([^]Position)oflecs.field_raw(&it, size_of(Position), 0)
-	for i in 0..<oflecs.iter_count_now(&it) {
+	positions := oflecs.field(&it, Position, 0)
+	for i in 0..<oflecs.count(&it) {
 		positions[i].x += 1
 	}
 }
 ```
 
+`field` returns the term's component array as a typed multi-pointer — no
+`size_of` and no cast at the call site. Use `field_raw` for untyped ids such
+as pairs. `count` and `entities` describe the current batch and are only
+valid until the next call to `next`.
+
 Call `iter_free` only when abandoning an iterator before it ran to
 completion.
+
+Builtin ids are the exported globals themselves, with their C names:
+`oflecs.EcsChildOf`, `oflecs.EcsOnAdd`, `oflecs.EcsWildcard`, ...
 
 The raw API is preferred when porting Flecs examples or using advanced features. Component pointers belong to Flecs and must not be retained across structural changes.
 

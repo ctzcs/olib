@@ -1,0 +1,5 @@
+/.zcode
+
+# Odin build/test artifacts (asset.pdb is left behind by odin test)
+*.pdb
+*.exe

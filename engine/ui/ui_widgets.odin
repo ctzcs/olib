@@ -37,9 +37,9 @@ UI_Theme :: struct {
 UI_THEME_DARK :: UI_Theme{
 	window_bg      = {24, 26, 32, 255},
 	panel          = {32, 35, 43, 255},
-	button         = {45, 49, 61, 255},
-	button_hover   = {58, 63, 78, 255},
-	button_press   = {38, 42, 52, 255},
+	button         = {55, 61, 78, 255},
+	button_hover   = {72, 80, 100, 255},
+	button_press   = {46, 52, 66, 255},
 	text           = {228, 230, 235, 255},
 	text_disabled  = {120, 124, 133, 255},
 	accent         = {86, 156, 210, 255},
@@ -93,13 +93,16 @@ ui_button :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, label: string)
 }
 
 // 标签：单行文本（运行时字符串）。
+// config 经 ctx 的帧内池分配：clay 存裸指针、EndLayout 才回读，
+// 栈上局部 config 会悬垂（表现为渲染命令里颜色/字号变垃圾值）。
 ui_label :: proc(ctx: ^UI_Context, theme: ^UI_Theme, text: string) {
-	config := clay.TextElementConfig{
+	config := ui_text_config(ctx, clay.TextElementConfig{
 		fontId = theme.body_font_id,
 		fontSize = theme.body_font_size,
 		textColor = ui_clay_color(theme.text),
-	}
-	clay.TextDynamic(text, &config)
+	})
+	if config == nil { return }
+	clay.TextDynamic(text, config)
 }
 
 // 开关：点击翻转 *value，返回新值。外观 = 圆角轨道 + 方形滑块。
@@ -117,7 +120,7 @@ ui_toggle :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, value: ^bool) 
 				padding = {left = 2, right = 2, top = 2, bottom = 2},
 				childAlignment = {x = value^ ? .Right : .Left, y = .Center},
 			},
-			backgroundColor = ui_clay_color(value^ ? theme.accent : theme.panel),
+			backgroundColor = ui_clay_color(value^ ? theme.accent : theme.button),
 			cornerRadius = clay.CornerRadiusAll(theme.corner_radius),
 		},
 	) {

@@ -149,7 +149,16 @@ ui_ops_dispose :: proc(ops: ^[dynamic]UI_Op) {
 
 // 把操作流画到 batcher（rect/图像/字形 -> Batcher 四边形）。
 // scissor 操作当前跳过（见文件头的 v1 限制）。
+// 字形/图像四边形按缩小采样纹理，Batcher 默认 Nearest 会把笔画打成噪点，
+// 这里统一推 Linear 采样。
 ui_render :: proc(batcher: ^foster.Batcher, ops: ^[dynamic]UI_Op) {
+	foster.BatcherPushSampler(
+		batcher,
+		foster.TextureSamplerMake(.Linear, .Clamp),
+	)
+	defer foster.BatcherPopSampler(batcher)
+
+	fill_mode := false
 	for &op in ops^ {
 		switch op.kind {
 		case .Quad:
@@ -158,10 +167,21 @@ ui_render :: proc(batcher: ^foster.Batcher, ops: ^[dynamic]UI_Op) {
 			br := foster.Vec2{op.x1, op.y1}
 			bl := foster.Vec2{op.x0, op.y1}
 			if op.texture != nil {
+				if fill_mode {
+					foster.BatcherPopMode(batcher)
+					fill_mode = false
+				}
 				foster.BatcherQuadTexture(batcher, op.texture, tl, tr, br, bl,
 					{op.u0, op.v0}, {op.u1, op.v0}, {op.u1, op.v1}, {op.u0, op.v1},
 					op.color)
 			} else {
+				// 纯色四边形走 Fill 模式（着色器忽略纹理采样）：
+				// Batcher 的 solid 路径会沿用当前绑定纹理，混排在贴图四边形
+				// 之后会错误采样到字体图集而变透明
+				if !fill_mode {
+					foster.BatcherPushMode(batcher, .Fill)
+					fill_mode = true
+				}
 				foster.BatcherQuad(batcher, foster.Rect{
 					op.x0, op.y0, op.x1 - op.x0, op.y1 - op.y0,
 				}, op.color)
@@ -170,6 +190,9 @@ ui_render :: proc(batcher: ^foster.Batcher, ops: ^[dynamic]UI_Op) {
 			// v1 限制：不裁剪
 		case:
 		}
+	}
+	if fill_mode {
+		foster.BatcherPopMode(batcher)
 	}
 }
 

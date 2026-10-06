@@ -2,10 +2,15 @@
 #+test
 package ui
 
+import "core:sync"
 import "core:testing"
 
 import clay "olib:thirdparty/clay-odin"
 import foster "ofoster:."
+
+// clay 的 context 是进程级全局：ui_init/ui_dispose 并发会段错误，测试串行化。
+@(private)
+clay_test_mutex: sync.Mutex
 
 // ---------------------------------------------------------------------------
 // 测试字体：手工构造 msdf 元数据（2 字符 + 1 对字距）
@@ -105,6 +110,9 @@ glyph_quads_advance_and_uv :: proc(t: ^testing.T) {
 
 @(test)
 layout_translate_roundtrip :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+
 	font := make_test_font()
 	defer dispose_test_font(font)
 
@@ -137,6 +145,9 @@ layout_translate_roundtrip :: proc(t: ^testing.T) {
 
 @(test)
 button_click_requires_hover_and_edge :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+
 	font := make_test_font()
 	defer dispose_test_font(font)
 
@@ -203,6 +214,9 @@ find_first_rect :: proc(commands: clay.ClayArray(clay.RenderCommand), id_label: 
 
 @(test)
 toggle_flips_on_click :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+
 	font := make_test_font()
 	defer dispose_test_font(font)
 

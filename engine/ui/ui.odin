@@ -33,6 +33,11 @@ UI_Context :: struct {
 	fonts:          [dynamic]^foster.MsdfFont,
 	font_textures: [dynamic]foster.Texture,
 
+	// 帧内 TextElementConfig bump 池：clay 把文本配置存裸指针、EndLayout
+	// 才回读，调用侧栈上 config 会悬垂（v1 踩过的坑），必须由 ctx 保活。
+	text_config_pool: []clay.TextElementConfig,
+	text_config_len:  int,
+
 	width, height: f32,
 
 	pointer_x, pointer_y: f32,
@@ -41,6 +46,9 @@ UI_Context :: struct {
 
 	scroll_delta: [2]f32, // 每帧累计，begin 时消费清零
 }
+
+// 单帧文本配置池容量（超出则拒绝并返回 nil，UI 退化为该文本不显示）。
+UI_TEXT_CONFIG_CAP :: 1024
 
 // ------------------------------------------------------------------------------
 // 生命周期
@@ -58,6 +66,15 @@ ui_init :: proc(ctx: ^UI_Context, width, height: f32, allocator := context.alloc
 	if err != .None { return false }
 	ctx.arena_memory = memory
 
+	p_pool, p_err := make([]clay.TextElementConfig, UI_TEXT_CONFIG_CAP, allocator)
+	if p_err != .None {
+		delete(memory, allocator)
+		ctx.arena_memory = nil
+		return false
+	}
+	ctx.text_config_pool = p_pool
+	ctx.text_config_len = 0
+
 	arena := clay.CreateArenaWithCapacityAndMemory(capacity, raw_data(memory))
 	clay.Initialize(
 		arena,
@@ -74,6 +91,7 @@ ui_dispose :: proc(ctx: ^UI_Context, allocator := context.allocator) {
 	clay.SetCurrentContext(nil)
 	delete(ctx.fonts)
 	delete(ctx.font_textures)
+	delete(ctx.text_config_pool)
 	delete(ctx.arena_memory, allocator)
 	ctx^ = {}
 }
@@ -113,10 +131,21 @@ ui_add_scroll :: proc(ctx: ^UI_Context, dx, dy: f32) {
 // 注意：down 的边沿快照在 ui_set_pointer 里做（调用侧通常在 begin 前
 // 已采好本帧输入）；begin 只提交状态给 clay。
 ui_begin :: proc(ctx: ^UI_Context, delta_time: f32) {
+	ctx.text_config_len = 0 // 文本配置池按帧重置（池内存跨帧保活，见结构体注释）
 	clay.SetPointerState({ctx.pointer_x, ctx.pointer_y}, ctx.pointer_down)
 	clay.UpdateScrollContainers(true, ctx.scroll_delta, delta_time)
 	ctx.scroll_delta = {0, 0}
 	clay.BeginLayout()
+}
+
+// 从帧内池取一个存活的 TextElementConfig 指针（clay 延迟回读，栈上
+// config 会悬垂）。池满返回 nil。
+ui_text_config :: proc(ctx: ^UI_Context, config: clay.TextElementConfig) -> ^clay.TextElementConfig {
+	if ctx.text_config_len >= len(ctx.text_config_pool) { return nil }
+	ptr := &ctx.text_config_pool[ctx.text_config_len]
+	ctx.text_config_len += 1
+	ptr^ = config
+	return ptr
 }
 
 // 帧结束：返回 clay 的渲染命令数组（送 ui_translate / ui_render）。

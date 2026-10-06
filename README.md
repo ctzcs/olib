@@ -15,9 +15,16 @@ core/        基础库（无引擎依赖）
 └── profiler/  作用域计时统计
 
 engine/      引擎层（依赖 ofoster）
-├── asset/     资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
-├── world/     Camera2D（惰性矩阵）/ SceneRouter（屏幕路由）
-└── messaging/ CommandQueue（单消费者）/ BroadcastChannel（延迟一帧广播）
+├── asset/       资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
+├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
+├── messaging/   CommandQueue（单消费者）/ BroadcastChannel（延迟一帧广播）
+├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
+├── rendering3d/ 3D 数据与队列层：Mesh 上传 / 材质状态 / 渲染排序
+├── animation/   骨骼动画采样 / palette / 混合
+├── dasset/      .dasset 模型格式数据层（比特兼容 DragonLib v4）
+├── storage/     资源根 / 用户存档路径策略
+├── app/         CLI 参数 + 调试控制台（命令转主线程）
+└── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
 
 thirdparty/  外部绑定：clay-odin / odin-imgui（含 ofoster 后端）/ oflecs
 ```

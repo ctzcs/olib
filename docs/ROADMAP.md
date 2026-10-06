@@ -39,14 +39,14 @@ P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
 
 | # | 项目 | DragonLib 来源 | 说明 |
 |---|------|----------------|------|
-| 8 | Dasset 模型格式（数据层） | Assets/Dasset/*（读写/模型/蒙皮，~8 文件） | 纯数据层不依赖渲染，可先做；blob 进 asset 管线（自定义 Importer） |
-| 9 | SkeletonAnimator | Animation/SkeletonAnimator.cs（~180 行） | 依赖 #8 的蒙皮数据 |
-| 10 | 3D 渲染栈 | Rendering/ 主体（Renderer3D/ShadowMap/CSM/Tonemap/材质/顶点，~15 文件）+ MeshGenerator | 依赖 #5 和 ofoster 的着色器/渲染目标能力；最大的单块 |
+| 8 | ~~Dasset 模型格式（数据层）~~ **已完成（2026-10，`engine/dasset`）** | 比特兼容 DragonLib v4 布局的读写（贴图/骨架/蒙皮顶点/PBR 材质/动画剪辑，v1~v4 读兼容，坏文件防御） |
+| 9 | ~~SkeletonAnimator~~ **已完成（2026-10，`engine/animation`）** | 采样（bind pose 填充+channel 覆盖，Step/Linear/CubicSpline、四元数最短弧）、palette 传播、advance_time、blend_poses、蒙皮包围盒 |
+| 10 | ~~3D 渲染栈（数据/队列层）~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传（dasset->ofoster Mesh，静态/蒙皮格式）、StandardMaterial3D+渲染状态推导（Opaque/Mask/Blend 分桶、DoubleSided 剔除）、渲染项排序（不透明前到后/透明后到前）。**GPU 输出边界**：还差着色器二进制管线（DragonLib 靠 Tools/ShaderCompiler 离线交叉编译 HLSL；ofoster 的 ShaderCreateInfo/Mesh/深度/混合 API 已就绪，管线建好后接入队列即可） |
 
 ## olib 之外但卡脖子（不改 OFoster 前提下）
 
-- **音频**：OFoster 没有音频模块（2026-10 核实）。按"不改 OFoster"原则，
-  路线是 olib 侧新包直接绑定后端（SDL3 audio 或 miniaudio），native 起步。
+- ~~**音频**~~ **已完成（2026-10，`engine/audio`）**：直接绑 `vendor:sdl3`
+  （默认回放设备流 f32/队列模式、WAV 装载转换、音量缩放入队、样本级裁剪）。
 - （可选）web 目标：asset v1 native-only；web 路线 = `storage_map` + `#load`
   预烘焙 blob，前置 `core/encoding` 的 js 兼容。
 - OFoster 自身的演进（如补齐 Foster C# API 面）由 OFoster 仓库自行决定，
@@ -76,4 +76,13 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 - Camera2D / SceneRouter → `engine/world`（Matrix3x2 构造/乘法用 ofoster
   已提交的 API，e51ceb8）
 - CommandQueue / BroadcastChannel → `engine/messaging`
+- **P0-1** Sprite/SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器 → `engine/rendering`
+- **P0-2** GameStorage 路径策略 → `engine/storage`
+- **P0-3** JobScheduler 评估（不移植，见 P0 表）
+- **P1-4** Camera3D/Frustum3D/Ray3D + 自备 Matrix4（行向量 v*M、D3D 深度）→ `engine/world`
+- **P1-5** has_arg + CliConsole（messaging 队列转主线程）→ `engine/app`
+- **P2-6** Dasset 数据层 → `engine/dasset`
+- **P2-7** SkeletonAnimator → `engine/animation`
+- **P2-8** 3D 数据/队列层 → `engine/rendering3d`（着色器管线边界见表 10）
+- **音频** → `engine/audio`（vendor:sdl3）
 - 目录三层化（core/engine/thirdparty）+ 编码规范（CODE_STYLE.md）

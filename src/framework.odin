@@ -6,10 +6,31 @@ import "core:mem"
 import coretime "core:time"
 import "core:strings"
 import SDL "vendor:sdl3"
+
+// 文件内导航（按 Foster 目录 / 类型分级）
+//   Framework / Version — 上游版本基线
+//   Spatial / Point2 — 整数坐标
+//   Graphics / Enums / GraphicsDriver — 图形后端
+//   App / Configuration — 应用选项
+//   Utility / UpdateMode — 更新策略
+//   Utility / Time — 帧计时
+//   Graphics / Defaults / DefaultResources — 默认资源状态
+//   Graphics / GraphicsDevice — 设备状态
+//   Graphics / Defaults / DefaultResources — 生命周期
+//   Graphics / Defaults / BatcherVertex — 默认批处理顶点
+//   Internal / GraphicsDeviceSDL — 帧与交换链
+//   Window — 窗口状态
+//   App — 配置、状态与回调
+//   Window / Lifecycle — 创建、属性与释放
+//   App / Lifecycle — 初始化与释放
+//   App / Events — 原生与 Web 事件分发
+//   App / MainLoop — 更新、渲染与退出
+
 // core:os 经 platform_native/web.odin 间接使用(js 目标无 core:os)
 
-// ===== 版本(与上游 Foster 对齐) =====
-
+// ==============================================================================
+// Framework / Version — 上游版本基线
+// ==============================================================================
 // Keep the port's public version aligned with the upstream Foster package.
 FosterVersionMajor :: 0
 FosterVersionMinor :: 4
@@ -21,8 +42,17 @@ version_string :: proc() -> string {
 
 sdl_version_string :: proc() -> string {
 	v := SDL.GetVersion()
-	return fmt.aprintf("%d.%d.%d", SDL.VERSIONNUM_MAJOR(v), SDL.VERSIONNUM_MINOR(v), SDL.VERSIONNUM_MICRO(v))
+	return fmt.aprintf(
+		"%d.%d.%d",
+		SDL.VERSIONNUM_MAJOR(v),
+		SDL.VERSIONNUM_MINOR(v),
+		SDL.VERSIONNUM_MICRO(v),
+	)
 }
+
+// ==============================================================================
+// Spatial / Point2 — 整数坐标
+// ==============================================================================
 
 Point2 :: struct {
 	X: int,
@@ -30,7 +60,11 @@ Point2 :: struct {
 }
 
 Point2Zero :: Point2{0, 0}
-Point2One  :: Point2{1, 1}
+Point2One :: Point2{1, 1}
+
+// ==============================================================================
+// Graphics / Enums / GraphicsDriver — 图形后端
+// ==============================================================================
 
 GraphicsDriver :: enum {
 	None,
@@ -56,14 +90,22 @@ graphics_driver_shader_extension :: proc(driver: GraphicsDriver) -> string {
 
 GetShaderExtension :: graphics_driver_shader_extension
 
+// ==============================================================================
+// App / Configuration — 应用选项
+// ==============================================================================
+
 AppFlag :: enum u8 {
 	GraphicsDebugging,
 	MultiSampledBackBuffer,
 }
 
-AppFlags :: distinct bit_set[AppFlag; u8]
+AppFlags :: distinct bit_set[AppFlag;u8]
 
 AppFlagsNone :: AppFlags{}
+
+// ==============================================================================
+// Utility / UpdateMode — 更新策略
+// ==============================================================================
 
 UpdateModeKind :: enum {
 	Fixed,
@@ -71,21 +113,25 @@ UpdateModeKind :: enum {
 }
 
 UpdateMode :: struct {
-	Mode: UpdateModeKind,
-	FixedTargetTime: coretime.Duration,
-	FixedMaxTime: coretime.Duration,
+	Mode:             UpdateModeKind,
+	FixedTargetTime:  coretime.Duration,
+	FixedMaxTime:     coretime.Duration,
 	FixedWaitEnabled: bool,
 }
 
-fixed_step :: proc(target_time_per_frame: coretime.Duration, max_time_per_frame := coretime.Duration(0), wait_for_next_update := true) -> UpdateMode {
+fixed_step :: proc(
+	target_time_per_frame: coretime.Duration,
+	max_time_per_frame := coretime.Duration(0),
+	wait_for_next_update := true,
+) -> UpdateMode {
 	max_time := max_time_per_frame
 	if max_time == 0 {
 		max_time = target_time_per_frame * 5
 	}
-	return UpdateMode{
-		Mode = .Fixed,
-		FixedTargetTime = target_time_per_frame,
-		FixedMaxTime = max_time,
+	return UpdateMode {
+		Mode             = .Fixed,
+		FixedTargetTime  = target_time_per_frame,
+		FixedMaxTime     = max_time,
 		FixedWaitEnabled = wait_for_next_update,
 	}
 }
@@ -95,28 +141,35 @@ fixed_step_fps :: proc(fps: int, wait_for_next_update := true) -> UpdateMode {
 }
 
 unlocked_step :: proc() -> UpdateMode {
-	return UpdateMode{
+	return UpdateMode {
 		Mode = .Unlocked,
 	}
 }
 
-FixedStep :: proc{fixed_step, fixed_step_fps}
+FixedStep :: proc {
+	fixed_step,
+	fixed_step_fps,
+}
 UnlockedStep :: unlocked_step
 
+// ==============================================================================
+// Utility / Time — 帧计时
+// ==============================================================================
+
 Time :: struct {
-	Elapsed: coretime.Duration,
-	Previous: coretime.Duration,
-	Delta: f32,
-	Frame: u64,
+	Elapsed:     coretime.Duration,
+	Previous:    coretime.Duration,
+	Delta:       f32,
+	Frame:       u64,
 	RenderFrame: u64,
 }
 
 advance_time :: proc(t: Time, delta: coretime.Duration) -> Time {
-	return Time{
-		Elapsed = t.Elapsed + delta,
-		Previous = t.Elapsed,
-		Delta = f32(coretime.duration_seconds(delta)),
-		Frame = t.Frame + 1,
+	return Time {
+		Elapsed     = t.Elapsed + delta,
+		Previous    = t.Elapsed,
+		Delta       = f32(coretime.duration_seconds(delta)),
+		Frame       = t.Frame + 1,
 		RenderFrame = t.RenderFrame,
 	}
 }
@@ -130,17 +183,21 @@ advance_render_frame :: proc(t: Time) -> Time {
 Advance :: advance_time
 AdvanceRenderFrame :: advance_render_frame
 
+// ==============================================================================
+// Graphics / Defaults / DefaultResources — 默认资源状态
+// ==============================================================================
+
 DefaultResources :: struct {
-	VertexShader: Shader,
-	FragmentShader: Shader,
-	TexturedVertexShader: Shader,
+	VertexShader:           Shader,
+	FragmentShader:         Shader,
+	TexturedVertexShader:   Shader,
 	TexturedFragmentShader: Shader,
-	MsdfVertexShader: Shader,
-	MsdfFragmentShader: Shader,
-	BatchMaterial: Material,
-	TexturedMaterial: Material,
-	MsdfMaterial: Material,
-	Initialized: bool,
+	MsdfVertexShader:       Shader,
+	MsdfFragmentShader:     Shader,
+	BatchMaterial:          Material,
+	TexturedMaterial:       Material,
+	MsdfMaterial:           Material,
+	Initialized:            bool,
 }
 
 time_seconds_f :: proc(t: Time) -> f32 {
@@ -154,70 +211,112 @@ time_between_interval :: proc(t: Time, interval: f64, offset: f64 = 0) -> bool {
 TimeSecondsF :: time_seconds_f
 TimeBetweenInterval :: time_between_interval
 
-GraphicsDevice :: struct {
-	Driver: GraphicsDriver,
-	VSync: bool,
-	Disposed: bool,
-	RequestedDriver: GraphicsDriver,
-	Device: ^SDL.GPUDevice,
-	Window: ^SDL.Window,
-	SwapchainFormat: SDL.GPUTextureFormat,
-	SupportsMailbox: bool,
-	ClearColor: SDL.FColor,
-	CommandBuffer: ^SDL.GPUCommandBuffer,
-	RenderPass: ^SDL.GPURenderPass,
-	SwapchainTexture: ^SDL.GPUTexture,
-	SwapchainWidth: u32,
-	SwapchainHeight: u32,
-	InFrame: bool,
-	RenderPassTarget: DrawableTarget,
-	RenderPassTargetSize: Point2,
-	RenderPassPipeline: ^SDL.GPUGraphicsPipeline,
-	RenderPassIndexBuffer: ^SDL.GPUBuffer,
-	RenderPassViewport: RectInt,
-	RenderPassScissor: RectInt,
-	HasRenderPassViewport: bool,
-	HasRenderPassScissor: bool,
-	SamplerCache: map[TextureSampler]^SDL.GPUSampler,
-	PipelineCache: map[u64]^SDL.GPUGraphicsPipeline,
-	FailedPipelineHashes: map[u64]bool,
-	ReportedDrawFailures: bit_set[DrawFailure],
-	UploadStaging: ^SDL.GPUTransferBuffer,
-	UploadStagingSize: u32,
-	UploadStagingCursor: u32,
-	WindowRenderTarget: Target,
-	HasWindowRenderTarget: bool,
-	BackbufferTarget: Target,
-	BackbufferSize: Point2,
-	HasBackbufferTarget: bool,
-	BackbufferSampleCount: SampleCount,
-	Defaults: DefaultResources,
+// ==============================================================================
+// Graphics / GraphicsDevice — 设备状态
+// ==============================================================================
 
-	DebugPipeline: ^SDL.GPUGraphicsPipeline,
-	DebugVertexShader: ^SDL.GPUShader,
+GraphicsDevice :: struct {
+	Driver:                GraphicsDriver,
+	VSync:                 bool,
+	Disposed:              bool,
+	RequestedDriver:       GraphicsDriver,
+	Device:                ^SDL.GPUDevice,
+	Window:                ^SDL.Window,
+	SwapchainFormat:       SDL.GPUTextureFormat,
+	SupportsMailbox:       bool,
+	ClearColor:            SDL.FColor,
+	CommandBuffer:         ^SDL.GPUCommandBuffer,
+	RenderPass:            ^SDL.GPURenderPass,
+	SwapchainTexture:      ^SDL.GPUTexture,
+	SwapchainWidth:        u32,
+	SwapchainHeight:       u32,
+	InFrame:               bool,
+	RenderPassTarget:      DrawableTarget,
+	RenderPassTargetSize:  Point2,
+	RenderPassPipeline:    ^SDL.GPUGraphicsPipeline,
+	RenderPassIndexBuffer: ^SDL.GPUBuffer,
+	RenderPassViewport:    RectInt,
+	RenderPassScissor:     RectInt,
+	HasRenderPassViewport: bool,
+	HasRenderPassScissor:  bool,
+	SamplerCache:          map[TextureSampler]^SDL.GPUSampler,
+	PipelineCache:         map[u64]^SDL.GPUGraphicsPipeline,
+	FailedPipelineHashes:  map[u64]bool,
+	ReportedDrawFailures:  bit_set[DrawFailure],
+	UploadStaging:         ^SDL.GPUTransferBuffer,
+	UploadStagingSize:     u32,
+	UploadStagingCursor:   u32,
+	WindowRenderTarget:    Target,
+	HasWindowRenderTarget: bool,
+	BackbufferTarget:      Target,
+	BackbufferSize:        Point2,
+	HasBackbufferTarget:   bool,
+	BackbufferSampleCount: SampleCount,
+	Defaults:              DefaultResources,
+
+	DebugPipeline:       ^SDL.GPUGraphicsPipeline,
+	DebugVertexShader:   ^SDL.GPUShader,
 	DebugFragmentShader: ^SDL.GPUShader,
-	DebugVertexBuffer: ^SDL.GPUBuffer,
-	DebugTexture: ^SDL.GPUTexture,
-	DebugSampler: ^SDL.GPUSampler,
+	DebugVertexBuffer:   ^SDL.GPUBuffer,
+	DebugTexture:        ^SDL.GPUTexture,
+	DebugSampler:        ^SDL.GPUSampler,
 }
 
-default_resources_init :: proc(device:^GraphicsDevice) {
-	if device == nil || device.Device == nil || device.Defaults.Initialized { return }
-	init_default_batch_material(&device.Defaults.BatchMaterial, &device.Defaults.VertexShader, &device.Defaults.FragmentShader, device)
-	init_default_textured_material(&device.Defaults.TexturedMaterial, &device.Defaults.TexturedVertexShader, &device.Defaults.TexturedFragmentShader, device)
-	init_default_msdf_material(&device.Defaults.MsdfMaterial, &device.Defaults.MsdfVertexShader, &device.Defaults.MsdfFragmentShader, device)
+// ==============================================================================
+// Graphics / Defaults / DefaultResources — 生命周期
+// ==============================================================================
+
+default_resources_init :: proc(device: ^GraphicsDevice) {
+	if device == nil || device.Device == nil || device.Defaults.Initialized {
+		return
+	}
+	init_default_batch_material(
+		&device.Defaults.BatchMaterial,
+		&device.Defaults.VertexShader,
+		&device.Defaults.FragmentShader,
+		device,
+	)
+	init_default_textured_material(
+		&device.Defaults.TexturedMaterial,
+		&device.Defaults.TexturedVertexShader,
+		&device.Defaults.TexturedFragmentShader,
+		device,
+	)
+	init_default_msdf_material(
+		&device.Defaults.MsdfMaterial,
+		&device.Defaults.MsdfVertexShader,
+		&device.Defaults.MsdfFragmentShader,
+		device,
+	)
 	device.Defaults.Initialized = true
 }
 DefaultResourcesInit :: default_resources_init
 
-default_resources_dispose :: proc(device:^GraphicsDevice) {
-	if device == nil || !device.Defaults.Initialized { return }
-	if device.Defaults.BatchMaterial.Vertex.Shader != nil { shader_dispose(device.Defaults.BatchMaterial.Vertex.Shader) }
-	if device.Defaults.BatchMaterial.Fragment.Shader != nil { shader_dispose(device.Defaults.BatchMaterial.Fragment.Shader) }
-	if device.Defaults.TexturedMaterial.Vertex.Shader != nil { shader_dispose(device.Defaults.TexturedMaterial.Vertex.Shader) }
-	if device.Defaults.TexturedMaterial.Fragment.Shader != nil { shader_dispose(device.Defaults.TexturedMaterial.Fragment.Shader) }
-	if device.Defaults.MsdfMaterial.Vertex.Shader != nil { shader_dispose(device.Defaults.MsdfMaterial.Vertex.Shader) }
-	if device.Defaults.MsdfMaterial.Fragment.Shader != nil { shader_dispose(device.Defaults.MsdfMaterial.Fragment.Shader) }
+default_resources_dispose :: proc(device: ^GraphicsDevice) {
+	if device == nil || !device.Defaults.Initialized {
+		return
+	}
+	if device.Defaults.BatchMaterial.Vertex.Shader != nil {
+		shader_dispose(device.Defaults.BatchMaterial.Vertex.Shader)
+	}
+	if device.Defaults.BatchMaterial.Fragment.Shader != nil {
+		shader_dispose(device.Defaults.BatchMaterial.Fragment.Shader)
+	}
+	if device.Defaults.TexturedMaterial.Vertex.Shader != nil {
+		shader_dispose(device.Defaults.TexturedMaterial.Vertex.Shader)
+	}
+	if device.Defaults.TexturedMaterial.Fragment.Shader != nil {
+		shader_dispose(device.Defaults.TexturedMaterial.Fragment.Shader)
+	}
+	if device.Defaults.MsdfMaterial.Vertex.Shader != nil {
+		shader_dispose(device.Defaults.MsdfMaterial.Vertex.Shader)
+	}
+	if device.Defaults.MsdfMaterial.Fragment.Shader != nil {
+		shader_dispose(device.Defaults.MsdfMaterial.Fragment.Shader)
+	}
+	MaterialDispose(&device.Defaults.BatchMaterial)
+	MaterialDispose(&device.Defaults.TexturedMaterial)
+	MaterialDispose(&device.Defaults.MsdfMaterial)
 	device.Defaults = {}
 }
 DefaultResourcesDispose :: default_resources_dispose
@@ -242,18 +341,34 @@ msdf_fragment_dxil :: #load("assets/shaders/Msdf.fragment.dxil")
 msdf_vertex_msl :: #load("assets/shaders/Msdf.vertex.msl")
 msdf_fragment_msl :: #load("assets/shaders/Msdf.fragment.msl")
 
+// ==============================================================================
+// Graphics / Defaults / BatcherVertex — 默认批处理顶点
+// ==============================================================================
+
 BatcherVertex :: struct #packed {
-	Pos: [2]f32,
-	Tex: [2]f32,
-	Col: Color,
+	Pos:  [2]f32,
+	Tex:  [2]f32,
+	Col:  Color,
 	Mode: Color,
 }
 
-identity_matrix_4x4 : [16]f32 = [16]f32{
-	1, 0, 0, 0,
-	0, 1, 0, 0,
-	0, 0, 1, 0,
-	0, 0, 0, 1,
+identity_matrix_4x4: [16]f32 = [16]f32 {
+	1,
+	0,
+	0,
+	0,
+	0,
+	1,
+	0,
+	0,
+	0,
+	0,
+	1,
+	0,
+	0,
+	0,
+	0,
+	1,
 }
 
 create_device :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
@@ -279,7 +394,11 @@ create_device :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
 		driver_name = "metal"
 	}
 
-	graphics_device.Device = SDL.CreateGPUDevice({.SPIRV, .DXIL, .MSL}, .GraphicsDebugging in flags, driver_name)
+	graphics_device.Device = SDL.CreateGPUDevice(
+		{.SPIRV, .DXIL, .MSL},
+		.GraphicsDebugging in flags,
+		driver_name,
+	)
 	if graphics_device.Device == nil {
 		panic(create_error_from_sdl("SDL_CreateGPUDevice"))
 	}
@@ -288,11 +407,23 @@ create_device :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
 	graphics_device.ClearColor = ColorToSDL(CornflowerBlue)
 	graphics_device.BackbufferSampleCount = .One
 	if .MultiSampledBackBuffer in flags {
-		if SDL.GPUTextureSupportsSampleCount(graphics_device.Device, texture_format_to_sdl(.Color), ._8) {
+		if SDL.GPUTextureSupportsSampleCount(
+			graphics_device.Device,
+			texture_format_to_sdl(.Color),
+			._8,
+		) {
 			graphics_device.BackbufferSampleCount = .Eight
-		} else if SDL.GPUTextureSupportsSampleCount(graphics_device.Device, texture_format_to_sdl(.Color), ._4) {
+		} else if SDL.GPUTextureSupportsSampleCount(
+			graphics_device.Device,
+			texture_format_to_sdl(.Color),
+			._4,
+		) {
 			graphics_device.BackbufferSampleCount = .Four
-		} else if SDL.GPUTextureSupportsSampleCount(graphics_device.Device, texture_format_to_sdl(.Color), ._2) {
+		} else if SDL.GPUTextureSupportsSampleCount(
+			graphics_device.Device,
+			texture_format_to_sdl(.Color),
+			._2,
+		) {
 			graphics_device.BackbufferSampleCount = .Two
 		}
 	}
@@ -322,7 +453,10 @@ startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.W
 		graphics_device.WindowRenderTarget = Target{}
 		graphics_device.WindowRenderTarget.GraphicsDevice = graphics_device
 		graphics_device.WindowRenderTarget.Name = "WindowSwapchain"
-		append(&graphics_device.WindowRenderTarget.Attachments, Texture{GraphicsDevice = graphics_device, Format = .Color})
+		append(
+			&graphics_device.WindowRenderTarget.Attachments,
+			Texture{GraphicsDevice = graphics_device, Format = .Color},
+		)
 		graphics_device.HasWindowRenderTarget = true
 
 		default_resources_init(graphics_device)
@@ -346,7 +480,11 @@ startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.W
 	if !SDL.ClaimWindowForGPUDevice(graphics_device.Device, window) {
 		panic(create_error_from_sdl("SDL_ClaimWindowForGPUDevice"))
 	}
-	graphics_device.SupportsMailbox = SDL.WindowSupportsGPUPresentMode(graphics_device.Device, window, .MAILBOX)
+	graphics_device.SupportsMailbox = SDL.WindowSupportsGPUPresentMode(
+		graphics_device.Device,
+		window,
+		.MAILBOX,
+	)
 	_ = SDL.SetGPUAllowedFramesInFlight(graphics_device.Device, 2)
 	present_mode := SDL.GPUPresentMode.VSYNC
 	// MAILBOX 在部分 D3D12 驱动上存在资源增长问题, 默认使用 VSYNC
@@ -354,13 +492,19 @@ startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.W
 		present_mode = .MAILBOX
 	}
 	_ = SDL.SetGPUSwapchainParameters(graphics_device.Device, window, .SDR, present_mode)
-	graphics_device.SwapchainFormat = SDL.GetGPUSwapchainTextureFormat(graphics_device.Device, window)
+	graphics_device.SwapchainFormat = SDL.GetGPUSwapchainTextureFormat(
+		graphics_device.Device,
+		window,
+	)
 
 	// 窗口渲染目标: 包装每帧获取的 swapchain 纹理, 渲染直通无 blit
 	graphics_device.WindowRenderTarget = Target{}
 	graphics_device.WindowRenderTarget.GraphicsDevice = graphics_device
 	graphics_device.WindowRenderTarget.Name = "WindowSwapchain"
-	append(&graphics_device.WindowRenderTarget.Attachments, Texture{GraphicsDevice = graphics_device, Format = .Color})
+	append(
+		&graphics_device.WindowRenderTarget.Attachments,
+		Texture{GraphicsDevice = graphics_device, Format = .Color},
+	)
 	graphics_device.HasWindowRenderTarget = true
 
 	default_resources_init(graphics_device)
@@ -368,7 +512,9 @@ startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.W
 
 shutdown_graphics_device :: proc(graphics_device: ^GraphicsDevice) {
 	when ODIN_OS == .JS {
-		// M0: JS 路径未创建任何默认资源与 GPU 对象, 无需释放; M1+ 的 GL 资源释放在这里接
+		graphics_device_dispose_backbuffer(graphics_device)
+		graphics_device_dispose_caches(graphics_device)
+		default_resources_dispose(graphics_device)
 		graphics_device.Window = nil
 		graphics_device.Driver = .None
 		return
@@ -397,6 +543,10 @@ present :: proc(graphics_device: ^GraphicsDevice) {
 	}
 	end_frame(graphics_device)
 }
+
+// ==============================================================================
+// Internal / GraphicsDeviceSDL — 帧与交换链
+// ==============================================================================
 
 begin_frame :: proc(graphics_device: ^GraphicsDevice) -> bool {
 	when ODIN_OS == .JS {
@@ -460,7 +610,13 @@ begin_frame :: proc(graphics_device: ^GraphicsDevice) -> bool {
 	// 提前获取 swapchain 纹理: 窗口渲染目标直接渲染到交换链 (无中间 blit)
 	swapchain_texture: ^SDL.GPUTexture
 	width, height: u32
-	if !SDL.WaitAndAcquireGPUSwapchainTexture(command_buffer, graphics_device.Window, &swapchain_texture, &width, &height) {
+	if !SDL.WaitAndAcquireGPUSwapchainTexture(
+		command_buffer,
+		graphics_device.Window,
+		&swapchain_texture,
+		&width,
+		&height,
+	) {
 		graphics_device.InFrame = false
 		return false
 	}
@@ -495,7 +651,7 @@ end_frame :: proc(graphics_device: ^GraphicsDevice) {
 		graphics_device.HasRenderPassViewport = false
 		graphics_device.HasRenderPassScissor = false
 		fw_end_pass() // 复位 GL 状态(剪刀等)
-		fw_present()  // WebGL2: rAF 合成即 present
+		fw_present() // WebGL2: rAF 合成即 present
 		return
 	}
 
@@ -541,7 +697,11 @@ graphics_device_dispose_backbuffer :: proc(graphics_device: ^GraphicsDevice) {
 	graphics_device.HasBackbufferTarget = false
 }
 
-graphics_device_ensure_backbuffer :: proc(graphics_device: ^GraphicsDevice, size: Point2, exact: bool) {
+graphics_device_ensure_backbuffer :: proc(
+	graphics_device: ^GraphicsDevice,
+	size: Point2,
+	exact: bool,
+) {
 	if graphics_device == nil || graphics_device.Device == nil {
 		return
 	}
@@ -550,8 +710,17 @@ graphics_device_ensure_backbuffer :: proc(graphics_device: ^GraphicsDevice, size
 	}
 	graphics_device.BackbufferSize = size
 	if !graphics_device.HasBackbufferTarget {
-		specs := [1]TargetAttachmentSpec{{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount}}
-		target_init_with_attachments(&graphics_device.BackbufferTarget, graphics_device, size.X, size.Y, specs[:], "Backbuffer")
+		specs := [1]TargetAttachmentSpec {
+			{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount},
+		}
+		target_init_with_attachments(
+			&graphics_device.BackbufferTarget,
+			graphics_device,
+			size.X,
+			size.Y,
+			specs[:],
+			"Backbuffer",
+		)
 		graphics_device.HasBackbufferTarget = true
 		return
 	}
@@ -559,15 +728,33 @@ graphics_device_ensure_backbuffer :: proc(graphics_device: ^GraphicsDevice, size
 	if target.Width < size.X || target.Height < size.Y {
 		fmt.println("[bb] recreating backbuffer:", size, " old:", target.Width, "x", target.Height)
 		target_dispose(target)
-		specs := [1]TargetAttachmentSpec{{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount}}
-		target_init_with_attachments(target, graphics_device, size.X + 64, size.Y + 64, specs[:], "Backbuffer")
+		specs := [1]TargetAttachmentSpec {
+			{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount},
+		}
+		target_init_with_attachments(
+			target,
+			graphics_device,
+			size.X + 64,
+			size.Y + 64,
+			specs[:],
+			"Backbuffer",
+		)
 		graphics_device.HasBackbufferTarget = true
 		return
 	}
 	if exact && (target.Width > size.X + 128 || target.Height > size.Y + 128) {
 		target_dispose(target)
-		specs := [1]TargetAttachmentSpec{{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount}}
-		target_init_with_attachments(target, graphics_device, size.X, size.Y, specs[:], "Backbuffer")
+		specs := [1]TargetAttachmentSpec {
+			{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount},
+		}
+		target_init_with_attachments(
+			target,
+			graphics_device,
+			size.X,
+			size.Y,
+			specs[:],
+			"Backbuffer",
+		)
 		graphics_device.HasBackbufferTarget = true
 	}
 }
@@ -605,6 +792,10 @@ graphics_device_dispose_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 }
 
+// ------------------------------------------------------------------------------
+// Internal / GraphicsDeviceSDL / DebugDraw — 默认绘制资源
+// ------------------------------------------------------------------------------
+
 graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device.Device == nil || graphics_device.Window == nil {
 		return
@@ -636,29 +827,29 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 		return
 	}
 
-	vertex_shader_info := SDL.GPUShaderCreateInfo{
-		code_size = uint(len(vertex_code)),
-		code = &vertex_code[0],
-		entrypoint = to_cstring("vertex_main"),
-		format = shader_format,
-		stage = .VERTEX,
-		num_samplers = 0,
+	vertex_shader_info := SDL.GPUShaderCreateInfo {
+		code_size            = uint(len(vertex_code)),
+		code                 = &vertex_code[0],
+		entrypoint           = to_cstring("vertex_main"),
+		format               = shader_format,
+		stage                = .VERTEX,
+		num_samplers         = 0,
 		num_storage_textures = 0,
-		num_storage_buffers = 0,
-		num_uniform_buffers = 1,
-		props = 0,
+		num_storage_buffers  = 0,
+		num_uniform_buffers  = 1,
+		props                = 0,
 	}
-	fragment_shader_info := SDL.GPUShaderCreateInfo{
-		code_size = uint(len(fragment_code)),
-		code = &fragment_code[0],
-		entrypoint = to_cstring("fragment_main"),
-		format = shader_format,
-		stage = .FRAGMENT,
-		num_samplers = 1,
+	fragment_shader_info := SDL.GPUShaderCreateInfo {
+		code_size            = uint(len(fragment_code)),
+		code                 = &fragment_code[0],
+		entrypoint           = to_cstring("fragment_main"),
+		format               = shader_format,
+		stage                = .FRAGMENT,
+		num_samplers         = 1,
 		num_storage_textures = 0,
-		num_storage_buffers = 0,
-		num_uniform_buffers = 0,
-		props = 0,
+		num_storage_buffers  = 0,
+		num_uniform_buffers  = 0,
+		props                = 0,
 	}
 
 	graphics_device.DebugVertexShader = SDL.CreateGPUShader(device, vertex_shader_info)
@@ -671,85 +862,94 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 
 	vertex_stride := u32(size_of(BatcherVertex))
-	vb_desc := [1]SDL.GPUVertexBufferDescription{{
-		slot = 0,
-		pitch = vertex_stride,
-		input_rate = .VERTEX,
-		instance_step_rate = 0,
-	}}
-	attrs := [4]SDL.GPUVertexAttribute{
+	vb_desc := [1]SDL.GPUVertexBufferDescription {
+		{
+			slot               = 0,
+			pitch              = vertex_stride,
+			input_rate         = .VERTEX,
+			instance_step_rate = 0,
+		},
+	}
+	attrs := [4]SDL.GPUVertexAttribute {
 		{location = 0, buffer_slot = 0, format = .FLOAT2, offset = 0},
 		{location = 1, buffer_slot = 0, format = .FLOAT2, offset = 8},
 		{location = 2, buffer_slot = 0, format = .UBYTE4_NORM, offset = 16},
 		{location = 3, buffer_slot = 0, format = .UBYTE4_NORM, offset = 20},
 	}
-	vertex_input := SDL.GPUVertexInputState{
+	vertex_input := SDL.GPUVertexInputState {
 		vertex_buffer_descriptions = &vb_desc[0],
-		num_vertex_buffers = 1,
-		vertex_attributes = &attrs[0],
-		num_vertex_attributes = 4,
+		num_vertex_buffers         = 1,
+		vertex_attributes          = &attrs[0],
+		num_vertex_attributes      = 4,
 	}
 
-	blend_state := SDL.GPUColorTargetBlendState{
-		src_color_blendfactor = .ONE,
-		dst_color_blendfactor = .ZERO,
-		color_blend_op = .ADD,
-		src_alpha_blendfactor = .ONE,
-		dst_alpha_blendfactor = .ZERO,
-		alpha_blend_op = .ADD,
-		color_write_mask = SDL.GPUColorComponentFlags{.R, .G, .B, .A},
-		enable_blend = false,
+	blend_state := SDL.GPUColorTargetBlendState {
+		src_color_blendfactor   = .ONE,
+		dst_color_blendfactor   = .ZERO,
+		color_blend_op          = .ADD,
+		src_alpha_blendfactor   = .ONE,
+		dst_alpha_blendfactor   = .ZERO,
+		alpha_blend_op          = .ADD,
+		color_write_mask        = SDL.GPUColorComponentFlags{.R, .G, .B, .A},
+		enable_blend            = false,
 		enable_color_write_mask = false,
 	}
-	color_target_desc := [1]SDL.GPUColorTargetDescription{{
-		format = graphics_device.SwapchainFormat,
-		blend_state = blend_state,
-	}}
-	target_info := SDL.GPUGraphicsPipelineTargetInfo{
+	color_target_desc := [1]SDL.GPUColorTargetDescription {
+		{
+			format      = graphics_device.SwapchainFormat,
+			blend_state = blend_state,
+		},
+	}
+	target_info := SDL.GPUGraphicsPipelineTargetInfo {
 		color_target_descriptions = &color_target_desc[0],
-		num_color_targets = 1,
-		depth_stencil_format = .INVALID,
-		has_depth_stencil_target = false,
+		num_color_targets         = 1,
+		depth_stencil_format      = .INVALID,
+		has_depth_stencil_target  = false,
 	}
 
-	stencil_ops := SDL.GPUStencilOpState{fail_op = .KEEP, pass_op = .KEEP, depth_fail_op = .KEEP, compare_op = .ALWAYS}
-	depth_stencil := SDL.GPUDepthStencilState{
-		compare_op = .ALWAYS,
-		back_stencil_state = stencil_ops,
+	stencil_ops := SDL.GPUStencilOpState {
+		fail_op       = .KEEP,
+		pass_op       = .KEEP,
+		depth_fail_op = .KEEP,
+		compare_op    = .ALWAYS,
+	}
+	depth_stencil := SDL.GPUDepthStencilState {
+		compare_op          = .ALWAYS,
+		back_stencil_state  = stencil_ops,
 		front_stencil_state = stencil_ops,
-		compare_mask = 0,
-		write_mask = 0,
-		enable_depth_test = false,
-		enable_depth_write = false,
+		compare_mask        = 0,
+		write_mask          = 0,
+		enable_depth_test   = false,
+		enable_depth_write  = false,
 		enable_stencil_test = false,
 	}
-	rasterizer := SDL.GPURasterizerState{
-		fill_mode = .FILL,
-		cull_mode = .NONE,
-		front_face = .COUNTER_CLOCKWISE,
+	rasterizer := SDL.GPURasterizerState {
+		fill_mode                  = .FILL,
+		cull_mode                  = .NONE,
+		front_face                 = .COUNTER_CLOCKWISE,
 		depth_bias_constant_factor = 0,
-		depth_bias_clamp = 0,
-		depth_bias_slope_factor = 0,
-		enable_depth_bias = false,
-		enable_depth_clip = true,
+		depth_bias_clamp           = 0,
+		depth_bias_slope_factor    = 0,
+		enable_depth_bias          = false,
+		enable_depth_clip          = true,
 	}
-	multisample := SDL.GPUMultisampleState{
-		sample_count = ._1,
-		sample_mask = 0,
-		enable_mask = false,
+	multisample := SDL.GPUMultisampleState {
+		sample_count             = ._1,
+		sample_mask              = 0,
+		enable_mask              = false,
 		enable_alpha_to_coverage = false,
 	}
 
-	pipeline_info := SDL.GPUGraphicsPipelineCreateInfo{
-		vertex_shader = graphics_device.DebugVertexShader,
-		fragment_shader = graphics_device.DebugFragmentShader,
-		vertex_input_state = vertex_input,
-		primitive_type = .TRIANGLELIST,
-		rasterizer_state = rasterizer,
-		multisample_state = multisample,
+	pipeline_info := SDL.GPUGraphicsPipelineCreateInfo {
+		vertex_shader       = graphics_device.DebugVertexShader,
+		fragment_shader     = graphics_device.DebugFragmentShader,
+		vertex_input_state  = vertex_input,
+		primitive_type      = .TRIANGLELIST,
+		rasterizer_state    = rasterizer,
+		multisample_state   = multisample,
 		depth_stencil_state = depth_stencil,
-		target_info = target_info,
-		props = 0,
+		target_info         = target_info,
+		props               = 0,
 	}
 
 	graphics_device.DebugPipeline = SDL.CreateGPUGraphicsPipeline(device, pipeline_info)
@@ -757,37 +957,37 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 		panic(create_error_from_sdl("SDL_CreateGPUGraphicsPipeline"))
 	}
 
-	sampler_info := SDL.GPUSamplerCreateInfo{
-		min_filter = .LINEAR,
-		mag_filter = .LINEAR,
-		mipmap_mode = .LINEAR,
-		address_mode_u = .CLAMP_TO_EDGE,
-		address_mode_v = .CLAMP_TO_EDGE,
-		address_mode_w = .CLAMP_TO_EDGE,
-		mip_lod_bias = 0,
-		max_anisotropy = 1,
-		compare_op = .ALWAYS,
-		min_lod = 0,
-		max_lod = 0,
+	sampler_info := SDL.GPUSamplerCreateInfo {
+		min_filter        = .LINEAR,
+		mag_filter        = .LINEAR,
+		mipmap_mode       = .LINEAR,
+		address_mode_u    = .CLAMP_TO_EDGE,
+		address_mode_v    = .CLAMP_TO_EDGE,
+		address_mode_w    = .CLAMP_TO_EDGE,
+		mip_lod_bias      = 0,
+		max_anisotropy    = 1,
+		compare_op        = .ALWAYS,
+		min_lod           = 0,
+		max_lod           = 0,
 		enable_anisotropy = false,
-		enable_compare = false,
-		props = 0,
+		enable_compare    = false,
+		props             = 0,
 	}
 	graphics_device.DebugSampler = SDL.CreateGPUSampler(device, sampler_info)
 	if graphics_device.DebugSampler == nil {
 		panic(create_error_from_sdl("SDL_CreateGPUSampler"))
 	}
 
-	tex_info := SDL.GPUTextureCreateInfo{
-		type = .D2,
-		format = .R8G8B8A8_UNORM,
-		usage = SDL.GPUTextureUsageFlags{.SAMPLER},
-		width = 1,
-		height = 1,
+	tex_info := SDL.GPUTextureCreateInfo {
+		type                 = .D2,
+		format               = .R8G8B8A8_UNORM,
+		usage                = SDL.GPUTextureUsageFlags{.SAMPLER},
+		width                = 1,
+		height               = 1,
 		layer_count_or_depth = 1,
-		num_levels = 1,
-		sample_count = ._1,
-		props = 0,
+		num_levels           = 1,
+		sample_count         = ._1,
+		props                = 0,
 	}
 	graphics_device.DebugTexture = SDL.CreateGPUTexture(device, tex_info)
 	if graphics_device.DebugTexture == nil {
@@ -795,9 +995,9 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 
 	vertex_data_size := u32(size_of(BatcherVertex) * 6)
-	vb_info := SDL.GPUBufferCreateInfo{
+	vb_info := SDL.GPUBufferCreateInfo {
 		usage = SDL.GPUBufferUsageFlags{.VERTEX},
-		size = vertex_data_size,
+		size  = vertex_data_size,
 		props = 0,
 	}
 	graphics_device.DebugVertexBuffer = SDL.CreateGPUBuffer(device, vb_info)
@@ -806,9 +1006,9 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 
 	transfer_size := u32(512)
-	transfer_info := SDL.GPUTransferBufferCreateInfo{
+	transfer_info := SDL.GPUTransferBufferCreateInfo {
 		usage = .UPLOAD,
-		size = transfer_size,
+		size  = transfer_size,
 		props = 0,
 	}
 	transfer := SDL.CreateGPUTransferBuffer(device, transfer_info)
@@ -823,7 +1023,7 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 
 	mode := Color{0, 0, 255, 0}
-	verts := [6]BatcherVertex{
+	verts := [6]BatcherVertex {
 		{Pos = [2]f32{-0.5, -0.5}, Tex = [2]f32{0, 0}, Col = Red, Mode = mode},
 		{Pos = [2]f32{-0.5, 0.5}, Tex = [2]f32{0, 0}, Col = Green, Mode = mode},
 		{Pos = [2]f32{0.5, 0.5}, Tex = [2]f32{0, 0}, Col = Blue, Mode = mode},
@@ -836,7 +1036,7 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	mem.copy(raw_data(dst), raw_data(verts[:]), int(vertex_data_size))
 	tex_offset := 256
 	texel := [4]u8{255, 255, 255, 255}
-	mem.copy(raw_data(dst[tex_offset:tex_offset+4]), &texel[0], 4)
+	mem.copy(raw_data(dst[tex_offset:tex_offset + 4]), &texel[0], 4)
 
 	SDL.UnmapGPUTransferBuffer(device, transfer)
 
@@ -853,12 +1053,34 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 		return
 	}
 
-	upload_src := SDL.GPUTransferBufferLocation{transfer_buffer = transfer, offset = 0}
-	upload_dst := SDL.GPUBufferRegion{buffer = graphics_device.DebugVertexBuffer, offset = 0, size = vertex_data_size}
+	upload_src := SDL.GPUTransferBufferLocation {
+		transfer_buffer = transfer,
+		offset          = 0,
+	}
+	upload_dst := SDL.GPUBufferRegion {
+		buffer = graphics_device.DebugVertexBuffer,
+		offset = 0,
+		size   = vertex_data_size,
+	}
 	SDL.UploadToGPUBuffer(copy_pass, upload_src, upload_dst, false)
 
-	upload_tex_src := SDL.GPUTextureTransferInfo{transfer_buffer = transfer, offset = u32(tex_offset), pixels_per_row = 1, rows_per_layer = 1}
-	upload_tex_dst := SDL.GPUTextureRegion{texture = graphics_device.DebugTexture, mip_level = 0, layer = 0, x = 0, y = 0, z = 0, w = 1, h = 1, d = 1}
+	upload_tex_src := SDL.GPUTextureTransferInfo {
+		transfer_buffer = transfer,
+		offset          = u32(tex_offset),
+		pixels_per_row  = 1,
+		rows_per_layer  = 1,
+	}
+	upload_tex_dst := SDL.GPUTextureRegion {
+		texture   = graphics_device.DebugTexture,
+		mip_level = 0,
+		layer     = 0,
+		x         = 0,
+		y         = 0,
+		z         = 0,
+		w         = 1,
+		h         = 1,
+		d         = 1,
+	}
 	SDL.UploadToGPUTexture(copy_pass, upload_tex_src, upload_tex_dst, false)
 
 	SDL.EndGPUCopyPass(copy_pass)
@@ -871,7 +1093,9 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 }
 
 draw_test_triangle :: proc(graphics_device: ^GraphicsDevice) {
-	if graphics_device.Device == nil || graphics_device.RenderPass == nil || graphics_device.CommandBuffer == nil {
+	if graphics_device.Device == nil ||
+	   graphics_device.RenderPass == nil ||
+	   graphics_device.CommandBuffer == nil {
 		return
 	}
 	if graphics_device.DebugPipeline == nil {
@@ -881,23 +1105,32 @@ draw_test_triangle :: proc(graphics_device: ^GraphicsDevice) {
 		}
 	}
 
-	SDL.SetGPUViewport(graphics_device.RenderPass, SDL.GPUViewport{
-		x = 0,
-		y = 0,
-		w = f32(graphics_device.SwapchainWidth),
-		h = f32(graphics_device.SwapchainHeight),
+	SDL.SetGPUViewport(graphics_device.RenderPass, SDL.GPUViewport {
+		x         = 0,
+		y         = 0,
+		w         = f32(graphics_device.SwapchainWidth),
+		h         = f32(graphics_device.SwapchainHeight),
 		min_depth = 0,
 		max_depth = 1,
 	})
 
-	SDL.PushGPUVertexUniformData(graphics_device.CommandBuffer, 0, raw_data(identity_matrix_4x4[:]), 64)
+	SDL.PushGPUVertexUniformData(
+		graphics_device.CommandBuffer,
+		0,
+		raw_data(identity_matrix_4x4[:]),
+		64,
+	)
 
 	SDL.BindGPUGraphicsPipeline(graphics_device.RenderPass, graphics_device.DebugPipeline)
 
-	vb_bindings := [1]SDL.GPUBufferBinding{{buffer = graphics_device.DebugVertexBuffer, offset = 0}}
+	vb_bindings := [1]SDL.GPUBufferBinding {
+		{buffer = graphics_device.DebugVertexBuffer, offset = 0},
+	}
 	SDL.BindGPUVertexBuffers(graphics_device.RenderPass, 0, &vb_bindings[0], 1)
 
-	ts_bindings := [1]SDL.GPUTextureSamplerBinding{{texture = graphics_device.DebugTexture, sampler = graphics_device.DebugSampler}}
+	ts_bindings := [1]SDL.GPUTextureSamplerBinding {
+		{texture = graphics_device.DebugTexture, sampler = graphics_device.DebugSampler},
+	}
 	SDL.BindGPUFragmentSamplers(graphics_device.RenderPass, 0, &ts_bindings[0], 1)
 
 	SDL.DrawGPUPrimitives(graphics_device.RenderPass, 3, 1, 0, 0)
@@ -906,7 +1139,9 @@ draw_test_triangle :: proc(graphics_device: ^GraphicsDevice) {
 DrawTestTriangle :: draw_test_triangle
 
 draw_test_quad :: proc(graphics_device: ^GraphicsDevice) {
-	if graphics_device.Device == nil || graphics_device.RenderPass == nil || graphics_device.CommandBuffer == nil {
+	if graphics_device.Device == nil ||
+	   graphics_device.RenderPass == nil ||
+	   graphics_device.CommandBuffer == nil {
 		return
 	}
 	if graphics_device.DebugPipeline == nil {
@@ -916,23 +1151,32 @@ draw_test_quad :: proc(graphics_device: ^GraphicsDevice) {
 		}
 	}
 
-	SDL.SetGPUViewport(graphics_device.RenderPass, SDL.GPUViewport{
-		x = 0,
-		y = 0,
-		w = f32(graphics_device.SwapchainWidth),
-		h = f32(graphics_device.SwapchainHeight),
+	SDL.SetGPUViewport(graphics_device.RenderPass, SDL.GPUViewport {
+		x         = 0,
+		y         = 0,
+		w         = f32(graphics_device.SwapchainWidth),
+		h         = f32(graphics_device.SwapchainHeight),
 		min_depth = 0,
 		max_depth = 1,
 	})
 
-	SDL.PushGPUVertexUniformData(graphics_device.CommandBuffer, 0, raw_data(identity_matrix_4x4[:]), 64)
+	SDL.PushGPUVertexUniformData(
+		graphics_device.CommandBuffer,
+		0,
+		raw_data(identity_matrix_4x4[:]),
+		64,
+	)
 
 	SDL.BindGPUGraphicsPipeline(graphics_device.RenderPass, graphics_device.DebugPipeline)
 
-	vb_bindings := [1]SDL.GPUBufferBinding{{buffer = graphics_device.DebugVertexBuffer, offset = 0}}
+	vb_bindings := [1]SDL.GPUBufferBinding {
+		{buffer = graphics_device.DebugVertexBuffer, offset = 0},
+	}
 	SDL.BindGPUVertexBuffers(graphics_device.RenderPass, 0, &vb_bindings[0], 1)
 
-	ts_bindings := [1]SDL.GPUTextureSamplerBinding{{texture = graphics_device.DebugTexture, sampler = graphics_device.DebugSampler}}
+	ts_bindings := [1]SDL.GPUTextureSamplerBinding {
+		{texture = graphics_device.DebugTexture, sampler = graphics_device.DebugSampler},
+	}
 	SDL.BindGPUFragmentSamplers(graphics_device.RenderPass, 0, &ts_bindings[0], 1)
 
 	SDL.DrawGPUPrimitives(graphics_device.RenderPass, 6, 1, 0, 0)
@@ -941,82 +1185,90 @@ draw_test_quad :: proc(graphics_device: ^GraphicsDevice) {
 DrawTestQuad :: draw_test_quad
 
 WindowCallback :: #type proc(window: ^Window)
-AppCallback    :: #type proc(app: ^App)
+AppCallback :: #type proc(app: ^App)
+
+// ==============================================================================
+// Window — 窗口状态
+// ==============================================================================
 
 Window :: struct {
-	Handle: ^SDL.Window,
-	ID: SDL.WindowID,
-	Title: string,
-	App: ^App,
+	Handle:         ^SDL.Window,
+	ID:             SDL.WindowID,
+	Title:          string,
+	App:            ^App,
 	GraphicsDevice: ^GraphicsDevice,
 
-	OnFocusGain: WindowCallback,
-	OnFocusLost: WindowCallback,
-	OnMouseEnter: WindowCallback,
-	OnMouseLeave: WindowCallback,
-	OnResize: WindowCallback,
-	OnRestore: WindowCallback,
-	OnMaximize: WindowCallback,
-	OnMinimize: WindowCallback,
+	OnFocusGain:       WindowCallback,
+	OnFocusLost:       WindowCallback,
+	OnMouseEnter:      WindowCallback,
+	OnMouseLeave:      WindowCallback,
+	OnResize:          WindowCallback,
+	OnRestore:         WindowCallback,
+	OnMaximize:        WindowCallback,
+	OnMinimize:        WindowCallback,
 	OnFullscreenEnter: WindowCallback,
-	OnFullscreenExit: WindowCallback,
-	OnCloseRequested: WindowCallback,
+	OnFullscreenExit:  WindowCallback,
+	OnCloseRequested:  WindowCallback,
 }
 
+// ==============================================================================
+// App — 配置、状态与回调
+// ==============================================================================
+
 AppConfig :: struct {
-	ApplicationName: string,
-	WindowTitle: string,
-	Width: int,
-	Height: int,
-	Fullscreen: bool,
-	Resizable: bool,
-	UpdateMode: UpdateMode,
+	ApplicationName:         string,
+	WindowTitle:             string,
+	Width:                   int,
+	Height:                  int,
+	Fullscreen:              bool,
+	Resizable:               bool,
+	UpdateMode:              UpdateMode,
 	PreferredGraphicsDriver: GraphicsDriver,
-	Flags: AppFlags,
+	Flags:                   AppFlags,
 }
 
 default_app_config :: proc(name: string, width, height: int) -> AppConfig {
-	return AppConfig{
-		ApplicationName = name,
-		WindowTitle = name,
-		Width = width,
-		Height = height,
-		Resizable = true,
-		UpdateMode = fixed_step_fps(60),
+	return AppConfig {
+		ApplicationName         = name,
+		WindowTitle             = name,
+		Width                   = width,
+		Height                  = height,
+		Resizable               = true,
+		UpdateMode              = fixed_step_fps(60),
 		PreferredGraphicsDriver = .None,
-		Flags = {},
+		Flags                   = {},
 	}
 }
 
 DefaultAppConfig :: default_app_config
 
 App :: struct {
-	Config: AppConfig,
-	Name: string,
-	Time: Time,
-	UpdateMode: UpdateMode,
-	Window: Window,
-	Input: Input,
-	GraphicsDevice: GraphicsDevice,
-	FileSystem: FileSystem,
-	Running: bool,
-	Exiting: bool,
-	Disposed: bool,
-	UserPath: string,
+	Config:          AppConfig,
+	Name:            string,
+	Time:            Time,
+	UpdateMode:      UpdateMode,
+	Window:          Window,
+	Input:           Input,
+	GraphicsDevice:  GraphicsDevice,
+	FileSystem:      FileSystem,
+	Running:         bool,
+	Exiting:         bool,
+	Disposed:        bool,
+	UserPath:        string,
 	// Optional pointer to application-owned state. This is the Odin equivalent
 	// of putting game fields on a Foster App subclass.
-	UserData: rawptr,
+	UserData:        rawptr,
 	OnExitRequested: AppCallback,
 
-	StartupProc: AppCallback,
+	StartupProc:  AppCallback,
 	ShutdownProc: AppCallback,
-	UpdateProc: AppCallback,
-	RenderProc: AppCallback,
+	UpdateProc:   AppCallback,
+	RenderProc:   AppCallback,
 
-	main_thread_id: int,
+	main_thread_id:    int,
 	main_thread_queue: [dynamic]AppCallback,
-	timer: coretime.Stopwatch,
-	last_update_time: coretime.Duration,
+	timer:             coretime.Stopwatch,
+	last_update_time:  coretime.Duration,
 	fixed_accumulator: coretime.Duration,
 }
 
@@ -1034,7 +1286,16 @@ create_error_from_sdl :: proc(sdl_method: string, foster_info := "") -> string {
 
 CreateExceptionFromSDL :: create_error_from_sdl
 
-window_init :: proc(window: ^Window, app: ^App, graphics_device: ^GraphicsDevice, config: AppConfig) {
+// ==============================================================================
+// Window / Lifecycle — 创建、属性与释放
+// ==============================================================================
+
+window_init :: proc(
+	window: ^Window,
+	app: ^App,
+	graphics_device: ^GraphicsDevice,
+	config: AppConfig,
+) {
 	window.App = app
 	window.GraphicsDevice = graphics_device
 	window.Title = config.WindowTitle
@@ -1059,7 +1320,12 @@ window_init :: proc(window: ^Window, app: ^App, graphics_device: ^GraphicsDevice
 		flags += SDL.WINDOW_RESIZABLE
 	}
 
-	window.Handle = SDL.CreateWindow(to_cstring(config.WindowTitle), c.int(config.Width), c.int(config.Height), flags)
+	window.Handle = SDL.CreateWindow(
+		to_cstring(config.WindowTitle),
+		c.int(config.Width),
+		c.int(config.Height),
+		flags,
+	)
 	if window.Handle == nil {
 		panic(create_error_from_sdl("SDL_CreateWindow"))
 	}
@@ -1251,6 +1517,10 @@ window_display_size :: proc(window: ^Window) -> Point2 {
 }
 
 window_set_mouse_visible :: proc(window: ^Window, enabled: bool) {
+	when ODIN_OS == .JS {
+		fw_cursor_visible(enabled)
+		return
+	}
 	_ = window
 	if enabled == SDL.CursorVisible() {
 		return
@@ -1286,15 +1556,23 @@ window_set_mouse_position :: proc(window: ^Window, x, y: f32) {
 }
 
 AppSetUserData :: proc(app: ^App, data: rawptr) {
-	if app != nil do app.UserData = data
+	if app != nil {
+		app.UserData = data
+	}
 }
 
 AppGetUserData :: proc(app: ^App) -> rawptr {
-	if app == nil do return nil
+	if app == nil {
+		return nil
+	}
 	return app.UserData
 }
 
 window_set_mouse_cursor :: proc(window: ^Window, cursor: ^SDL.Cursor) {
+	when ODIN_OS == .JS {
+		_ = fw_cursor_set(web_handle_u32(cursor))
+		return
+	}
 	_ = window
 	if cursor == nil {
 		_ = SDL.SetCursor(SDL.GetDefaultCursor())
@@ -1304,12 +1582,20 @@ window_set_mouse_cursor :: proc(window: ^Window, cursor: ^SDL.Cursor) {
 }
 
 window_start_text_input :: proc(window: ^Window) {
+	when ODIN_OS == .JS {
+		fw_text_input(true)
+		return
+	}
 	if window.Handle != nil && !SDL.TextInputActive(window.Handle) {
 		_ = SDL.StartTextInput(window.Handle)
 	}
 }
 
 window_stop_text_input :: proc(window: ^Window) {
+	when ODIN_OS == .JS {
+		fw_text_input(false)
+		return
+	}
 	if window.Handle != nil && SDL.TextInputActive(window.Handle) {
 		_ = SDL.StopTextInput(window.Handle)
 	}
@@ -1326,25 +1612,45 @@ window_set_text_input :: proc(window: ^Window, enabled: bool) {
 window_on_event :: proc(window: ^Window, event_type: SDL.EventType) {
 	#partial switch event_type {
 	case .WINDOW_FOCUS_GAINED:
-		if window.OnFocusGain != nil do window.OnFocusGain(window)
+		if window.OnFocusGain != nil {
+			window.OnFocusGain(window)
+		}
 	case .WINDOW_FOCUS_LOST:
-		if window.OnFocusLost != nil do window.OnFocusLost(window)
+		if window.OnFocusLost != nil {
+			window.OnFocusLost(window)
+		}
 	case .WINDOW_MOUSE_ENTER:
-		if window.OnMouseEnter != nil do window.OnMouseEnter(window)
+		if window.OnMouseEnter != nil {
+			window.OnMouseEnter(window)
+		}
 	case .WINDOW_MOUSE_LEAVE:
-		if window.OnMouseLeave != nil do window.OnMouseLeave(window)
+		if window.OnMouseLeave != nil {
+			window.OnMouseLeave(window)
+		}
 	case .WINDOW_RESIZED:
-		if window.OnResize != nil do window.OnResize(window)
+		if window.OnResize != nil {
+			window.OnResize(window)
+		}
 	case .WINDOW_RESTORED:
-		if window.OnRestore != nil do window.OnRestore(window)
+		if window.OnRestore != nil {
+			window.OnRestore(window)
+		}
 	case .WINDOW_MAXIMIZED:
-		if window.OnMaximize != nil do window.OnMaximize(window)
+		if window.OnMaximize != nil {
+			window.OnMaximize(window)
+		}
 	case .WINDOW_MINIMIZED:
-		if window.OnMinimize != nil do window.OnMinimize(window)
+		if window.OnMinimize != nil {
+			window.OnMinimize(window)
+		}
 	case .WINDOW_ENTER_FULLSCREEN:
-		if window.OnFullscreenEnter != nil do window.OnFullscreenEnter(window)
+		if window.OnFullscreenEnter != nil {
+			window.OnFullscreenEnter(window)
+		}
 	case .WINDOW_LEAVE_FULLSCREEN:
-		if window.OnFullscreenExit != nil do window.OnFullscreenExit(window)
+		if window.OnFullscreenExit != nil {
+			window.OnFullscreenExit(window)
+		}
 	case .WINDOW_CLOSE_REQUESTED:
 		if window.OnCloseRequested != nil {
 			window.OnCloseRequested(window)
@@ -1354,8 +1660,13 @@ window_on_event :: proc(window: ^Window, event_type: SDL.EventType) {
 	}
 }
 
-Width :: proc(window: ^Window) -> int { return window_size(window).X }
-Height :: proc(window: ^Window) -> int { return window_size(window).Y }
+Width :: proc(window: ^Window) -> int {
+	return window_size(window).X
+}
+
+Height :: proc(window: ^Window) -> int {
+	return window_size(window).Y
+}
 Size :: window_size
 SizeInPixels :: window_size_in_pixels
 Position :: window_position
@@ -1380,6 +1691,10 @@ StartTextInput :: window_start_text_input
 StopTextInput :: window_stop_text_input
 SetTextInput :: window_set_text_input
 OnEvent :: window_on_event
+
+// ==============================================================================
+// App / Lifecycle — 初始化与释放
+// ==============================================================================
 
 init_app :: proc(app: ^App, config: AppConfig) {
 	if config.Width <= 0 || config.Height <= 0 {
@@ -1437,6 +1752,11 @@ dispose_app :: proc(app: ^App) {
 
 	shutdown_graphics_device(&app.GraphicsDevice)
 	input_close_devices(&app.Input)
+	when ODIN_OS == .JS {
+		web_storage_shutdown()
+		delete(web_clipboard_callbacks)
+		web_clipboard_callbacks = nil
+	}
 	window_close(&app.Window)
 	destroy_device(&app.GraphicsDevice)
 	when ODIN_OS != .JS {
@@ -1470,6 +1790,10 @@ drain_main_thread_queue :: proc(app: ^App) {
 	}
 }
 
+// ==============================================================================
+// App / Events — 原生与 Web 事件分发
+// ==============================================================================
+
 poll_events :: proc(app: ^App) {
 	when ODIN_OS == .JS {
 		// 事件来源替换为 foster.js 的 DOM 事件队列; 窗口事件映射为 SDL.EventType
@@ -1502,8 +1826,14 @@ poll_events :: proc(app: ^App) {
 				}
 			case .MouseMove:
 				position := Vec2f{web_event.F, web_event.G}
-				delta := Vec2f{position.X - app.Input.last_mouse.X, position.Y - app.Input.last_mouse.Y}
-				if position.X != app.Input.last_mouse.X || position.Y != app.Input.last_mouse.Y || delta.X != 0 || delta.Y != 0 {
+				delta := Vec2f {
+					position.X - app.Input.last_mouse.X,
+					position.Y - app.Input.last_mouse.Y,
+				}
+				if position.X != app.Input.last_mouse.X ||
+				   position.Y != app.Input.last_mouse.Y ||
+				   delta.X != 0 ||
+				   delta.Y != 0 {
 					app.Input.last_mouse = position
 					input_mouse_move(&app.Input, position, delta, app.Time.Elapsed)
 				}
@@ -1512,11 +1842,62 @@ poll_events :: proc(app: ^App) {
 				position := Vec2f{web_event.F, web_event.G}
 				app.Input.last_mouse = position
 				input_mouse_move(&app.Input, position, Vec2f{0, 0}, app.Time.Elapsed)
-				input_mouse_button(&app.Input, cast(MouseButtons)web_event.A, true, app.Time.Elapsed)
+				input_mouse_button(
+					&app.Input,
+					cast(MouseButtons)web_event.A,
+					true,
+					app.Time.Elapsed,
+				)
 			case .MouseButtonUp:
-				input_mouse_button(&app.Input, cast(MouseButtons)web_event.A, false, app.Time.Elapsed)
+				input_mouse_button(
+					&app.Input,
+					cast(MouseButtons)web_event.A,
+					false,
+					app.Time.Elapsed,
+				)
 			case .MouseWheel:
 				input_mouse_wheel(&app.Input, Vec2f{web_event.F, web_event.G})
+			case .TextInput:
+				input_text(&app.Input, web_event_text(), &app.Window)
+			case .ControllerConnected:
+				name := web_event_text(context.allocator)
+				append(&app.Input.owned_controller_names, name)
+				input_connect_controller(
+					&app.Input,
+					ControllerID(web_event.A),
+					name,
+					int(web_event.B),
+					int(web_event.C),
+					web_event.F != 0,
+					web_event.F != 0 ? .Standard : .Unknown,
+					0,
+					0,
+					0,
+				)
+			case .ControllerDisconnected:
+				input_disconnect_controller(&app.Input, ControllerID(web_event.A))
+			case .ControllerButtonDown, .ControllerButtonUp:
+				input_controller_button(
+					&app.Input,
+					ControllerID(web_event.A),
+					int(web_event.B),
+					web_event.Kind == .ControllerButtonDown,
+					app.Time.Elapsed,
+				)
+			case .ControllerAxis:
+				input_controller_axis(
+					&app.Input,
+					ControllerID(web_event.A),
+					int(web_event.B),
+					web_event.F,
+					app.Time.Elapsed,
+				)
+			case .DialogResult:
+				web_dialog_complete(u32(web_event.A), web_event.B != 0)
+			case .StorageFlushResult:
+				web_storage_complete(u32(web_event.A), web_event.B != 0)
+			case .ClipboardResult:
+				web_clipboard_complete(u32(web_event.A), web_event.B != 0)
 			}
 		}
 		return
@@ -1536,35 +1917,35 @@ poll_events :: proc(app: ^App) {
 				}
 			}
 		case .WINDOW_FOCUS_GAINED,
-			.WINDOW_FOCUS_LOST,
-			.WINDOW_MOUSE_ENTER,
-			.WINDOW_MOUSE_LEAVE,
-			.WINDOW_RESIZED,
-			.WINDOW_RESTORED,
-			.WINDOW_MAXIMIZED,
-			.WINDOW_MINIMIZED,
-			.WINDOW_ENTER_FULLSCREEN,
-			.WINDOW_LEAVE_FULLSCREEN,
-			.WINDOW_CLOSE_REQUESTED:
+		     .WINDOW_FOCUS_LOST,
+		     .WINDOW_MOUSE_ENTER,
+		     .WINDOW_MOUSE_LEAVE,
+		     .WINDOW_RESIZED,
+		     .WINDOW_RESTORED,
+		     .WINDOW_MAXIMIZED,
+		     .WINDOW_MINIMIZED,
+		     .WINDOW_ENTER_FULLSCREEN,
+		     .WINDOW_LEAVE_FULLSCREEN,
+		     .WINDOW_CLOSE_REQUESTED:
 			if event.window.windowID == app.Window.ID {
 				window_on_event(&app.Window, event.type)
 			}
 		case .MOUSE_BUTTON_DOWN,
-			.MOUSE_BUTTON_UP,
-			.MOUSE_WHEEL,
-			.KEY_DOWN,
-			.KEY_UP,
-			.TEXT_INPUT,
-			.JOYSTICK_ADDED,
-			.JOYSTICK_REMOVED,
-			.JOYSTICK_BUTTON_DOWN,
-			.JOYSTICK_BUTTON_UP,
-			.JOYSTICK_AXIS_MOTION,
-			.GAMEPAD_ADDED,
-			.GAMEPAD_REMOVED,
-			.GAMEPAD_BUTTON_DOWN,
-			.GAMEPAD_BUTTON_UP,
-			.GAMEPAD_AXIS_MOTION:
+		     .MOUSE_BUTTON_UP,
+		     .MOUSE_WHEEL,
+		     .KEY_DOWN,
+		     .KEY_UP,
+		     .TEXT_INPUT,
+		     .JOYSTICK_ADDED,
+		     .JOYSTICK_REMOVED,
+		     .JOYSTICK_BUTTON_DOWN,
+		     .JOYSTICK_BUTTON_UP,
+		     .JOYSTICK_AXIS_MOTION,
+		     .GAMEPAD_ADDED,
+		     .GAMEPAD_REMOVED,
+		     .GAMEPAD_BUTTON_DOWN,
+		     .GAMEPAD_BUTTON_UP,
+		     .GAMEPAD_AXIS_MOTION:
 			input_on_event(&app.Input, &app.Window, &event, app.Time.Elapsed)
 		}
 	}
@@ -1575,7 +1956,11 @@ step_app :: proc(app: ^App, delta: coretime.Duration) {
 
 	when ODIN_OS != .JS {
 		if SDL.GetWindowRelativeMouseMode(app.Window.Handle) && window_focused(&app.Window) {
-			SDL.WarpMouseInWindow(app.Window.Handle, f32(Width(&app.Window)) / 2, f32(Height(&app.Window)) / 2)
+			SDL.WarpMouseInWindow(
+				app.Window.Handle,
+				f32(Width(&app.Window)) / 2,
+				f32(Height(&app.Window)) / 2,
+			)
 		}
 	}
 
@@ -1642,6 +2027,10 @@ tick_app :: proc(app: ^App) {
 		app.RenderProc(app)
 	}
 }
+
+// ==============================================================================
+// App / MainLoop — 更新、渲染与退出
+// ==============================================================================
 
 run :: proc(app: ^App) {
 	when ODIN_OS == .JS {

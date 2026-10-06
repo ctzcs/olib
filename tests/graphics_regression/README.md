@@ -1,19 +1,22 @@
 # Graphics regression
 
 Run from PowerShell on Windows with Odin, a SPIR-V-capable DXC on PATH,
-and a Windows SDK DXC with its matching DXIL validator:
+and a Windows SDK DXC with its matching DXIL validator, plus glslangValidator:
 
 ```powershell
 ./tests/graphics_regression/run.ps1
 ```
 
-Override `-SpirvDxc` / `-DxilDxc` for other compiler locations, or use
+Override `-SpirvDxc` / `-DxilDxc` for other compiler locations and
+`-GlslangValidator` for the GLSL compute compiler location. Use
 `-Drivers vulkan` / `-Drivers d3d12` to test one backend. Both are tested by
 default. These tests require a GPU supporting the tested HDR render formats.
 They create offscreen targets without opening a window, and write build
 artifacts under `build/graphics-regression`.
 
-Checks cover native HDR upload/readback, RGBA16F/RGBA32F MRT output and alpha,
+Checks cover compute readonly/readwrite textures and buffers, uniform data,
+standalone and frame dispatch, shader recreation and invalid dispatch rejection;
+native HDR upload/readback, RGBA16F/RGBA32F MRT output and alpha,
 100 frames of replacement blending without clears, premultiplied blending,
 pipeline cache separation, packed R11G11B10_UFLOAT output, and missing-shader
 log deduplication. The D3D12 run also uses a valid shader with an incompatible

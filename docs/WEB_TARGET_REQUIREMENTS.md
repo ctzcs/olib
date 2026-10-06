@@ -2,6 +2,24 @@
 
 > 需求方背景：vehicles 项目（Odin + OFoster）要跑进浏览器。本文档是给 OFoster 增加 Web 后端的需求说明，基于 2026-09-09 对 OFoster 当前代码和 web-spike 验证结果的审计。
 
+## 2026-10-06 状态更新
+
+历史 M0–M4 记录保留如下，但其中“无目录枚举”“纹理下载恒返回 nil”及
+“Blit 非目标”的描述已被新实现替代。当前桥支持空目录标记、子项枚举与递归删除，
+支持离屏颜色及深度/模板目标、深度/模板状态、RGBA8/R8/RG8/RGBA32F GPU 读回、
+区域上传、GPU Clone 与缩放 Blit。`tests/port_regression` 已在 Chromium 通过
+RGBA8 像素、模板裁剪、深度比较与 ZIP/目录存储回归。
+
+后续补齐标准和原始手柄映射、按下/释放与震动请求，UTF-8/IME 文本输入、同帧累计，
+CSS/自定义图像光标、异步剪贴板、PNG 导出、文件/目录导入及保存完成回调。
+`tests/port_regression/?debug=1&input-tests=1` 通过新增模拟设备和文件句柄回归，
+并以真实 TTF 验证增量图集、pixel-perfect 字形和资源释放。
+
+Compute、SSBO、离屏 MSAA、线框填充属于当前 WebGL2 后端限制。剪贴板/文件选择
+还受浏览器权限、API 支持和用户激活限制；选择器不可用会回调取消结果。选中文件
+导入虚拟路径，保存的磁盘写入用 `FlushStorageFileAsync` 确认。真实硬件/系统 IME/
+权限对话框尚需人工验证。完整 API 差异和测试边界见 [PORTING_MAP.md](PORTING_MAP.md)。
+
 ## 0. 已验证事实（不要推翻，直接利用）
 
 - **Odin 不经过 Emscripten**：`-target:js_wasm32` 用 Odin 自带 wasm-ld + JS runtime（`odin.js`）。Odin 的 `vendor:sdl3` 没有 wasm 链接路径（`sdl3__foreign.odin` 只有 `SDL3.lib` / `system:SDL3`），SDL 不可链。所有 SDL 调用点必须走条件编译替换。
@@ -162,7 +180,7 @@ vehicles 以 `odin build src -target:js_wasm32 -collection:ofoster=..\OFoster\sr
 | M2 ✅ | 纹理 + Textured 管线 + transfer buffer 上传 | 验收 3（2026-09-10 通过，见 §0 M2-M4 事实） |
 | M3 ✅ | 键鼠输入 + resize + 相对鼠标 | 验收 4、5（2026-09-10 通过） |
 | M4 ✅ | 虚拟 FS 存档持久化 | 验收 6（2026-09-10 通过） |
-| M5（可选） | 剪贴板、光标样式、gamepad、WebGPU 评估 | — |
+| M5（浏览器能力） | 剪贴板、光标、gamepad、文本输入、文件选择 | 2026-10-06 模拟接口回归通过；真实设备/权限待人工验收，WebGPU 未实现 |
 
 ## 11. 风险与注意
 
@@ -220,5 +238,5 @@ python -m http.server 8138     # 在仓库根目录
 - [ ] 桌面构建回归通过（同一份代码双端可跑）。
 - [ ] 改过 `*.js` 后 `index.html` 里对应 `?v=N` 版本号 +1（浏览器脚本缓存，症状是"改动不生效"）。
 - [ ] 音频：首次需一次用户手势（autoplay 策略），确认点击后 BGM 正常。
-- [ ] 已知限制可接受：截图/离屏纹理读回不可用、`FillMode.Line` 恒按填充绘制（见 §0）。
+- [ ] 已知限制可接受：compute/SSBO/离屏 MSAA 不可用、`FillMode.Line` 按填充绘制；GPU 读回已支持，浮点目标取决于扩展（见顶部状态更新）。
 - [ ] 调试日志默认隐藏；自查时 URL 加 `?debug=1`，出错自动弹出，F12 始终有完整输出。

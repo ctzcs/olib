@@ -82,6 +82,84 @@ verify_pixels :: proc(texture: ^foster.Texture, expected: [4]f32) {
     for value, i in data { assert(roundtrip[i] == value) }
 }
 
+verify_compute :: proc(device: ^foster.GraphicsDevice, directory: string) {
+    extension := device.Driver == .D3D12 ? "dxil" : "spv"
+    code, err := os.read_entire_file(fmt.tprintf("%s/compute.%s", directory, extension), context.allocator)
+    assert(err == nil)
+    defer delete(code)
+    shader: foster.Shader
+    foster.ShaderInit(&shader, device, foster.ShaderCreateInfo{
+        Stage = .Compute, Code = code, EntryPoint = device.Driver == .D3D12 ? "compute_main" : "main",
+        ReadOnlyStorageTextureCount = 1, ReadOnlyStorageBufferCount = 1,
+        ReadWriteStorageTextureCount = 1, ReadWriteStorageBufferCount = 1,
+        UniformBufferCount = 1, ThreadCountX = 4, ThreadCountY = 4, ThreadCountZ = 1,
+    }, "compute-regression")
+    defer foster.ShaderDispose(&shader)
+    source, output: foster.Texture
+    foster.TextureInitFlags(&source, device, 8, 8, .R32G32B32A32_FLOAT, {.ComputeRead}, "input")
+    foster.TextureInitFlags(&output, device, 8, 8, .R32G32B32A32_FLOAT, {.ComputeRead, .ComputeWrite}, "output")
+    defer foster.TextureDispose(&source)
+    defer foster.TextureDispose(&output)
+    pixels: [64][4]f32
+    for i in 0..<64 { pixels[i] = {1, 2, 3, 4} }
+    foster.TextureSetData(&source, raw_data(pixels[:]), size_of(pixels))
+    input: foster.StorageBuffer
+    buffer: foster.ComputeStorageBuffer
+    foster.StorageBufferInit(&input, device, size_of([4]f32))
+    foster.ComputeStorageBufferInit(&buffer, device, size_of([4]f32))
+    defer foster.StorageBufferDispose(&input)
+    defer foster.ComputeStorageBufferDispose(&buffer)
+    foster.StorageBufferUpload(&input, raw_data(pixels[:]), 64)
+    foster.ComputeStorageBufferUpload(&buffer, raw_data(pixels[:]), 64)
+    command: foster.ComputeCommand
+    foster.ComputeCommandInit(&command)
+    defer foster.ComputeCommandDispose(&command)
+    command.Shader = &shader
+    command.GroupCountX = 2
+    command.GroupCountY = 2
+    append(&command.ReadOnlyStorageTextures, &source)
+    append(&command.ReadOnlyStorageBuffers, &input)
+    append(&command.ReadWriteStorageTextures, &output)
+    append(&command.ReadWriteStorageBuffers, &buffer)
+    uniform: foster.UniformBuffer
+    params := [1][4]f32{{10, 20, 30, 40}}
+    foster.UniformBufferInit(&uniform)
+    foster.UniformBufferSet(&uniform, mem.slice_to_bytes(params[:]))
+    defer foster.UniformBufferDispose(&uniform)
+    append(&command.UniformBuffers, uniform)
+    // The standalone path must end its compute pass before submitting.
+    assert(foster.GraphicsDeviceDispatch(device, &command))
+    assert(SDL.WaitForGPUIdle(device.Device))
+    verify_pixels(&output, {12, 24, 36, 48})
+    // Repeat in an existing frame and after shader recreation.
+    foster.ShaderRecreate(&shader, shader.CreateInfo)
+    begin(device)
+    assert(foster.GraphicsDeviceDispatch(device, &command))
+    submit(device)
+    verify_pixels(&output, {12, 24, 36, 48})
+    // Read the writable storage buffer independently of the texture output.
+    transfer := SDL.CreateGPUTransferBuffer(device.Device, {usage = .DOWNLOAD, size = size_of(pixels)})
+    assert(transfer != nil)
+    defer SDL.ReleaseGPUTransferBuffer(device.Device, transfer)
+    cb := SDL.AcquireGPUCommandBuffer(device.Device)
+    pass := SDL.BeginGPUCopyPass(cb)
+    SDL.DownloadFromGPUBuffer(pass, {buffer = buffer.Base.Resource, size = size_of(pixels)}, {transfer_buffer = transfer})
+    SDL.EndGPUCopyPass(pass)
+    assert(SDL.SubmitGPUCommandBuffer(cb) && SDL.WaitForGPUIdle(device.Device))
+    ptr := SDL.MapGPUTransferBuffer(device.Device, transfer, false)
+    assert(ptr != nil)
+    values := ([^][4]f32)(ptr)
+    for i in 0..<64 { assert(values[i] == [4]f32{24, 48, 72, 96}) }
+    SDL.UnmapGPUTransferBuffer(device.Device, transfer)
+    command.GroupCountX = 0
+    assert(!foster.GraphicsDeviceDispatch(device, &command))
+    command.GroupCountX = 2
+    buffer.Base.Disposed = true
+    assert(!foster.GraphicsDeviceDispatch(device, &command))
+    buffer.Base.Disposed = false
+    fmt.println("PASS: compute readonly/readwrite textures and buffers, uniform data, standalone/frame dispatch and recreation")
+}
+
 run :: proc(driver: foster.GraphicsDriver, directory: string) {
     driver_name: cstring = driver == .D3D12 ? "direct3d12" : "vulkan"
     device := foster.GraphicsDevice{Driver = driver}
@@ -90,6 +168,7 @@ run :: proc(driver: foster.GraphicsDriver, directory: string) {
     defer SDL.DestroyGPUDevice(device.Device)
     defer foster.graphics_device_dispose_caches(&device)
     fmt.println("Testing", driver)
+    verify_compute(&device, directory)
 
     vertex, fragment: foster.Shader
     load_shader(&vertex, &device, directory, "vertex", "vertex_main", "hdr-vertex", .Vertex, 0)

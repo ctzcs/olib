@@ -10,7 +10,7 @@ OFoster is an Odin implementation of the [Foster](https://github.com/FosterFrame
 
 ## Foster sync baseline
 
-OFoster is currently synchronized with the upstream Foster source at:
+OFoster tracks the following upstream Foster source baseline:
 
 - Upstream: [FosterFramework/Foster](https://github.com/FosterFramework/Foster)
 - Foster version: `v0.4.2`
@@ -27,18 +27,18 @@ this section together with `FosterVersionMajor`, `FosterVersionMinor`, and
 
 The 0.4.2 additions currently exposed by the port include stencil/fill draw
 state, texture flags and region operations, compute pipeline/dispatch types,
-uniform buffers, storage backends (including Store/Deflate ZIP archives),
+uniform buffers, storage backends (including Store/Deflate and ZIP64 archives),
 convex hull and rectangle difference helpers, and virtual-input
 activation/manual-update helpers. The SDL3 bindings supplied with Odin are
 used directly.
 
-The repository root is the OFoster library package. Runnable examples are
+The library package is `src/`. Runnable examples are
 maintained in the separate `OFoster_Sample` project.
 
 ## Use the framework
 
-Import the OFoster root package from an Odin program. When building from the repository root,
-define the collection once:
+Import the OFoster package from an Odin program. When building from the repository root,
+use `-collection:ofoster=src`:
 
 ```odin
 import foster "ofoster:."
@@ -61,15 +61,94 @@ the web bridge).
   layer incl. Batcher), `images.odin` (image loading and fonts), `input.odin`,
   `spatial.odin`, `utility.odin`, `storage.odin`, `web.odin` (js bridge), plus
   `#+build` platform pair (`platform_native.odin` / `platform_web.odin`).
-- `assets/shaders/`: default shaders embedded at compile time via `#load`.
+- `src/assets/shaders/`: default shaders embedded at compile time via `#load`.
 - `src/internal/`: vendored C bindings (`third_party`) and the web bridge JS
   (`web`).
-- `tests/`: `webtest` (web acceptance program) and `graphics_regression`
-  (GPU regression suite).
+- `tests/`: `webtest` (web acceptance program), `graphics_regression`
+  (native GPU suite) and `port_regression` (shared native/Web port checks).
 - `docs/`: supplementary documentation — `PORTING_MAP.md` (upstream file
-  mapping and API differences) and `WEB_TARGET_REQUIREMENTS.md` (web target
+  mapping and API differences), `CODE_STYLE.md` (source layout and formatting),
+  and `WEB_TARGET_REQUIREMENTS.md` (web target
   requirements and acceptance notes).
 - `build/`: git-ignored scratch space for local harnesses and artifacts.
+
+## Source layout and formatting
+
+Each library file has a section index and hierarchical comments matching the
+upstream directories and types. Major sections use `// ===` separators, and
+types or smaller groups use `// ---` separators. Procedure bodies, control flow
+and struct fields are expanded across lines for readability.
+
+Follow [CODE_STYLE.md](docs/CODE_STYLE.md) when adding, porting or maintaining
+code. It defines the section hierarchy, navigation comments, multiline layout
+and examples. Keep related procedures in their existing sections and update the
+file's section index when adding a new group.
+
+The shared formatter settings are in `odinfmt.json`. With `odinfmt` available,
+format the library from the repository root:
+
+```powershell
+odinfmt -path:src -config:odinfmt.json -w
+```
+
+## Port coverage and verification
+
+The 2026-10-06 port update adds complete native compute resource binding
+(samplers, readonly/readwrite textures and buffers, uniforms), GPU texture
+clone/partial upload/scaled blit, Batcher stencil state and resource disposal,
+concave polygon triangulation, input mask filtering and press transitions,
+easing/time/spatial helpers, and JSON vector/matrix conversion procedures.
+ZIP containers now work through the common storage API, including relative
+roots, filtered/recursive directory enumeration, seekable `OpenRead` streams
+and writable `Create` streams. Writes are buffered until Flush/Close/Destroy;
+Create immediately truncates the destination. Destroy streams
+with `io.destroy`; returned strings, byte slices and directory names are owned
+by the caller. Keep `ZipStorage` alive and at a stable address while using its
+container or relative views.
+
+Seeded RNG integer/float/double output now follows the upstream bit-generation
+rules on both native and Web targets. This changes sequences produced by older
+OFoster versions for those methods; `RngU64` retains its existing sequence.
+
+The update also completes StackList and Polygon mutation helpers, hex component
+ordering, direction/sign parsing, projection overlap, triangulation enumerators,
+incremental GPU font atlases, sine-wave and scaled/wrapped text drawing. Font
+kerning now translates codepoints to glyph indices. Image, font, packer, Aseprite
+and independent input disposal release owned allocations; linked Aseprite cels
+and strings survive release of the original input. ZIP initialization accepts
+files, memory or a storage container, handles ZIP64, and reports CRC/structural
+errors through `ZipStorage.Error`, with no partially decoded entries exposed.
+
+The WebGL2 bridge additionally supports offscreen color/depth/stencil targets,
+depth and stencil draw state, RGBA8/R8/RG8/RGBA32F texture readback, GPU cloning
+and scaled copies, PNG export to virtual storage, and persistent directory-aware
+storage. It now bridges gamepads/rumble, UTF-8 and IME text, CSS/custom cursors,
+asynchronous clipboard access and file/folder/save pickers. Browser pickers
+require a supported File System Access API and user activation; unsupported or
+cancelled pickers return an empty/cancelled result. Picked paths are virtual
+snapshots. Writes to selected save files are queued; `FlushStorageFileAsync`
+confirms completion, while the synchronous write result confirms virtual storage.
+Web compute, graphics storage buffers, wireframe fill and attachment MSAA remain
+outside WebGL2 coverage.
+Custom Web shaders use the bridge's named uniforms (`u_matrix`, `u_tex`,
+`u_distance_range`), rather than arbitrary native uniform-buffer layouts.
+`GetClipboardString` returns an owned string (delete it); Web reads return the
+last cached clipboard text. Use `RequestClipboardString` / `SetClipboardStringAsync`
+for browser completion and permission failures. Callback text/paths are borrowed
+for the callback duration. See [PORTING_MAP.md](docs/PORTING_MAP.md) for API adaptations and verification
+limits; the baseline above is not a claim of complete C# API equivalence.
+
+Run from the repository root on Windows:
+
+```powershell
+odin check src -no-entry-point
+odin run tests/port_regression -collection:ofoster=src -out:build/port-regression.exe
+./tests/graphics_regression/run.ps1
+```
+
+The graphics suites exercise D3D12 and Vulkan. The native compute regression
+requires DXC and `glslangValidator`; see its [README](tests/graphics_regression/README.md).
+For browser checks, follow [tests/port_regression/README.md](tests/port_regression/README.md).
 
 ## App usage
 

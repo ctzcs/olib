@@ -2,6 +2,10 @@
 
 package foster_framework
 
+// ==============================================================================
+// Platform / Native — 本机存储、路径与线程
+// ==============================================================================
+
 // 本机平台实现：storage 的 OS 层/路径层 + 线程 ID。
 // 拆分原因：core:os 与 core:path/filepath 在 js 目标不可用，且 import
 // 不能放进 when 块（编译器要求用 #+build 分文件），Web 对应在
@@ -11,10 +15,17 @@ import "core:strings"
 import os "core:os"
 import filepath "core:path/filepath"
 
-// ===== storage OS 层（文件读写/目录/工作路径）（原 storage_os_native.odin） =====
+// 文件内导航（按 Foster 目录 / 类型分级）
+//   Platform / Native — 本机存储、路径与线程
+//   Platform / Storage / Files
+//   Platform / Storage / Paths
+//   Platform / Thread
+
+// ==============================================================================
+// Platform / Storage / Files
+// ==============================================================================
 // 存储层本机文件后端: 所有 core:os 调用收口在这里(core:os 在 js 目标不可用,
 // storage_runtime.odin 通过本层间接使用)。Web 对应实现在 storage_os_web.odin。
-
 
 storage_os_exists :: proc(path: string) -> bool {
 	return os.exists(path)
@@ -73,11 +84,12 @@ storage_os_working_directory :: proc(allocator := context.allocator) -> string {
 	return dir
 }
 
-// ===== storage 路径层（平台分隔符语义）（原 storage_path_native.odin） =====
+// ==============================================================================
+// Platform / Storage / Paths
+// ==============================================================================
 // 存储层本机路径后端(core:path/filepath 的 path.odin 无条件依赖 core:os,
 // js 目标不可用, 故收口到本层; Web 对应实现在 storage_path_web.odin)。
 // 行为与原先直接调用 core:path/filepath 完全一致(平台分隔符语义)。
-
 
 storage_path_clean :: proc(path: string, allocator := context.temp_allocator) -> string {
 	cleaned, _ := filepath.clean(path, allocator)
@@ -93,9 +105,10 @@ storage_path_split :: proc(path: string) -> (dir, file: string) {
 	return filepath.split(path)
 }
 
-// ===== 线程 ID（原 platform_thread_native.odin） =====
+// ==============================================================================
+// Platform / Thread
+// ==============================================================================
 // 桌面/本机平台的线程 ID(core:os 在 js 目标不可用, 见 platform_thread_web.odin)
-
 
 platform_current_thread_id :: proc() -> int {
 	return os.get_current_thread_id()

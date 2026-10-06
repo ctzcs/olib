@@ -1,6 +1,7 @@
 param(
     [string]$SpirvDxc,
     [string]$DxilDxc,
+    [string]$GlslangValidator = 'glslangValidator',
     [ValidateSet('d3d12', 'vulkan')]
     [string[]]$Drivers = @('d3d12', 'vulkan')
 )
@@ -35,6 +36,10 @@ foreach ($entry in @(
 
 $odinRoot = (& odin root).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot locate Odin.' }
+& $DxilDxc -T cs_6_0 -E compute_main -Fo (Join-Path $outputDirectory 'compute.dxil') (Join-Path $PSScriptRoot 'compute.hlsl')
+if ($LASTEXITCODE -ne 0) { throw 'Compute DXIL compilation failed.' }
+& $GlslangValidator -V -S comp -o (Join-Path $outputDirectory 'compute.spv') (Join-Path $PSScriptRoot 'compute.glsl')
+if ($LASTEXITCODE -ne 0) { throw 'Compute SPIR-V compilation failed.' }
 Copy-Item -LiteralPath (Join-Path $odinRoot 'vendor/sdl3/SDL3.dll') -Destination $outputDirectory
 $executable = Join-Path $outputDirectory 'graphics-regression.exe'
 & odin build $PSScriptRoot "-collection:ofoster=$repoRoot/src" "-out:$executable"

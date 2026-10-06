@@ -38,6 +38,10 @@ UI_Context :: struct {
 	text_config_pool: []clay.TextElementConfig,
 	text_config_len:  int,
 
+	// 圆角渲染用的单位圆盘纹理（预乘 alpha），ui_render 首次调用时懒建。
+	corner_texture:    foster.Texture,
+	corner_texture_ok: bool,
+
 	width, height: f32,
 
 	pointer_x, pointer_y: f32,
@@ -89,6 +93,10 @@ ui_dispose :: proc(ctx: ^UI_Context, allocator := context.allocator) {
 	// context 活在 arena 里；先断开 clay 全局指针，避免下一个
 	// Initialize 读到已释放的 oldContext（UB/挂死）
 	clay.SetCurrentContext(nil)
+	if ctx.corner_texture_ok {
+		foster.TextureDispose(&ctx.corner_texture)
+		ctx.corner_texture_ok = false
+	}
 	delete(ctx.fonts)
 	delete(ctx.font_textures)
 	delete(ctx.text_config_pool)

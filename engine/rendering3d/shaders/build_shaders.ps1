@@ -17,7 +17,7 @@ $shaderDir = $PSScriptRoot
 $out = Join-Path $shaderDir 'Compiled'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-$shaders = @('Standard3D', 'Standard3DSkinned', 'DepthOnly', 'DepthOnlySkinned')
+$shaders = @('Standard3D', 'Standard3DSkinned', 'DepthOnly', 'DepthOnlySkinned', 'DebugLine3D')
 foreach ($name in $shaders) {
     $src = Join-Path $shaderDir "$name.hlsl"
     & $dxc -spirv -T vs_6_0 -E vertex_main -Fo (Join-Path $out "$name.vertex.spv") $src

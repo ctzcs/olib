@@ -43,6 +43,16 @@ depthonly_skinned_vertex_spv :: #load("shaders/Compiled/DepthOnlySkinned.vertex.
 depthonly_skinned_fragment_spv :: #load("shaders/Compiled/DepthOnlySkinned.fragment.spv")
 
 @(private)
+debugline_vertex_spv :: #load("shaders/Compiled/DebugLine3D.vertex.spv")
+@(private)
+debugline_fragment_spv :: #load("shaders/Compiled/DebugLine3D.fragment.spv")
+
+@(private)
+debugline_vertex_dxil :: #load("shaders/Compiled/DebugLine3D.vertex.dxil")
+@(private)
+debugline_fragment_dxil :: #load("shaders/Compiled/DebugLine3D.fragment.dxil")
+
+@(private)
 depthonly_vertex_dxil :: #load("shaders/Compiled/DepthOnly.vertex.dxil")
 @(private)
 depthonly_fragment_dxil :: #load("shaders/Compiled/DepthOnly.fragment.dxil")
@@ -120,6 +130,35 @@ shader3d_standard_init :: proc(pair: ^Shader3D_Pair, device: ^foster.GraphicsDev
 
 	return pair.static_vertex.Resource != nil && pair.static_fragment.Resource != nil &&
 	       pair.skinned_vertex.Resource != nil && pair.skinned_fragment.Resource != nil
+}
+
+// DebugLine3D（调试线）：vertex 1 个 UBO（ViewProjection），fragment 无。
+// 材质两阶段共用同一 Shader 资源（着色器对 stage 不敏感的部分由
+// material_init_with_shaders 区分，这里 vertex/fragment 各需实例）。
+Shader3D_Debug_Line_Pair :: struct {
+	vertex:   foster.Shader,
+	fragment: foster.Shader,
+}
+
+shader3d_debug_line_init :: proc(pair: ^Shader3D_Debug_Line_Pair, device: ^foster.GraphicsDevice) -> bool {
+	if !shader3d_driver_supported(device.Driver) { return false }
+
+	vs_code := shader3d_pick_code(device.Driver, debugline_vertex_spv, debugline_vertex_dxil)
+	fs_code := shader3d_pick_code(device.Driver, debugline_fragment_spv, debugline_fragment_dxil)
+
+	foster.shader_init(&pair.vertex, device, foster.ShaderCreateInfo{
+		Stage              = .Vertex,
+		Code               = vs_code,
+		SamplerCount       = 0,
+		UniformBufferCount = 1,
+		EntryPoint         = "vertex_main",
+	}, "DebugLine3DVertex")
+	foster.shader_init(&pair.fragment, device, foster.ShaderCreateInfo{
+		Stage      = .Fragment,
+		Code       = fs_code,
+		EntryPoint = "fragment_main",
+	}, "DebugLine3DFragment")
+	return pair.vertex.Resource != nil && pair.fragment.Resource != nil
 }
 
 shader3d_dispose :: proc(pair: ^Shader3D_Pair) {

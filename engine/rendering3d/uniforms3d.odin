@@ -5,6 +5,7 @@
 // 无需转置）。槽位号与 HLSL 的 register(bN) 一致。
 package rendering3d
 
+import "core:math"
 import "core:mem"
 
 import world "olib:engine/world"
@@ -160,9 +161,9 @@ pack_shadow_block_disabled :: proc(buf: []u8) -> bool {
 	return true
 }
 
-// Standard3DPointLightBlock（8 + 16*2 个 vec4 = 528... 实际 4+64+64=132 vec4? 按布局：
-// meta(1) + position_range(16) + color_intensity(16) = 33 vec4 = 528B）。
-POINT_LIGHT_BLOCK_SIZE :: 33 * 16
+// Standard3DPointLightBlock（b3）：点光 + 聚光灯同一块。
+// meta(1) + 点光 position/color 各 16 + 聚光 meta(1) + 聚光 4 组 16 = 98 vec4 = 1568B。
+POINT_LIGHT_BLOCK_SIZE :: 98 * 16
 
 Point_Light :: struct {
 	position: [3]f32,
@@ -171,8 +172,24 @@ Point_Light :: struct {
 	intensity: f32,
 }
 
-pack_point_light_block :: proc(buf: []u8, lights: []Point_Light) -> bool {
+// 无阴影聚光灯：Direction 指向光射出方向，锥角为弧度半角。
+Spot_Light :: struct {
+	position:    [3]f32,
+	direction:   [3]f32,
+	range:       f32,
+	color:       [3]f32,
+	intensity:   f32,
+	inner_angle: f32, // 弧度半角
+	outer_angle: f32,
+}
+
+SPOT_LIGHT_DEFAULT_INNER :: f32(math.PI / 12)
+SPOT_LIGHT_DEFAULT_OUTER :: f32(math.PI / 6)
+
+// 打包 b3：点光与聚光（各自钳制参数，越界方向兜底 -Y）。
+pack_point_light_block :: proc(buf: []u8, lights: []Point_Light, spot_lights: []Spot_Light) -> bool {
 	if len(buf) < POINT_LIGHT_BLOCK_SIZE { return false }
+
 	count := min(len(lights), MAX_POINT_LIGHTS)
 	write_vec4(buf, 0, {f32(count), 0, 0, 0})
 	for i in 0..<MAX_POINT_LIGHTS {
@@ -183,6 +200,37 @@ pack_point_light_block :: proc(buf: []u8, lights: []Point_Light) -> bool {
 		} else {
 			write_vec4(buf, 16 + i*16, {0, 0, 0, 0})
 			write_vec4(buf, 16 + (MAX_POINT_LIGHTS + i)*16, {0, 0, 0, 0})
+		}
+	}
+
+	// 聚光：meta 在 33 号 vec4，其后 4 组各 16
+	base := 33 * 16
+	spot_count := min(len(spot_lights), MAX_POINT_LIGHTS)
+	write_vec4(buf, base, {f32(spot_count), 0, 0, 0})
+	for i in 0..<MAX_POINT_LIGHTS {
+		if i < spot_count {
+			l := spot_lights[i]
+			dx, dy, dz := l.direction[0], l.direction[1], l.direction[2]
+			length2 := dx*dx + dy*dy + dz*dz
+			if length2 > 1e-8 {
+				inv := 1.0 / math.sqrt(length2)
+				dx, dy, dz = dx*inv, dy*inv, dz*inv
+			} else {
+				dx, dy, dz = 0, -1, 0
+			}
+			outer := math.clamp(l.outer_angle, 0.001, math.PI / 2)
+			inner := math.clamp(l.inner_angle, 0, outer)
+			color := [3]f32{
+				max(l.color[0], 0), max(l.color[1], 0), max(l.color[2], 0),
+			}
+			write_vec4(buf, base + 16 + i*16, {l.position[0], l.position[1], l.position[2], max(l.range, 0)})
+			write_vec4(buf, base + 16 + (16 + i)*16, {color[0], color[1], color[2], max(l.intensity, 0)})
+			write_vec4(buf, base + 16 + (32 + i)*16, {dx, dy, dz, math.cos(outer)})
+			write_vec4(buf, base + 16 + (48 + i)*16, {math.cos(inner), 0, 0, 0})
+		} else {
+			for g in 0..<4 {
+				write_vec4(buf, base + 16 + (g*16 + i)*16, {0, 0, 0, 0})
+			}
 		}
 	}
 	return true

@@ -55,12 +55,13 @@ renderer3d_dispose :: proc(r: ^Renderer3D) {
 //（palette: []world.Matrix4，非蒙皮项传 nil）。
 renderer3d_render :: proc(
 	r: ^Renderer3D,
-	camera: ^world.Camera3D,
-	light:   ^Light_Block,
+	camera:      ^world.Camera3D,
+	light:       ^Light_Block,
 	point_lights: []Point_Light,
-	target:  foster.DrawableTarget,
-	queue:   ^Render_Queue,
-	palette: []world.Matrix4,
+	spot_lights: []Spot_Light,
+	target:      foster.DrawableTarget,
+	queue:       ^Render_Queue,
+	palette:     []world.Matrix4,
 ) -> int {
 	if r.device == nil { return 0 }
 
@@ -76,7 +77,7 @@ renderer3d_render :: proc(
 		foster.MaterialStageSetUniformBuffer(&r.material_skinned.Fragment, shadow_buf, 2)
 	}
 	pl_buf := scratch_reserve(&r.scratch, POINT_LIGHT_BLOCK_SIZE)
-	if pack_point_light_block(pl_buf, point_lights) {
+	if pack_point_light_block(pl_buf, point_lights, spot_lights) {
 		foster.MaterialStageSetUniformBuffer(&r.material_static.Fragment, pl_buf, 3)
 		foster.MaterialStageSetUniformBuffer(&r.material_skinned.Fragment, pl_buf, 3)
 	}

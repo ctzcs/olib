@@ -41,7 +41,7 @@ P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
 |---|------|----------------|------|
 | 8 | ~~Dasset 模型格式（数据层）~~ **已完成（2026-10，`engine/dasset`）** | 比特兼容 DragonLib v4 布局的读写（贴图/骨架/蒙皮顶点/PBR 材质/动画剪辑，v1~v4 读兼容，坏文件防御） |
 | 9 | ~~SkeletonAnimator~~ **已完成（2026-10，`engine/animation`）** | 采样（bind pose 填充+channel 覆盖，Step/Linear/CubicSpline、四元数最短弧）、palette 传播、advance_time、blend_poses、蒙皮包围盒 |
-| 10 | ~~3D 渲染栈~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传、材质状态、渲染排序 + **着色器管线**：HLSL（DragonLib 同源）→ build_shaders.ps1（Vulkan SDK dxc）→ dxil/spv 入库 #load 内嵌，按驱动分发；Renderer3D 前向主 pass（光照/点光/透明混合/蒙皮 palette 槽，阴影经 uniform 关闭）。**剩余增量**：.msl/.glsl 平台补编（Metal/Web）、阴影 pass + CSM（DepthOnly 着色器已备）、Tonemap 后处理 |
+| 10 | ~~3D 渲染栈~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传、材质状态、渲染排序 + **着色器管线**（dxil/spv 入库 #load、按驱动分发）+ Renderer3D 前向主 pass（方向光/点光/**聚光灯**/透明混合/蒙皮 palette）+ **DebugDraw3D**（Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton；ofoster 无线拓扑，走朝向相机的四边形展开复用 DebugLine3D 着色器）+ **LOD**（Lod_Selector 滞回阈值 + 泛型 Model_Lod）。**剩余增量**：.msl/.glsl 平台补编、阴影 pass + CSM（DepthOnly 已备）、Tonemap/后处理（DragonLib 已有 PostBloom/Fxaa/Sky3D HLSL 源可移植）、天空盒、IBL/环境烘焙 |
 
 ## olib 之外但卡脖子（不改 OFoster 前提下）
 

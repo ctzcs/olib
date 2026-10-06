@@ -26,7 +26,7 @@ P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
 | 1 | Sprite / SpriteAtlas | Rendering/Sprite.cs + Atlas/*（~380 行） | 新包 `engine/rendering`（sprite.odin + atlas.odin） | 中 | 图集加载/切图/Batcher 绘制单测 + 像素校验 |
 | 2 | 图集源 | Atlas/AsepriteAtlasBuilder + KenneyXmlAtlasSource | 同上（atlas_aseprite.odin / atlas_kenney.odin） | 小 | 两种格式的解析单测 |
 | 3 | GameStorage | Core/Storage/GameStorage + LocalStorage（~150 行） | 新包 `engine/storage`（resources + user data 路径策略） | 小 | `%APPDATA%` 路径解析、桌面读写单测 |
-| 4 | JobScheduler 评估 | Threading/*（~330 行） | 先出结论再决定：`core:thread`/`core:sync` 够用则薄封装进 `core/thread`，否则完整移植 | 评估 | 评估记录写进本文档；若实现：并行任务单测 |
+| 4 | ~~JobScheduler 评估~~ **已评估（2026-10，不移植）** | Threading/* | 结论：`core:thread.Pool` + `core:sync.Wait_Group` 覆盖"常驻池 + 完成等待"；相比 DragonLib 仅缺三点——等待时调用线程参与执行（工作窃取）、`ScheduleParallel` 区间分批、每任务 handle。等真实帧级并行需求出现时在 `core/thread` 做薄封装（Wait_Group 计数 + 调用线程参与即可复刻主要价值，ring buffer/异常聚合不需要） | — | — |
 
 ## P1 —— 引擎骨架补全
 

@@ -67,3 +67,61 @@ cli_dispatch_and_update_roundtrip :: proc(t: ^testing.T) {
 	cli_update(&console)
 	testing.expect(t, state.got == "again")
 }
+
+// ---------------------------------------------------------------------------
+// Game_App —— 桥接与字段提升（不开窗口，直测 trampoline）
+// ---------------------------------------------------------------------------
+
+@(private)
+Bridge_State :: struct {
+	startups: int,
+	updates:  int,
+}
+
+@(private)
+bridge_startup :: proc(g: ^Game_App) {
+	s := (^Bridge_State)(g.userdata)
+	if s != nil { s.startups += 1 }
+}
+
+@(private)
+bridge_update :: proc(g: ^Game_App) {
+	s := (^Bridge_State)(g.userdata)
+	if s != nil { s.updates += 1 }
+}
+
+@(test)
+game_app_trampoline_bridge :: proc(t: ^testing.T) {
+	g: Game_App
+	state: Bridge_State
+
+	g.user_startup = bridge_startup
+	g.user_update = bridge_update
+
+	// 桥接：^foster.App 视图 -> ^Game_App（using 字段在首位，地址相同）
+	app_view := &g.App
+	back, ok := game_app_from(app_view)
+	testing.expect(t, ok && back == (&g))
+
+	// 未挂 userdata：trampoline 安全空转
+	trampoline_startup(&g.App)
+	trampoline_update(&g.App)
+	testing.expect(t, state.startups == 0 && state.updates == 0)
+
+	// 挂上后回调可达
+	g.userdata = &state
+	trampoline_startup(&g.App)
+	trampoline_update(&g.App)
+	testing.expect(t, state.startups == 1 && state.updates == 1)
+
+	// 字段提升：Game_App 直接看到 App 的字段（Window/Time/GraphicsDevice）
+	_ = g.Window
+	_ = g.Time
+	_ = g.GraphicsDevice
+	testing.expect(t, g.has_console == false)
+
+	// nil 回调安全
+	g.user_startup = nil
+	trampoline_startup(&g.App)
+	testing.expect(t, state.startups == 1)
+}

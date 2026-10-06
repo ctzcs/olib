@@ -58,6 +58,12 @@ ShaderCompiler（HLSL→四后端+哈希清单，配 EmbeddedShaderMaterial 思�
 FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 均属构建期工具，与 P2 一起看。
 
+## UI 路线（2026-10 追加）
+
+- **已完成**：clay v0.14 升级（绑定+预编库）、`engine/ui` —— clay→ofoster 渲染后端（rect/border/scissor 翻译 + msdf 文本字形四边形）、Theme + Button/Label/Toggle 控件层（hover/按下态、点击边沿）。测试 5/5（clay 布局真跑）。
+- **v1 已知限制**（ui_backend.odin 头注释）：圆角直角化、scissor 未生效、文本图集直采样（非 msdf 抗锯齿）。
+- **后续增量**：msdf 材质文本路径（ofoster 已有 InitDefaultMsdfMaterial）、scissor（DrawCommand.Scissor 已有字段）、过渡动画（clay transition API）、Slider/Dropdown、**文本输入框**（clay v0.14 无此能力，需自建：光标/选区/IME）。
+
 ## 明确不做
 
 | 项 | 理由 |

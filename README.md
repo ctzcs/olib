@@ -23,8 +23,9 @@ engine/      引擎层（依赖 ofoster）
 ├── animation/   骨骼动画采样 / palette / 混合
 ├── dasset/      .dasset 模型格式数据层（比特兼容 DragonLib v4）
 ├── storage/     资源根 / 用户存档路径策略
-├── app/         CLI 参数 + 调试控制台（命令转主线程）
-└── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
+├── app/         CLI 参数 + 调试控制台 + Game_App（using 嵌入 App）
+├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
+└── ui/          clay v0.14 布局 + ofoster 渲染后端 + Button/Label/Toggle 控件层
 
 thirdparty/  外部绑定：clay-odin / odin-imgui（含 ofoster 后端）/ oflecs
 ```

@@ -186,7 +186,7 @@ FloatingElementConfig :: struct {
 	attachment:         FloatingAttachPoints,
 	pointerCaptureMode: PointerCaptureMode,
 	attachTo:           FloatingAttachToElement,
-	clipTo:             FloatingClipToElement,
+	clipTo: 			FloatingClipToElement,
 }
 
 TextRenderData :: struct {
@@ -338,10 +338,11 @@ ClayArray :: struct($type: typeid) {
 }
 
 ElementDeclaration :: struct {
+	id:              ElementId,
 	layout:          LayoutConfig,
 	backgroundColor: Color,
 	cornerRadius:    CornerRadius,
-	aspectRatio:     AspectRatioElementConfig,
+	aspectRatio: 	 AspectRatioElementConfig,
 	image:           ImageElementConfig,
 	floating:        FloatingElementConfig,
 	custom:          CustomElementConfig,
@@ -377,7 +378,6 @@ Context :: struct {} // opaque structure, only use as a pointer
 @(link_prefix = "Clay_", default_calling_convention = "c")
 foreign Clay {
 	_OpenElement :: proc() ---
-	_OpenElementWithId :: proc(id: ElementId) ---
 	_CloseElement :: proc() ---
 	MinMemorySize :: proc() -> u32 ---
 	CreateArenaWithCapacityAndMemory :: proc(capacity: c.size_t, offset: [^]u8) -> Arena ---
@@ -413,8 +413,7 @@ foreign Clay {
 @(link_prefix = "Clay_", default_calling_convention = "c", private)
 foreign Clay {
 	_ConfigureOpenElement :: proc(config: ElementDeclaration) ---
-	_HashString :: proc(key: String, seed: u32) -> ElementId ---
-	_HashStringWithOffset :: proc(key: String, index: u32, seed: u32) -> ElementId ---
+	_HashString :: proc(key: String, offset: u32, seed: u32) -> ElementId ---
 	_OpenTextElement :: proc(text: String, textConfig: ^TextElementConfig) ---
 	_StoreTextElementConfig :: proc(config: TextElementConfig) -> ^TextElementConfig ---
 	_GetParentElementId :: proc() -> u32 ---
@@ -426,18 +425,10 @@ ConfigureOpenElement :: proc(config: ElementDeclaration) -> bool {
 }
 
 @(deferred_none = _CloseElement)
-UI_WithId :: proc(id: ElementId) -> proc (config: ElementDeclaration) -> bool {
-	_OpenElementWithId(id)
-	return ConfigureOpenElement
-}
-
-@(deferred_none = _CloseElement)
-UI_AutoId :: proc() -> proc (config: ElementDeclaration) -> bool {
+UI :: proc() -> proc (config: ElementDeclaration) -> bool {
 	_OpenElement()
 	return ConfigureOpenElement
 }
-
-UI :: proc{UI_WithId, UI_AutoId};
 
 Text :: proc($text: string, config: ^TextElementConfig) {
 	wrapped := MakeString(text)
@@ -469,11 +460,11 @@ CornerRadiusAll :: proc(radius: f32) -> CornerRadius {
 	return CornerRadius{radius, radius, radius, radius}
 }
 
-SizingFit :: proc(sizeMinMax: SizingConstraintsMinMax = {}) -> SizingAxis {
+SizingFit :: proc(sizeMinMax: SizingConstraintsMinMax) -> SizingAxis {
 	return SizingAxis{type = SizingType.Fit, constraints = {sizeMinMax = sizeMinMax}}
 }
 
-SizingGrow :: proc(sizeMinMax: SizingConstraintsMinMax = {}) -> SizingAxis {
+SizingGrow :: proc(sizeMinMax: SizingConstraintsMinMax) -> SizingAxis {
 	return SizingAxis{type = SizingType.Grow, constraints = {sizeMinMax = sizeMinMax}}
 }
 
@@ -490,9 +481,9 @@ MakeString :: proc(label: string) -> String {
 }
 
 ID :: proc(label: string, index: u32 = 0) -> ElementId {
-	return _HashString(MakeString(label), index)
+	return _HashString(MakeString(label), index, 0)
 }
 
 ID_LOCAL :: proc(label: string, index: u32 = 0) -> ElementId {
-	return _HashStringWithOffset(MakeString(label), index, _GetParentElementId())
+	return _HashString(MakeString(label), index, _GetParentElementId())
 }

@@ -8,6 +8,7 @@ package rendering3d
 import "core:math"
 
 import world "olib:engine/world"
+import foster "ofoster:."
 
 // 分区：
 //   类型 —— Render_Item / Render_Queue
@@ -18,9 +19,10 @@ import world "olib:engine/world"
 // ------------------------------------------------------------------------------
 
 Render_Item :: struct {
-	mesh:     rawptr, // 调用侧的 Mesh 句柄（发射端解释；本层只排序）
+	mesh:     ^foster.Mesh, // ofoster Mesh（上传于 mesh3d_upload）
 	material: Standard_Material_3D,
 	world:    world.Matrix4,
+	skinned:  bool, // 蒙皮走 palette 槽的材质变体
 
 	view_depth: f32, // 排序键：到相机的视空间深度（submit 时算好）
 }
@@ -33,11 +35,12 @@ Render_Queue :: struct {
 // 提交与排序
 // ------------------------------------------------------------------------------
 
-queue_submit :: proc(q: ^Render_Queue, mesh: rawptr, material: Standard_Material_3D, world_matrix: world.Matrix4, view_depth: f32) {
+queue_submit :: proc(q: ^Render_Queue, mesh: ^foster.Mesh, material: Standard_Material_3D, world_matrix: world.Matrix4, view_depth: f32, skinned := false) {
 	append(&q.items, Render_Item{
 		mesh       = mesh,
 		material   = material,
 		world      = world_matrix,
+		skinned    = skinned,
 		view_depth = view_depth,
 	})
 }

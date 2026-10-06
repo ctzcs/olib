@@ -41,7 +41,7 @@ P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
 |---|------|----------------|------|
 | 8 | ~~Dasset 模型格式（数据层）~~ **已完成（2026-10，`engine/dasset`）** | 比特兼容 DragonLib v4 布局的读写（贴图/骨架/蒙皮顶点/PBR 材质/动画剪辑，v1~v4 读兼容，坏文件防御） |
 | 9 | ~~SkeletonAnimator~~ **已完成（2026-10，`engine/animation`）** | 采样（bind pose 填充+channel 覆盖，Step/Linear/CubicSpline、四元数最短弧）、palette 传播、advance_time、blend_poses、蒙皮包围盒 |
-| 10 | ~~3D 渲染栈（数据/队列层）~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传（dasset->ofoster Mesh，静态/蒙皮格式）、StandardMaterial3D+渲染状态推导（Opaque/Mask/Blend 分桶、DoubleSided 剔除）、渲染项排序（不透明前到后/透明后到前）。**GPU 输出边界**：还差着色器二进制管线（DragonLib 靠 Tools/ShaderCompiler 离线交叉编译 HLSL；ofoster 的 ShaderCreateInfo/Mesh/深度/混合 API 已就绪，管线建好后接入队列即可） |
+| 10 | ~~3D 渲染栈~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传、材质状态、渲染排序 + **着色器管线**：HLSL（DragonLib 同源）→ build_shaders.ps1（Vulkan SDK dxc）→ dxil/spv 入库 #load 内嵌，按驱动分发；Renderer3D 前向主 pass（光照/点光/透明混合/蒙皮 palette 槽，阴影经 uniform 关闭）。**剩余增量**：.msl/.glsl 平台补编（Metal/Web）、阴影 pass + CSM（DepthOnly 着色器已备）、Tonemap 后处理 |
 
 ## olib 之外但卡脖子（不改 OFoster 前提下）
 

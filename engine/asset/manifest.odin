@@ -17,7 +17,7 @@ import "core:encoding/json"
 import "core:fmt"
 import "core:strings"
 
-import enc "olib:encoding"
+import enc "olib:core/encoding"
 import foster "ofoster:."
 
 MANIFEST_VERSION :: u32(1)

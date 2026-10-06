@@ -46,7 +46,7 @@ import "core:os"
 import "core:strings"
 import "core:time"
 
-import ha "olib:handle/array"
+import ha "olib:core/handle/array"
 import foster "ofoster:."
 
 // ===========================================================================

@@ -1,5 +1,9 @@
 /.zcode
+/.zcodeignore
 
 # Odin build/test artifacts (asset.pdb is left behind by odin test)
 *.pdb
 *.exe
+
+# ImGui runtime window layout state
+imgui.ini

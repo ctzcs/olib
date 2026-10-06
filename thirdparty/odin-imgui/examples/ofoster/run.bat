@@ -1,10 +1,10 @@
 @echo off
 rem Build and run the odin-imgui x ofoster bridge example.
-rem Set OFOSTER_PATH to your ofoster checkout if it is not ..\..\..\tinyglade\ofoster.
+rem Set OFOSTER_PATH to your ofoster checkout if it is not ..\..\..\..\..\tinyglade\ofoster.
 setlocal
 cd /d "%~dp0"
 
-if "%OFOSTER_PATH%"=="" set "OFOSTER_PATH=..\..\..\..\tinyglade\ofoster"
+if "%OFOSTER_PATH%"=="" set "OFOSTER_PATH=..\..\..\..\..\tinyglade\ofoster"
 if not exist "%OFOSTER_PATH%\foster_framework.odin" (
 	echo ofoster not found at "%OFOSTER_PATH%" - set OFOSTER_PATH to your checkout
 	exit /b 1

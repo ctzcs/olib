@@ -1,6 +1,6 @@
 package tween
 
-import ha "olib:handle/array"
+import ha "olib:core/handle/array"
 
 // 对外暴露的节点句柄。
 // 使用 distinct 与其他系统的 Handle 做类型隔离。

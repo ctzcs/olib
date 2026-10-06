@@ -88,6 +88,32 @@ matrix4_look_at :: proc(eye, target, up: foster.Vec3) -> Matrix4 {
 	}
 }
 
+// 从四元数（xyzw）构造旋转矩阵（System.Numerics CreateFromQuaternion 语义）。
+matrix4_from_quaternion :: proc(q: [4]f32) -> Matrix4 {
+	xx, yy, zz := q[0]*q[0], q[1]*q[1], q[2]*q[2]
+	xy, xz, yz := q[0]*q[1], q[0]*q[2], q[1]*q[2]
+	wx, wy, wz := q[3]*q[0], q[3]*q[1], q[3]*q[2]
+
+	return Matrix4{
+		{1 - 2*(yy+zz), 2*(xy+wz), 2*(xz-wy), 0},
+		{2*(xy-wz), 1 - 2*(xx+zz), 2*(yz+wx), 0},
+		{2*(xz+wy), 2*(yz-wx), 1 - 2*(xx+yy), 0},
+		{0, 0, 0, 1},
+	}
+}
+
+// 从 System.Numerics 布局的 16 元素（M11..M44 行主序）构造（dasset 的
+// InverseBindMatrix 即此布局）。
+matrix4_from_row_major :: proc(m: [16]f32) -> Matrix4 {
+	result: Matrix4
+	for j in 0..<4 {
+		for i in 0..<4 {
+			matrix4_set(&result, j, i, m[i*4 + j])
+		}
+	}
+	return result
+}
+
 // 透视投影（垂直 FOV，D3D 深度 [0,1]）。
 // fov 弧度钳到 (0.1, π-0.1)；near 钳到 >= 0.001；far >= near + 0.001。
 matrix4_perspective_fov :: proc(fov_, aspect, near_, far_: f32) -> Matrix4 {
@@ -254,6 +280,11 @@ matrix4_set :: proc(m: ^Matrix4, col, row: int, v: f32) {
 	case 2: m.c2[row] = v
 	case 3: m.c3[row] = v
 	}
+}
+
+// 取第 col（0..3）列（系数向量）。
+matrix4_column :: proc(m: Matrix4, col: int) -> Vec4 {
+	return matrix4_c(m, col)
 }
 
 @(private)

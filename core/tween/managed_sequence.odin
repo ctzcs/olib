@@ -1,10 +1,23 @@
+// Sequence 托管：把多个 tween/callback/interval 排上同一条本地时间轴。
 package tween
+
+// 分区：
+//   数据与查询 —— Managed_Sequence_Data / 取 payload / 祖先检查
+//   时长计算 —— recompute / sync / child 总时长
+//   子节点挂接 —— prepare / attach（创建即挂接的内部通道）
+//   vtable 实现 —— update / reset / kill
+//   创建 —— manager_add_sequence
+//   时间轴组装 —— append / join / insert / prepend（各带 _tween 便捷版）
 
 @(private)
 Managed_Sequence_Data :: struct {
 	manager: ^Tween_Manager,
 	runtime: Sequence_Runtime,
 }
+
+// ------------------------------------------------------------------------------
+// 数据与查询 —— Managed_Sequence_Data / 取 payload / 祖先检查
+// ------------------------------------------------------------------------------
 
 @(private)
 Sequence_Attach_Proc :: #type proc(manager: ^Tween_Manager, seq: Tween_Handle, child: Tween_Handle) -> bool
@@ -33,6 +46,10 @@ sequence_is_ancestor :: proc(manager: ^Tween_Manager, ancestor: Tween_Handle, ch
 	}
 	return false
 }
+
+// ------------------------------------------------------------------------------
+// 时长计算 —— recompute / sync / child 总时长
+// ------------------------------------------------------------------------------
 
 @(private)
 sequence_recompute_duration :: proc(data: ^Managed_Sequence_Data) -> f32 {
@@ -91,6 +108,10 @@ sequence_child_total_duration :: proc(node: ^Tween_Node) -> (duration: f32, ok: 
 	return
 }
 
+// ------------------------------------------------------------------------------
+// 子节点挂接 —— prepare / attach（创建即挂接的内部通道）
+// ------------------------------------------------------------------------------
+
 @(private)
 sequence_prepare_child :: proc(manager: ^Tween_Manager, seq: Tween_Handle, child: Tween_Handle) -> bool {
 	node := manager_get_node_ptr(manager^, child)
@@ -135,6 +156,10 @@ sequence_attach_created_handle_at :: proc(
 	}
 	return handle, true
 }
+
+// ------------------------------------------------------------------------------
+// vtable 实现 —— update / reset / kill
+// ------------------------------------------------------------------------------
 
 @(private)
 sequence_update_proc :: proc(node: ^Tween_Node, dt: f32) {
@@ -233,6 +258,10 @@ sequence_kill_proc :: proc(node: ^Tween_Node) {
 	node.payload = nil
 }
 
+// ------------------------------------------------------------------------------
+// 创建 —— manager_add_sequence
+// ------------------------------------------------------------------------------
+
 // Sequence 创建入口。
 // 外部通过它创建一个可继续 Append/Join/Insert/Prepend 的 sequence 节点。
 manager_add_sequence :: proc(manager: ^Tween_Manager) -> Tween_Handle {
@@ -271,6 +300,10 @@ manager_add_sequence :: proc(manager: ^Tween_Manager) -> Tween_Handle {
 
 	return manager_add_node(manager, node)
 }
+
+// ------------------------------------------------------------------------------
+// 时间轴组装 —— append / join / insert / prepend（各带 _tween 便捷版）
+// ------------------------------------------------------------------------------
 
 // 将一个已注册到 manager 的 child 节点追加到 sequence 末尾。
 sequence_append :: proc(manager: ^Tween_Manager, seq: Tween_Handle, child: Tween_Handle) -> bool {

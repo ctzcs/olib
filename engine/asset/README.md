@@ -128,16 +128,11 @@ blob 头含 `importer_version` 与源的 `mtime/size`；新鲜度 = 三者全部
 | `manifest.odin` | path→GUID 寻址层（保留 GUID 的 Raw blob；打包后 load_path 零改动） |
 | `loader.odin` | Asset_Storage 后端（directory/map） |
 | `asset_test.odin` | 8 个测试，覆盖全部不变量（含打包形态：只带 Library、无 Assets） |
-| `example/` | 自包含示例：生成 demo.qoi → 导入 → 加载 → 渲染，3 秒自动退出 |
 
 ## 构建与测试
 
 ```bash
-# 单元测试（native）
 odin test engine/asset -collection:olib=. -collection:ofoster=<ofoster src 根>
-
-# 示例（Windows，OFOSTER_PATH 缺省 ..\..\..\..\OFoster\src）
-engine\asset\example\run.bat
 ```
 
 v1 仅支持 native 目标（扫描/mtime 依赖 `core:os`）。web 路线：`storage_map` + `#load`

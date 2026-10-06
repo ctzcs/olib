@@ -13,6 +13,18 @@ package entities
 import "base:intrinsics"
 import "base:runtime"
 
+// 分区：
+//   类型 —— Handle / Base / Entity_Ptr / Entities / Buffer
+//   生命周期 —— init / shutdown / clear
+//   创建与销毁 —— create / destroy
+//   查询 —— get / get_sub / get_buffer
+//   迭代 —— begin / next（Val 与 Sub 两路）
+//   内部辅助 —— 字节重解释 / variant 提取
+
+// ------------------------------------------------------------------------------
+// 类型 —— Handle / Base / Entity_Ptr / Entities / Buffer
+// ------------------------------------------------------------------------------
+
 UNION_LEN :: intrinsics.type_union_variant_count
 UNION_HAS :: intrinsics.type_is_variant_of
 UNION_INDEX :: intrinsics.type_variant_index_of
@@ -78,6 +90,10 @@ Buffer :: struct {
 	top:  i32, // Inclusive index watermark
 	free: i32,
 }
+
+// ------------------------------------------------------------------------------
+// 生命周期 —— init / shutdown / clear
+// ------------------------------------------------------------------------------
 
 init :: proc(
 	ents:         ^$Ents/Entities($Val_Union, $Sub_Union),
@@ -162,6 +178,10 @@ clear :: proc(ents: ^$Ents/Entities($Val_Union, $Sub_Union)) {
 		buf.free = 0
 	}
 }
+
+// ------------------------------------------------------------------------------
+// 创建与销毁 —— create / destroy
+// ------------------------------------------------------------------------------
 
 create :: proc {
 	create_val,
@@ -253,6 +273,10 @@ destroy :: proc(ents: ^$Ents/Entities($Val_Union, $Sub_Union), handle: Handle) -
 	return true
 }
 
+// ------------------------------------------------------------------------------
+// 查询 —— get / get_sub / get_buffer
+// ------------------------------------------------------------------------------
+
 @(require_results)
 get :: proc(
 	ents: ^$Ents/Entities($Val_Union, $Sub_Union),
@@ -310,6 +334,10 @@ get_buffer :: proc(ents: ^$Ents/Entities($Val_Union, $Sub_Union), $Val: typeid) 
 	buf := ents.buffers[UNION_INDEX(Val_Union, Val)]
 	return (cast([^]Val)buf.data)[1:buf.top + 1]
 }
+
+// ------------------------------------------------------------------------------
+// 迭代 —— begin / next（Val 与 Sub 两路）
+// ------------------------------------------------------------------------------
 
 // Usage: for it := begin(&s, Val_Or_Sub_Type); val := next(&it) { ... }
 begin :: proc {
@@ -413,6 +441,10 @@ _iter_sub_next_variant :: proc(it: ^Iter_Sub($Val_Union, $Sub_Union, $Sub)) -> (
 
 	return true
 }
+
+// ------------------------------------------------------------------------------
+// 内部辅助 —— 字节重解释 / variant 提取
+// ------------------------------------------------------------------------------
 
 @(require_results)
 _reinterpret_bytes :: proc "contextless" ($T: typeid, bytes: []byte, loc := #caller_location) -> []T {

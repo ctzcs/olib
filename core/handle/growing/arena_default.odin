@@ -1,8 +1,10 @@
 #+build !js
+// growing 的平台后端（非 web）：Growing Virtual Arena。
+// 条目在虚存 arena 中线性分配、地址永不移动（指针稳定）；web 版见 arena_js.odin。
 package growing
 
-import vmem "core:mem/virtual"
 import "base:runtime"
+import vmem "core:mem/virtual"
 
 Arena :: vmem.Arena
 
@@ -13,9 +15,9 @@ arena_init :: proc(arena: ^Arena, block_size: int = ARENA_DEFAULT_BLOCK_SIZE, al
 	// NOTE: allocator not used, it's just for the JS version.
 }
 
-arena_destroy :: vmem.arena_destroy
-arena_free_all :: vmem.arena_free_all
-arena_allocator :: vmem.arena_allocator
+arena_destroy           :: vmem.arena_destroy
+arena_free_all          :: vmem.arena_free_all
+arena_allocator         :: vmem.arena_allocator
 ARENA_DEFAULT_BLOCK_SIZE :: vmem.DEFAULT_ARENA_GROWING_MINIMUM_BLOCK_SIZE
 
 arena_initialized :: proc(arena: Arena) -> bool {

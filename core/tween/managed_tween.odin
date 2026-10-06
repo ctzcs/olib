@@ -1,4 +1,15 @@
+// 托管 tween：把 Tween(T) 注册进 manager 变成可统一调度的节点。
+// setter 版写回调、指针版直接写目标、属性版从 getter 现取起点。
 package tween
+
+// 分区：
+//   数据类型 —— setter 版 / 指针版 payload
+//   内部工具 —— 时长/终值/归一化/节点构造
+//   注册 —— manager_add_tween / manager_add_tween_to / manager_add_property_tween
+
+// ------------------------------------------------------------------------------
+// 数据类型 —— setter 版 / 指针版 payload
+// ------------------------------------------------------------------------------
 
 Managed_Tween_Data :: struct($T: typeid) {
 	tween:         Tween(T),
@@ -11,6 +22,10 @@ Managed_Ptr_Tween_Data :: struct($T: typeid) {
 	initial_tween: Tween(T),
 	target:        ^T,
 }
+
+// ------------------------------------------------------------------------------
+// 内部工具 —— 时长/终值/归一化/节点构造
+// ------------------------------------------------------------------------------
 
 @(private)
 managed_tween_get_duration :: proc(tween: Tween($T)) -> f32 {
@@ -89,6 +104,10 @@ managed_tween_make_node :: proc(
 		},
 	}
 }
+
+// ------------------------------------------------------------------------------
+// 注册 —— manager_add_tween / manager_add_tween_to / manager_add_property_tween
+// ------------------------------------------------------------------------------
 
 manager_add_tween :: proc(
 	manager: ^Tween_Manager,

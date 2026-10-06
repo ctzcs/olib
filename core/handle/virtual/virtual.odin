@@ -60,9 +60,20 @@ Example (assumes this package is imported under the alias `hm`):
 */
 package virtual
 
-import "base:runtime"
+// 分区：
+//   类型 —— Handle / Pool / Iterator
+//   生命周期 —— make / delete / reset / clear
+//   增删 —— add / remove
+//   查询 —— get / get_value / valid / len / cap
+//   迭代 —— begin / next / skip
+
 import "base:builtin"
+import "base:runtime"
 import vmem "core:mem/virtual"
+
+// ------------------------------------------------------------------------------
+// 类型 —— Handle / Pool / Iterator
+// ------------------------------------------------------------------------------
 
 // Returned from the `add` proc. Store these as permanent references to items in
 // the handle map. You can resolve the handle to a pointer using the `get` proc.
@@ -100,6 +111,16 @@ Pool :: struct($T: typeid, $HT: typeid, $Max: int) {
 	unused_items: [dynamic]u32,
 }
 
+// For iterating a handle map. Create using `begin`.
+Iterator :: struct($T: typeid, $HT: typeid, $Max: int) {
+	m:     ^Pool(T, HT, Max),
+	index: int,
+}
+
+// ------------------------------------------------------------------------------
+// 生命周期 —— make / delete / reset / clear
+// ------------------------------------------------------------------------------
+
 // Usually you can just declare the Pool using
 // `hm: Pool(Item_Type, Handle_Type, 10000)`, but if you want to override
 // the allocator used for `unused_items`, then you can instead do:
@@ -115,37 +136,52 @@ make :: proc($T: typeid, $HT: typeid, $Max: int, allocator := context.allocator,
 	// We allocate the arena struct into the arena itself, the reference to the
 	// arena inside the allocator that is sent into the dynamic array stays fixed.
 	arena, alloc_err := new(vmem.Arena, vmem.arena_allocator(&arena_bootstrap), loc)
-    if alloc_err != nil {
-        vmem.arena_destroy(&arena_bootstrap)
-        return {}, alloc_err
-    }
+	if alloc_err != nil {
+		vmem.arena_destroy(&arena_bootstrap)
+		return {}, alloc_err
+	}
 	arena^ = arena_bootstrap
 
 	return {
 		unused_items = runtime.make([dynamic]u32, allocator, loc),
-		items_arena = arena,
-		items = runtime.make([dynamic]T, vmem.arena_allocator(arena), loc),
+		items_arena  = arena,
+		items        = runtime.make([dynamic]T, vmem.arena_allocator(arena), loc),
 	}, nil
 }
 
 // Destroys live values if requested, frees container memory, and zeroes the Pool.
 delete :: proc(m: ^Pool($T, $HT, $Max), destroy: proc(value: ^T) = nil, loc := #caller_location) {
-    clear(m, destroy)
-    if m.items_arena != nil {
-        arena := m.items_arena^
-        vmem.arena_destroy(&arena)
-    }
-    runtime.delete(m.unused_items, loc)
-    m^ = {}
+	clear(m, destroy)
+	if m.items_arena != nil {
+		arena := m.items_arena^
+		vmem.arena_destroy(&arena)
+	}
+	runtime.delete(m.unused_items, loc)
+	m^ = {}
 }
 
 // Empties the handle map without deallocating any memory.
 // Starts a new lifecycle; all previously returned handles must be discarded.
 reset :: proc(m: ^Pool($T, $HT, $Max), destroy: proc(value: ^T) = nil, loc := #caller_location) {
-    clear(m, destroy)
-    runtime.clear(&m.items)
-    runtime.clear(&m.unused_items)
+	clear(m, destroy)
+	runtime.clear(&m.items)
+	runtime.clear(&m.unused_items)
 }
+
+// Retains slots and generations without allocation. Old handles stay invalid
+// until generation wraparound. Callbacks must not structurally mutate this pool.
+clear :: proc(m: ^Pool($T, $HT, $Max), destroy: proc(value: ^T) = nil) {
+	for i := 1; i < builtin.len(m.items); i += 1 {
+		item := &m.items[i]
+		if item.handle.idx != 0 {
+			remove(m, item.handle, destroy)
+		}
+	}
+}
+
+// ------------------------------------------------------------------------------
+// 增删 —— add / remove
+// ------------------------------------------------------------------------------
 
 // Add a value of type `T` to the handle map. Returns a handle you can use as a
 // permanent reference.
@@ -172,10 +208,10 @@ add :: proc(m: ^Pool($T, $HT, $Max), v: T, loc := #caller_location) -> (res: HT,
 		return reused.handle, nil
 	}
 
-    needed := max(builtin.len(m.items), 1) + 1
-    if builtin.cap(m.unused_items) < needed - 1 {
-        reserve(&m.unused_items, max(needed - 1, 2 * builtin.cap(m.unused_items), 8)) or_return
-    }
+	needed := max(builtin.len(m.items), 1) + 1
+	if builtin.cap(m.unused_items) < needed - 1 {
+		reserve(&m.unused_items, max(needed - 1, 2 * builtin.cap(m.unused_items), 8)) or_return
+	}
 
 	if builtin.len(m.items) == 0 {
 		append(&m.items, T{}) or_return
@@ -202,6 +238,28 @@ add :: proc(m: ^Pool($T, $HT, $Max), v: T, loc := #caller_location) -> (res: HT,
 	return new_item.handle, nil
 }
 
+// Removes a live value, optionally destroying its resources, and retains its
+// generation for reuse. The callback must not structurally mutate this pool.
+remove :: proc(m: ^Pool($T, $HT, $Max), h: HT, destroy: proc(value: ^T) = nil) {
+	item := get(m^, h)
+	if item == nil {
+		return
+	}
+	// Save generation before the callback, which may zero the entire value.
+	gen := h.gen
+	if destroy != nil {
+		destroy(item)
+	}
+	// add reserves free-list space before publishing a new slot.
+	append(&m.unused_items, h.idx)
+	item^ = {}
+	item.handle.gen = gen
+}
+
+// ------------------------------------------------------------------------------
+// 查询 —— get / get_value / valid / len / cap
+// ------------------------------------------------------------------------------
+
 // Resolve a handle to a pointer of type `^T`. The pointer is stable due to the
 // usage of the virtual static arena. But you should _not_ store the pointer
 // permanently. The item may get reused if any part of your program destroys and
@@ -219,18 +277,12 @@ get :: proc(m: Pool($T, $HT, $Max), h: HT) -> ^T {
 	return nil
 }
 
-// Removes a live value, optionally destroying its resources, and retains its
-// generation for reuse. The callback must not structurally mutate this pool.
-remove :: proc(m: ^Pool($T, $HT, $Max), h: HT, destroy: proc(value: ^T) = nil) {
-    item := get(m^, h)
-    if item == nil { return }
-    // Save generation before the callback, which may zero the entire value.
-    gen := h.gen
-    if destroy != nil { destroy(item) }
-    // add reserves free-list space before publishing a new slot.
-    append(&m.unused_items, h.idx)
-    item^ = {}
-    item.handle.gen = gen
+// Returns a value copy and whether the handle was valid.
+get_value :: proc(m: Pool($T, $HT, $Max), h: HT) -> (value: T, ok: bool) {
+	if item := get(m, h); item != nil {
+		return item^, true
+	}
+	return {}, false
 }
 
 // Tells you if a handle maps to a valid item.
@@ -262,11 +314,9 @@ cap :: proc(m: Pool($T, $HT, $Max)) -> int {
 	return max(slot_cap(m) - 1, 0)
 }
 
-// For iterating a handle map. Create using `begin`.
-Iterator :: struct($T: typeid, $HT: typeid, $Max: int) {
-	m: ^Pool(T, HT, Max),
-	index: int,
-}
+// ------------------------------------------------------------------------------
+// 迭代 —— begin / next / skip
+// ------------------------------------------------------------------------------
 
 // Create an iterator. Use with `next` to do the actual iteration.
 begin :: proc(m: ^Pool($T, $HT, $Max)) -> Iterator(T, HT, Max) {
@@ -279,7 +329,7 @@ begin :: proc(m: ^Pool($T, $HT, $Max)) -> Iterator(T, HT, Max) {
 // Usage:
 //     my_iter := hm.begin(&my_handle_map)
 //     for e in hm.next(&my_iter) {}
-// 
+//
 // Instead of using an iterator you can also loop over `items` and check if
 // `item.handle.idx == 0` and in that case skip that item.
 next :: proc(it: ^Iterator($T, $HT, $Max)) -> (val: ^T, h: HT, cond: bool) {
@@ -304,19 +354,4 @@ next :: proc(it: ^Iterator($T, $HT, $Max)) -> (val: ^T, h: HT, cond: bool) {
 // }
 skip :: proc(e: $T) -> bool {
 	return e.handle.idx == 0
-}
-
-// Returns a value copy and whether the handle was valid.
-get_value :: proc(m: Pool($T, $HT, $Max), h: HT) -> (value: T, ok: bool) {
-    if item := get(m, h); item != nil { return item^, true }
-    return {}, false
-}
-
-// Retains slots and generations without allocation. Old handles stay invalid until generation
-// wraparound. Callbacks must not structurally mutate this pool.
-clear :: proc(m: ^Pool($T, $HT, $Max), destroy: proc(value: ^T) = nil) {
-    for i := 1; i < builtin.len(m.items); i += 1 {
-        item := &m.items[i]
-        if item.handle.idx != 0 { remove(m, item.handle, destroy) }
-    }
 }

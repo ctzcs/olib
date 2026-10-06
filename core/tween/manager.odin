@@ -1,6 +1,23 @@
+// tween:manager —— 节点池与帧推进（tween 系统的总入口）。
+//
+// manager 持有全部运行时节点（Tween / Sequence 统一为 Tween_Node），负责
+// 推进时间、按 vtable 分发 update、执行自动清理。具体插值与序列组装见
+// 同包的 tween.odin / managed_tween.odin / managed_sequence.odin。
+//
+// 分区：
+//   类型 —— 句柄/状态机/节点/回调/配置
+//   节点池管理 —— make / add / remove / reset / delete
+//   播放控制 —— play / pause
+//   回调注册 —— set_callbacks / on_* / clear_callbacks
+//   循环与生命周期 —— set_loops / rewind / restart / complete / kill
+//   帧推进 —— manager_update / 自动清理
 package tween
 
 import ha "olib:core/handle/array"
+
+// ------------------------------------------------------------------------------
+// 类型 —— 句柄/状态机/节点/回调/配置
+// ------------------------------------------------------------------------------
 
 // 对外暴露的节点句柄。
 // 使用 distinct 与其他系统的 Handle 做类型隔离。
@@ -165,6 +182,10 @@ Tween_Manager :: struct {
 	stats:  Tween_Manager_Stats,
 }
 
+// ------------------------------------------------------------------------------
+// 节点池管理 —— make / add / remove / reset / delete
+// ------------------------------------------------------------------------------
+
 manager_make :: proc() -> Tween_Manager {
 	return Tween_Manager{
 		time_scale = 1,
@@ -268,6 +289,10 @@ manager_delete :: proc(manager: ^Tween_Manager) {
 	manager^ = {}
 }
 
+// ------------------------------------------------------------------------------
+// 播放控制 —— play / pause
+// ------------------------------------------------------------------------------
+
 @(private)
 call_callback :: proc(callback: Tween_Callback_Proc, handle: Tween_Handle) {
 	if callback != nil do callback(handle)
@@ -296,6 +321,10 @@ manager_pause :: proc(manager: ^Tween_Manager, handle: Tween_Handle) -> bool {
 	recount_stats(manager)
 	return true
 }
+
+// ------------------------------------------------------------------------------
+// 回调注册 —— set_callbacks / on_* / clear_callbacks
+// ------------------------------------------------------------------------------
 
 manager_set_callbacks :: proc(manager: ^Tween_Manager, handle: Tween_Handle, callbacks: Tween_Callbacks) -> bool {
 	node := manager_get_node_ptr(manager^, handle)
@@ -345,6 +374,10 @@ manager_clear_callbacks :: proc(manager: ^Tween_Manager, handle: Tween_Handle) -
 	node.callbacks = {}
 	return true
 }
+
+// ------------------------------------------------------------------------------
+// 循环与生命周期 —— set_loops / rewind / restart / complete / kill
+// ------------------------------------------------------------------------------
 
 manager_set_loops :: proc(manager: ^Tween_Manager, handle: Tween_Handle, count: i32, mode: Repeat_Mode) -> bool {
 	node := manager_get_node_ptr(manager^, handle)
@@ -411,6 +444,10 @@ manager_kill :: proc(manager: ^Tween_Manager, handle: Tween_Handle) -> bool {
 	recount_stats(manager)
 	return true
 }
+
+// ------------------------------------------------------------------------------
+// 帧推进 —— manager_update / 自动清理
+// ------------------------------------------------------------------------------
 
 @(private)
 update_node :: proc(manager: ^Tween_Manager, node: ^Tween_Node, dt: f32) {

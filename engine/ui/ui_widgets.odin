@@ -31,6 +31,8 @@ UI_Theme :: struct {
 	text_dim:      foster.Color, // 次级文本
 	text_on_accent: foster.Color, // 主按钮上的文字
 	accent:        foster.Color,
+	ghost_hover:   foster.Color, // 幽灵按钮 hover 蒙层（半透明叠加色）
+	ghost_press:   foster.Color,
 	corner_radius:  f32,
 	padding:        u16,
 	body_font_id:   u16,
@@ -53,6 +55,8 @@ UI_THEME_DARK :: UI_Theme{
 	text_dim        = {148, 154, 168, 255},
 	text_on_accent  = {255, 255, 255, 255},
 	accent          = {62, 109, 232, 255},
+	ghost_hover     = {255, 255, 255, 26},
+	ghost_press     = {255, 255, 255, 46},
 	corner_radius   = 8,
 	padding         = 10,
 	body_font_id    = 0,
@@ -101,7 +105,7 @@ ui_button_ex :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, label: stri
 	case .Ghost:
 		bg = foster.Color{0, 0, 0, 0}
 		label_col = theme.text
-		if hovered { bg = ctx.pointer_down ? foster.Color{255, 255, 255, 46} : foster.Color{255, 255, 255, 26} }
+		if hovered { bg = ctx.pointer_down ? theme.ghost_press : theme.ghost_hover }
 	case:
 		bg = theme.button
 		label_col = theme.text

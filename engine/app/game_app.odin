@@ -1,10 +1,15 @@
-// app:game_app —— olib 侧的游戏 App 模板（对位 DragonLib GameApp）。
+// app —— 启动模板与 CLI 辅助（对位 DragonLib GameApp）。
 //
-// 用 using 把 foster.App 整个嵌入：g.Width / g.GraphicsDevice / g.Time
-// 直接可用；olib 在其上加 CLI 调试控制台的自动接线（注册 quit、每帧
-// cli_update）。回调签名升级为 proc(^Game_App)——ofoster 调的是
-// proc(^foster.App)，靠"using 字段在首位 => 地址相同"的指针转换桥接，
-// 无包级全局、可多实例。
+// ofoster 的 App 已经承担 Foster 的生命周期；本包在其上补：
+//   - Game_App：using 嵌入 foster.App（字段全提升），回调升级为
+//     proc(^Game_App)（桥接靠"using 字段在首位 => 地址相同"），
+//     并自动接好 CLI 控制台（quit/每帧消费）与 userdata 挂载；
+//   - Cli_Console：后台读 stdin 的调试控制台（命令转到主线程执行），
+//     附 CLI 参数判断（has_arg）。
+//
+// 分区（按文件）：
+//   game_app.odin    Game_App 模板与生命周期 / 桥接 trampoline
+//   cli_console.odin 调试控制台 + has_arg
 package app
 
 import foster "ofoster:."

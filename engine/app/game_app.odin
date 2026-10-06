@@ -25,10 +25,10 @@ Game_App :: struct {
 	// using 字段必须在首位：^foster.App 与 ^Game_App 地址相同（桥接依赖此布局）。
 	using App:    foster.App,
 
-	user_startup:  Game_App_Proc,
-	user_update:   Game_App_Proc,
-	user_render:   Game_App_Proc,
-	user_shutdown: Game_App_Proc,
+	startup:  Game_App_Proc,
+	update:   Game_App_Proc,
+	render:   Game_App_Proc,
+	shutdown: Game_App_Proc,
 
 	console:     Cli_Console,
 	has_console: bool,
@@ -70,16 +70,16 @@ game_app_exit :: proc(g: ^Game_App) {
 // 命令；无 stdin 的环境静默跳过）。用户回调任意一个可为 nil。
 game_app_run :: proc(
 	g:            ^Game_App,
-	user_startup:  Game_App_Proc,
-	user_update:   Game_App_Proc,
-	user_render:   Game_App_Proc,
-	user_shutdown: Game_App_Proc,
+	startup:  Game_App_Proc,
+	update:   Game_App_Proc,
+	render:   Game_App_Proc,
+	shutdown: Game_App_Proc,
 	enable_cli := false,
 ) {
-	g.user_startup = user_startup
-	g.user_update = user_update
-	g.user_render = user_render
-	g.user_shutdown = user_shutdown
+	g.startup = startup
+	g.update = update
+	g.render = render
+	g.shutdown = shutdown
 
 	if enable_cli {
 		cli_init(&g.console)
@@ -102,8 +102,8 @@ game_app_run :: proc(
 @(private)
 trampoline_startup :: proc(a: ^foster.App) {
 	g, ok := game_app_from(a)
-	if !ok || g.user_startup == nil { return }
-	g.user_startup(g)
+	if !ok || g.startup == nil { return }
+	g.startup(g)
 }
 
 @(private)
@@ -113,24 +113,24 @@ trampoline_update :: proc(a: ^foster.App) {
 	if g.has_console {
 		cli_update(&g.console) // 每帧消费命令（主线程执行）
 	}
-	if g.user_update != nil {
-		g.user_update(g)
+	if g.update != nil {
+		g.update(g)
 	}
 }
 
 @(private)
 trampoline_render :: proc(a: ^foster.App) {
 	g, ok := game_app_from(a)
-	if !ok || g.user_render == nil { return }
-	g.user_render(g)
+	if !ok || g.render == nil { return }
+	g.render(g)
 }
 
 @(private)
 trampoline_shutdown :: proc(a: ^foster.App) {
 	g, ok := game_app_from(a)
 	if !ok { return }
-	if g.user_shutdown != nil {
-		g.user_shutdown(g)
+	if g.shutdown != nil {
+		g.shutdown(g)
 	}
 	if g.has_console {
 		cli_stop(&g.console)

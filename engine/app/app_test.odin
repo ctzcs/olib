@@ -95,8 +95,8 @@ game_app_trampoline_bridge :: proc(t: ^testing.T) {
 	g: Game_App
 	state: Bridge_State
 
-	g.user_startup = bridge_startup
-	g.user_update = bridge_update
+	g.startup = bridge_startup
+	g.update = bridge_update
 
 	// 桥接：^foster.App 视图 -> ^Game_App（using 字段在首位，地址相同）
 	app_view := &g.App
@@ -121,7 +121,7 @@ game_app_trampoline_bridge :: proc(t: ^testing.T) {
 	testing.expect(t, g.has_console == false)
 
 	// nil 回调安全
-	g.user_startup = nil
+	g.startup = nil
 	trampoline_startup(&g.App)
 	testing.expect(t, state.startups == 1)
 }

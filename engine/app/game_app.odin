@@ -8,16 +8,11 @@
 //     附 CLI 参数判断（has_arg）。
 //
 // 分区（按文件）：
-//   game_app.odin    Game_App 模板与生命周期 / 桥接 trampoline
+//   game_app.odin    Game_App 类型 / 生命周期 / CLI 接入（update 与 shutdown trampoline）
 //   cli_console.odin 调试控制台 + has_arg
 package app
 
 import foster "olib:foster"
-
-// 分区：
-//   类型 —— Game_App / App 视图转换
-//   生命周期 —— init / run / dispose / exit
-//   CLI —— enable / update 与 shutdown trampoline
 
 // ------------------------------------------------------------------------------
 // 类型
@@ -33,6 +28,9 @@ Game_App :: struct {
 	console:     Cli_Console,
 	has_console: bool,
 }
+
+// 桥接依赖 App 位于偏移 0；字段顺序被改动时在编译期报错。
+#assert(offset_of(Game_App, App) == 0)
 
 // 从 Foster 回调里的 ^foster.App 取回外层 Game_App。
 // 仅对 game_app_init 建立的、经 game_app_run 桥接的实例有效。
@@ -101,7 +99,6 @@ game_app_enable_cli :: proc(g: ^Game_App) {
 @(private)
 trampoline_update :: proc(a: ^foster.App) {
 	g := game_app_from(a)
-	if g == nil do return
 	if g.has_console {
 		cli_update(&g.console) // 每帧消费命令（主线程执行）
 	}
@@ -113,7 +110,6 @@ trampoline_update :: proc(a: ^foster.App) {
 @(private)
 trampoline_shutdown :: proc(a: ^foster.App) {
 	g := game_app_from(a)
-	if g == nil do return
 	if g.shutdown != nil {
 		g.shutdown(a)
 	}

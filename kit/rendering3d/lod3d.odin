@@ -7,7 +7,7 @@ package rendering3d
 import "core:math"
 
 import dasset "olib:core/dasset"
-import world "olib:engine/world"
+import world "olib:kit/world"
 
 // 分区：
 //   Lod_Selector —— 阈值状态机 + 屏幕高度估算

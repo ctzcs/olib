@@ -1,6 +1,6 @@
 # olib 编码规范
 
-适用范围：`core/` 与 `engine/` 的第一方源码（含测试）。
+适用范围：`core/` 与 `kit/` 的第一方源码（含测试）。
 `thirdparty/` 是外部绑定的 vendored 代码，保持与上游一致，**不适用**本规范。
 `foster/` 是 Foster 移植，**豁免**本规范，沿用 [foster/docs/CODE_STYLE.md](../foster/docs/CODE_STYLE.md)；
 对它的主动修改须登记到 [foster/docs/LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)。
@@ -10,7 +10,7 @@
 ```
 olib/
 ├── core/        基础库：无引擎依赖（handle / entities / encoding / messaging / dasset / tween / debug / profiler）
-├── engine/      引擎层：依赖 foster/（asset / world / rendering / app 等）
+├── kit/      扩展层（kit）：依赖 foster/（asset / world / rendering / app 等）
 ├── foster/      Foster 移植，豁免本规范，见 foster/docs/CODE_STYLE.md
 ├── thirdparty/  外部绑定：clay-odin / odin-imgui / oflecs
 └── docs/        本文档
@@ -20,7 +20,7 @@ olib/
 - 同一主题的声明、构造、查询、修改和释放函数放在一起，不为层级拆小文件；
   单主题的小包（如 `meta.odin`）一个文件即可，多主题包按主题分文件
   （参考 `core/tween/`：manager / tween / interpolated / managed_*）。
-- 依赖方向单向：`engine → foster`、`engine → core → (Odin core/base)`；
+- 依赖方向单向：`kit → foster`、`kit → core → (Odin core/base)`；
   core 不得 import foster；foster 不依赖 olib 其他任何包。
 
 ## 2. 分节注释（表达层级）
@@ -44,7 +44,7 @@ olib/
 - 函数内部的局部阶段用单行短注释（`// ---- 第一遍：身份 ----`），不加线框。
 - 分区前后保留一个空行；不给每个小函数加线框。
 - 标题使用真实语义（"生命周期"“查询”“迭代”），禁止"其他"“杂项"。
-- 有参考实现时标题对齐其目录/类型层级（olib 的 engine/* 对位 DragonLib
+- 有参考实现时标题对齐其目录/类型层级（olib 的 kit/* 对位 DragonLib
   Libs/Engine 的 Assets/World/Messaging）。
 
 ## 3. 顶部导航
@@ -96,7 +96,7 @@ package tween
 
 ```powershell
 odin fmt core
-odin fmt engine
+odin fmt kit
 ```
 
 `odin fmt` 无法展开的密集代码（单行 if、挤压的 case 体）仍按第 4 节手动整理。
@@ -106,7 +106,7 @@ odin fmt engine
 - proc 字面量**没有闭包**：需要状态的回调走 `proc(item, userdata: rawptr)` +
   userdata 惯例（见 `core/messaging` 的 `queue_drain`）。
 - 泛型参数上的隐式枚举选择子无法解析：调用处写显式成员名
-  （`Screen.Title` 而非 `.Title`，见 `engine/world/scene_router.odin`）。
+  （`Screen.Title` 而非 `.Title`，见 `kit/world/scene_router.odin`）。
 - 切片 `transmute` 保留 len 数值而非按字节换算：跨类型字节拷贝一律
   `mem.copy(rawptr, rawptr, 字节数)`（设计语义，不会随版本改变）。
 - 结构体字段无默认值：提供 `xxx_init` proc 并在文档注明零值可用性。

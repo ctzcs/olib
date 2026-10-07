@@ -3,12 +3,12 @@ package main
 import "core:fmt"
 import "core:math"
 
-import app "olib:engine/app"
-import ui "olib:engine/ui"
+import app "olib:kit/app"
+import ui "olib:kit/ui"
 import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
 
-// 布局与交互来自 engine/ui；游戏皮肤、道具语义、冷却遮罩属于示例。
+// 布局与交互来自 kit/ui；游戏皮肤、道具语义、冷却遮罩属于示例。
 skill_names := [6]string{"Riven blade", "Iron vow", "Ember burst", "Moonfall", "Ember flask", "Windstep"}
 item_names := [6]string{"WARDEN'S BLADE", "OATHBOUND SHIELD", "CINDER CORE", "MOONGLASS SHARD", "EMBER FLASK", "VERDANT PLUME"}
 item_types := [6]string{"WEAPON  /  +24 ATTACK", "ARMOR  /  +18 GUARD", "MATERIAL  /  FIRE", "RARE MATERIAL  /  ARCANE", "CONSUMABLE  /  RESTORE HP", "CHARM  /  +8 AGILITY"}

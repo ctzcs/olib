@@ -18,7 +18,7 @@ core/        基础库（无引擎依赖）
 
 foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组织与 Git 历史）
 
-engine/      引擎层（依赖 foster/）
+kit/      扩展层（kit）（依赖 foster/）
 ├── asset/       资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
 ├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
@@ -43,12 +43,12 @@ odin build <app> -collection:olib=<olib 路径>
 ```odin
 import ha    "olib:core/handle/array"
 import msg   "olib:core/messaging"
-import asset "olib:engine/asset"
-import world "olib:engine/world"
+import asset "olib:kit/asset"
+import world "olib:kit/world"
 import foster "olib:foster"
 ```
 
-各模块文档见包内注释、[资源管线](engine/asset/README.md)与 [游戏 UI](engine/ui/README.md)。
+各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
 游戏 UI 示例见 `examples/game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
 基础控件验收页见 `examples/ui_gallery`。
 
@@ -58,7 +58,7 @@ import foster "olib:foster"
 odin test core/handle/array -collection:olib=.
 odin test core/messaging
 odin test core/dasset
-# 其余包同理：core/entities core/tween engine/asset engine/world ...
+# 其余包同理：core/entities core/tween kit/asset kit/world ...
 ```
 
 编码规范：[docs/CODE_STYLE.md](docs/CODE_STYLE.md)

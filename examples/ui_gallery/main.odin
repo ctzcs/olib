@@ -3,8 +3,8 @@ package main
 import "core:fmt"
 import "core:os"
 
-import app "olib:engine/app"
-import ui "olib:engine/ui"
+import app "olib:kit/app"
+import ui "olib:kit/ui"
 import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
 

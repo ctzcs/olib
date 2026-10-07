@@ -1,6 +1,6 @@
 package main
 
-import ui "olib:engine/ui"
+import ui "olib:kit/ui"
 import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
 

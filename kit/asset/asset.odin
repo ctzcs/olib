@@ -1,4 +1,4 @@
-// olib:engine/asset —— Foster 资源管线 v1。
+// olib:kit/asset —— Foster 资源管线 v1。
 //
 // 架构（.meta 管身份，Library 管派生物，blob 是 Importer/Runtime 边界）：
 //

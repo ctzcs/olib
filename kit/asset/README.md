@@ -1,4 +1,4 @@
-# olib:engine/asset —— Foster 资源管线 v1
+# olib:kit/asset —— Foster 资源管线 v1
 
 `.meta` 管身份，`Library/` 管派生物，blob 是 Importer 与 Runtime 的边界，pak 将来只是 Storage 后端的变化。
 
@@ -27,7 +27,7 @@ Project/
 工具/编辑器侧（每次启动时跑一次）：
 
 ```odin
-import asset "olib:engine/asset"
+import asset "olib:kit/asset"
 
 stats, err := asset.import_all("Assets", "Library")
 // stats: {scanned, imported, skipped, guid_generated, orphaned_meta}
@@ -132,7 +132,7 @@ blob 头含 `importer_version` 与源的 `mtime/size`；新鲜度 = 三者全部
 ## 构建与测试
 
 ```bash
-odin test engine/asset -collection:olib=.
+odin test kit/asset -collection:olib=.
 ```
 
 v1 仅支持 native 目标（扫描/mtime 依赖 `core:os`）。web 路线：`storage_map` + `#load`

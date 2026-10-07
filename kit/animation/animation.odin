@@ -1,6 +1,6 @@
 // animation —— 骨骼动画的采样与 palette 计算（对位 DragonLib Engine.Animation.SkeletonAnimator）。
 //
-// 纯计算，无 GPU/ECS 依赖（可单测）。矩阵为行向量约定（v*M，同 engine/world）：
+// 纯计算，无 GPU/ECS 依赖（可单测）。矩阵为行向量约定（v*M，同 kit/world）：
 // 本地姿态 -> 沿拓扑序传播全局矩阵（global = local * parent_global）->
 // palette[i] = InverseBind[i] * global[i]。
 //
@@ -17,7 +17,7 @@ package animation
 import "core:math"
 
 import dasset "olib:core/dasset"
-import world "olib:engine/world"
+import world "olib:kit/world"
 
 // shader 侧 joint palette 的容量上限（skinned shader 的 MAX_JOINTS）。
 ANIMATION_MAX_JOINTS :: 128

@@ -1,14 +1,14 @@
 // rendering3d:uniforms3d —— 与 Standard3D 着色器 cbuffer 对应的 CPU 侧打包。
 //
 // 布局按 SDL std140 规则手排（全 vec4，无 padding 陷阱）；矩阵为列主序
-// 16×f32（engine/world 的 Matrix4 列存储直接推送即可——mul(M,v) 语义下
+// 16×f32（kit/world 的 Matrix4 列存储直接推送即可——mul(M,v) 语义下
 // 无需转置）。槽位号与 HLSL 的 register(bN) 一致。
 package rendering3d
 
 import "core:math"
 import "core:mem"
 
-import world "olib:engine/world"
+import world "olib:kit/world"
 
 // 分区：
 //   顶点槽 —— 矩阵块（槽 0）/ 阴影矩阵（槽 1）/ 骨骼 palette（槽 2、3）

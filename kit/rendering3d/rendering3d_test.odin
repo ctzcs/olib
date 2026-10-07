@@ -6,7 +6,7 @@ import "core:math"
 import "core:testing"
 
 import dasset "olib:core/dasset"
-import world "olib:engine/world"
+import world "olib:kit/world"
 import foster "olib:foster"
 
 @(test)

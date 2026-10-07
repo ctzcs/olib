@@ -7,7 +7,7 @@ package rendering3d
 
 import "core:math"
 
-import world "olib:engine/world"
+import world "olib:kit/world"
 import foster "olib:foster"
 
 // 分区：

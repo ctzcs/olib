@@ -1,6 +1,6 @@
 # 游戏 UI
 
-Clay 负责布局，`engine/ui` 提供控件、交互与 Foster Batcher 后端。
+Clay 负责布局，`kit/ui` 提供控件、交互与 Foster Batcher 后端。
 可运行游戏界面位于 [`examples/game_ui`](../../examples/game_ui)：遗迹场景上的生命/能量 HUD、
 带冷却遮罩的技能栏、格子背包和暂停菜单。它使用同一套布局与交互，游戏皮肤在示例中定义。
 原来的设置页和控件验收示例保留在 [`examples/ui_gallery`](../../examples/ui_gallery)。
@@ -149,7 +149,7 @@ if show_dialog {
 ## 验证
 
 ```powershell
-odin test engine/ui -collection:olib=.
+odin test kit/ui -collection:olib=.
 odin build examples/game_ui -collection:olib=. -out:game_ui.exe
 ```
 

@@ -3,7 +3,7 @@ package main
 import "core:math"
 import "core:os"
 
-import ui "olib:engine/ui"
+import ui "olib:kit/ui"
 import foster "olib:foster"
 import stbtt "olib:foster/internal/third_party"
 

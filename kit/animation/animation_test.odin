@@ -6,7 +6,7 @@ import "core:math"
 import "core:testing"
 
 import dasset "olib:core/dasset"
-import world "olib:engine/world"
+import world "olib:kit/world"
 
 // 两关节链：root(bind 平移 1,0,0) -> child(bind 平移 0,2,0)，均单位逆绑定。
 @(private)

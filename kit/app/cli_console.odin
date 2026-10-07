@@ -169,6 +169,7 @@ cli_start :: proc(console: ^Cli_Console) -> bool {
 		active_cli_console = nil
 		return false
 	}
+	thread.start(console.thread)
 	fmt.println("[cli] CLI 调试控制台已启动，输入 help 查看命令")
 	return true
 }

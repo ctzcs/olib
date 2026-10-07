@@ -2,6 +2,7 @@
 #+test
 package app
 
+import "core:os"
 import "core:testing"
 
 import msg "olib:core/messaging"
@@ -98,4 +99,17 @@ cli_zero_value_lifecycle :: proc(t: ^testing.T) {
 	cli_dispose(&console)
 	testing.expect(t, console.commands == nil && !console.running)
 	testing.expect(t, console.thread == nil && msg.queue_count(&console.queue) == 0)
+}
+
+@(test)
+cli_open_without_stdin_cleans_up :: proc(t: ^testing.T) {
+	previous_stdin := os.stdin
+	os.stdin = nil
+	defer os.stdin = previous_stdin
+	console: Cli_Console
+	a: foster.App
+	testing.expect(t, !cli_open(&console, &a))
+	cli_update(&console)
+	cli_dispose(&console)
+	testing.expect(t, console.commands == nil && console.thread == nil && !console.running)
 }

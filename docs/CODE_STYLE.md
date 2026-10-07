@@ -2,7 +2,8 @@
 
 适用范围：`core/` 与 `engine/` 的第一方源码（含测试）。
 `thirdparty/` 是外部绑定的 vendored 代码，保持与上游一致，**不适用**本规范。
-`foster/` 是 Foster 移植，**豁免**本规范，沿用 [foster/docs/CODE_STYLE.md](../foster/docs/CODE_STYLE.md)。
+`foster/` 是 Foster 移植，**豁免**本规范，沿用 [foster/docs/CODE_STYLE.md](../foster/docs/CODE_STYLE.md)；
+对它的主动修改须登记到 [foster/docs/LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)。
 
 ## 1. 仓库布局
 

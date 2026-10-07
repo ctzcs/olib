@@ -70,7 +70,8 @@ the web bridge).
 - `tests/`: `webtest` (web acceptance program), `graphics_regression`
   (native GPU suite) and `port_regression` (shared native/Web port checks).
 - `docs/`: supplementary documentation — `PORTING_MAP.md` (upstream file
-  mapping and API differences), `CODE_STYLE.md` (source layout and formatting),
+  mapping and API differences), `LOCAL_CHANGES.md` (olib's intentional deviations
+  from upstream, tracked for re-syncing), `CODE_STYLE.md` (source layout and formatting),
   and `WEB_TARGET_REQUIREMENTS.md` (web target
   requirements and acceptance notes).
 - `../build/`: git-ignored scratch space at the olib root for local harnesses and artifacts.

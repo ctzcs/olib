@@ -3,7 +3,8 @@
 本文档记录上游 C# Foster 源文件与本项目 Odin 文件的对应关系，以及移植中
 有意做出的 API 差异。同步上游时，先对照本表定位每个上游文件在 Odin 侧的
 落点，再更新 `README.md` 的 sync baseline 一节与 `framework.odin`
-里的版本号。
+里的版本号。olib 主动做的修改（新增 / 行为变更 / 修复 / 删除）另见
+[LOCAL_CHANGES.md](LOCAL_CHANGES.md)。
 
 ## 当前覆盖（2026-10-06）
 
@@ -157,7 +158,10 @@ C# 的重载/实例方法在 Odin 侧多为"前缀 + 显式名"或 proc group，
 ## 同步上游的流程
 
 1. 在上游仓库对比 sync baseline commit 之后的变更清单。
-2. 按本表把每个改动的 C# 文件映射到对应 Odin 文件并移植。
-3. 跑 `tests/webtest`（native + `js_wasm32`）与 `tests/graphics_regression`，以及
+2. 对照 [LOCAL_CHANGES.md](LOCAL_CHANGES.md)，找出与上游改动落在同一位置的本地修改
+   （`grep -rn "\[olib L-" foster`），按各条的同步策略处理：`保留` 的手工合并；
+   `上游修复后删除` 的确认上游已修复后移除代码标记与清单行；`同步时重新评估` 的逐条决定。
+3. 按本表把每个改动的 C# 文件映射到对应 Odin 文件并移植。
+4. 跑 `tests/webtest`（native + `js_wasm32`）与 `tests/graphics_regression`，以及
    `build/glade-regression` 与 `build/exhaustive-format-check`（若适用）。
-4. 更新 `README.md` 的 baseline、`framework.odin` 的版本号和本表。
+5. 运行 `tests/check_local_changes.ps1`；更新 `README.md` 的 baseline、`framework.odin` 的版本号和本表。

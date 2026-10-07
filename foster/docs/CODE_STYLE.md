@@ -84,6 +84,13 @@ ClampIndex :: proc(index, count: int) -> int {
 }
 ```
 
+## 本地修改
+
+偏离上游 Foster 的主动修改（新增、行为变更、修复、删除）必须登记到
+[LOCAL_CHANGES.md](LOCAL_CHANGES.md)，并在修改点写 `// [olib L-xxx] 简述` 标记；
+纯新增优先放在 `olib_ext.odin` / `olib_*.odin`，少改移植文件。提交前运行
+`powershell -File foster/tests/check_local_changes.ps1`。
+
 ## 格式配置与维护
 
 本目录上一级的 [odinfmt.json](../odinfmt.json) 是格式参数的依据：

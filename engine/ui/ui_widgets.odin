@@ -1,17 +1,15 @@
-// ui:widgets —— 控件与主题层（Paper 观感的 olib 自建方案）。
-//
-// clay 不提供控件库（v0.14 也无文本输入），这层用 clay 的布局原语 +
-// PointerOver/点击边沿搭出最小控件集：Button(三种样式)/Heading/Label/
-// Toggle/Separator。状态色来自 Theme；hover/按下即时生效，过渡动画接
-// clay 的 transition API 是后续增量。
 package ui
+
+import "core:math"
 
 import clay "olib:thirdparty/clay-odin"
 import foster "ofoster:."
 
 // 分区：
 //   主题 —— UI_Theme / 默认深色主题
-//   控件 —— button / heading / label / toggle / separator / 容器声明
+//   控件 —— button / heading / label / toggle / separator
+//   游戏控件 —— image / image_button / progress_bar / slider
+//   容器 —— row / column / panel / scroll / modal
 
 // ------------------------------------------------------------------------------
 // 主题
@@ -85,33 +83,57 @@ UI_Button_Style :: enum {
 	Ghost,   // 幽灵：透明底，hover 半透明白
 }
 
-// 按钮：返回本帧是否被点击（悬停 + 按下边沿）。label 为运行时字符串。
+// 按钮默认在内部松开时触发；options.trigger = .Press 可保留按下即触发。
 // id 必须帧间稳定（clay 的悬停/过渡按 id 记忆；hover 查询发生在声明前，
 // 用的是上一帧的布局——clay 官方模式）。
-ui_button :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, label: string) -> bool {
-	return ui_button_ex(ctx, theme, id, label, .Normal)
+ui_button :: proc(
+	ctx: ^UI_Context,
+	theme: ^UI_Theme,
+	id: string,
+	label: string,
+	options: UI_Widget_Options = {},
+) -> bool {
+	return ui_button_ex(ctx, theme, id, label, .Normal, options)
 }
 
-ui_button_ex :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, label: string, style: UI_Button_Style) -> bool {
-	hovered := clay.PointerOver(clay.ID(id))
-	clicked := hovered && ui_clicked(ctx)
+ui_button_ex :: proc(
+	ctx: ^UI_Context,
+	theme: ^UI_Theme,
+	id: string,
+	label: string,
+	style: UI_Button_Style,
+	options: UI_Widget_Options = {},
+) -> bool {
+	state := ui_interact(ctx, id, options)
+	hovered := state.hovered && !state.disabled
+	clicked := state.clicked
 
 	bg, label_col: foster.Color
 	#partial switch style {
 	case .Primary:
 		bg = theme.primary
 		label_col = theme.text_on_accent
-		if hovered { bg = ctx.pointer_down ? theme.primary_press : theme.primary_hover }
+		if hovered {
+			bg = state.active ? theme.primary_press : theme.primary_hover
+		}
 	case .Ghost:
 		bg = foster.Color{0, 0, 0, 0}
 		label_col = theme.text
-		if hovered { bg = ctx.pointer_down ? theme.ghost_press : theme.ghost_hover }
+		if hovered {
+			bg = state.active ? theme.ghost_press : theme.ghost_hover
+		}
 	case:
 		bg = theme.button
 		label_col = theme.text
-		if hovered { bg = ctx.pointer_down ? theme.button_press : theme.button_hover }
+		if hovered {
+			bg = state.active ? theme.button_press : theme.button_hover
+		}
 	}
 
+	if state.disabled {
+		label_col = theme.text_dim
+		bg = theme.panel
+	}
 	if clay.UI()(
 		clay.ElementDeclaration{
 			id = clay.ID(id),
@@ -123,6 +145,7 @@ ui_button_ex :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, label: stri
 				padding = clay.PaddingAll(theme.padding),
 				childAlignment = {x = .Center, y = .Center},
 			},
+			border = ui_focus_border(theme, state),
 			backgroundColor = ui_clay_color(bg),
 			cornerRadius = clay.CornerRadiusAll(theme.corner_radius),
 		},
@@ -137,7 +160,7 @@ ui_heading :: proc(ctx: ^UI_Context, theme: ^UI_Theme, text: string) {
 	ui_label_ex(ctx, theme, text, theme.text, theme.heading_font_size)
 }
 
-// 标签：单行文本（运行时字符串）。
+// 标签：运行时字符串，使用 Clay 默认 Words 换行。
 // config 经 ctx 的帧内池分配：clay 存裸指针、EndLayout 才回读，
 // 栈上局部 config 会悬垂（表现为渲染命令里颜色/字号变垃圾值）。
 ui_label :: proc(ctx: ^UI_Context, theme: ^UI_Theme, text: string) {
@@ -155,19 +178,30 @@ ui_label_ex :: proc(ctx: ^UI_Context, theme: ^UI_Theme, text: string, color: fos
 		fontSize = size,
 		textColor = ui_clay_color(color),
 	})
-	if config == nil { return }
+	if config == nil {
+		return
+	}
 	clay.TextDynamic(text, config)
 }
 
 // 开关：点击翻转 *value，返回新值。胶囊轨道 + 圆形滑块。
-ui_toggle :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, value: ^bool) -> bool {
-	hovered := clay.PointerOver(clay.ID(id))
-	if hovered && ui_clicked(ctx) {
+ui_toggle :: proc(
+	ctx: ^UI_Context,
+	theme: ^UI_Theme,
+	id: string,
+	value: ^bool,
+	options: UI_Widget_Options = {},
+) -> bool {
+	state := ui_interact(ctx, id, options)
+	hovered := state.hovered && !state.disabled
+	if state.clicked {
 		value^ = !value^
 	}
 
 	track := value^ ? theme.accent : theme.button_hover
-	if hovered && !value^ { track = theme.button }
+	if hovered && !value^ {
+		track = theme.button
+	}
 	if clay.UI()(
 		clay.ElementDeclaration{
 			id = clay.ID(id),
@@ -176,7 +210,8 @@ ui_toggle :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id: string, value: ^bool) 
 				padding = {left = 2, right = 2, top = 2, bottom = 2},
 				childAlignment = {x = value^ ? .Right : .Left, y = .Center},
 			},
-			backgroundColor = ui_clay_color(track),
+			border = ui_focus_border(theme, state),
+			backgroundColor = ui_clay_color(state.disabled ? theme.panel : track),
 			cornerRadius = clay.CornerRadiusAll(10), // 半高 = 胶囊
 		},
 	) {
@@ -206,7 +241,7 @@ ui_separator :: proc(ctx: ^UI_Context, theme: ^UI_Theme) {
 
 // 水平行容器声明（gap 像素间距，子元素垂直居中）。子内容在调用侧的
 // if clay.UI()(ui_row_decl(...)) {} 块里声明。
-ui_row_decl :: proc(gap: u16) -> clay.ElementDeclaration {
+ui_row_decl :: proc(gap: u16 = 8) -> clay.ElementDeclaration {
 	return clay.ElementDeclaration{
 		layout = {
 			sizing = {width = clay.SizingGrow({}), height = clay.SizingFit({})},
@@ -226,9 +261,13 @@ ui_spacer :: proc() {
 }
 
 // 面板：带内边距与圆角的容器声明（子内容在返回的 if 块里声明）。
-ui_panel_decl :: proc(theme: ^UI_Theme) -> clay.ElementDeclaration {
+ui_panel_decl :: proc(theme: ^UI_Theme, gap: u16 = 8, width: f32 = 0) -> clay.ElementDeclaration {
 	return clay.ElementDeclaration{
-		layout = {padding = clay.PaddingAll(theme.padding * 2)},
+		layout = {
+			sizing = {width = width > 0 ? clay.SizingFixed(width) : clay.SizingGrow({}), height = clay.SizingFit({})},
+			layoutDirection = .TopToBottom, childGap = gap,
+			padding = clay.PaddingAll(theme.padding * 2),
+		},
 		backgroundColor = ui_clay_color(theme.panel),
 		cornerRadius = clay.CornerRadiusAll(theme.corner_radius + 2),
 	}
@@ -240,5 +279,220 @@ ui_panel_border_decl :: proc(theme: ^UI_Theme) -> clay.ElementDeclaration {
 		layout = {padding = {left = 1, right = 1, top = 1, bottom = 1}},
 		backgroundColor = ui_clay_color(theme.panel_border),
 		cornerRadius = clay.CornerRadiusAll(theme.corner_radius + 3),
+	}
+}
+
+// ------------------------------------------------------------------------------
+// 游戏常用控件 —— 图像 / 图像按钮 / 进度 / 滑条
+// ------------------------------------------------------------------------------
+
+@(private)
+ui_focus_border :: proc(theme: ^UI_Theme, state: UI_Interaction) -> clay.BorderElementConfig {
+	if state.focused && !state.disabled {
+		return {color = ui_clay_color(theme.accent), width = {left = 2, right = 2, top = 2, bottom = 2}}
+	}
+	return {}
+}
+
+UI_Image_Data :: struct {
+	sub: foster.Subtexture,
+	source_border, border: f32,
+}
+
+// 可容纳文字/图标的图片背景声明。纹理由调用者持有，颜色使用预乘 alpha。
+ui_image_decl :: proc(ctx: ^UI_Context, sub: foster.Subtexture,
+	tint: foster.Color = {255, 255, 255, 255}) -> clay.ElementDeclaration {
+	decl := clay.ElementDeclaration{
+		layout = {sizing = {width = clay.SizingGrow({}), height = clay.SizingGrow({})}},
+	}
+	if sub.Texture == nil || ctx.image_len >= len(ctx.image_pool) {
+		ctx.pool_overflow = ctx.pool_overflow || ctx.image_len >= len(ctx.image_pool)
+		return decl
+	}
+	data := &ctx.image_pool[ctx.image_len]
+	data^ = {sub = sub}
+	ctx.image_len += 1
+	decl.backgroundColor = ui_clay_color(tint)
+	decl.custom = {customData = data}
+	return decl
+}
+
+// 整张纹理的对称九宫格背景。source_border 为源图片像素，border 为逻辑像素。
+// 保留四角比例，边缘仅沿对应方向拉伸；透明圆角需由图片自身提供。
+ui_nine_slice_decl :: proc(ctx: ^UI_Context, texture: ^foster.Texture,
+	source_border, border: f32, tint: foster.Color = {255, 255, 255, 255}) -> clay.ElementDeclaration {
+	sub: foster.Subtexture
+	if texture != nil {
+		sub = foster.SubtextureFromTexture(texture)
+	}
+	decl := ui_image_decl(ctx, sub, tint)
+	if decl.custom.customData != nil {
+		data := cast(^UI_Image_Data)decl.custom.customData
+		data.source_border = math.clamp(source_border, 0, min(sub.Frame.Width, sub.Frame.Height) * 0.5)
+		data.border = max(border, 0)
+	}
+	return decl
+}
+
+// Subtexture 同时支持整张贴图、图集区域和裁切后的帧；按 Frame 尺寸缩放。
+// sub 被复制到帧内池，GPU 纹理仍由调用者拥有。尺寸单位为逻辑像素。
+ui_image :: proc(
+	ctx: ^UI_Context,
+	sub: foster.Subtexture,
+	width, height: f32,
+	tint: foster.Color = {255, 255, 255, 255},
+) {
+	decl := ui_image_decl(ctx, sub, tint)
+	if decl.custom.customData == nil {
+		return
+	}
+	decl.layout.sizing = {width = clay.SizingFixed(max(width, 0)), height = clay.SizingFixed(max(height, 0))}
+	if clay.UI()(decl) {}
+}
+
+ui_image_button :: proc(
+	ctx: ^UI_Context,
+	theme: ^UI_Theme,
+	id: string,
+	sub: foster.Subtexture,
+	size: f32 = 48,
+	options: UI_Widget_Options = {},
+) -> bool {
+	state := ui_interact(ctx, id, options)
+	bg := state.active ? theme.button_press : state.hovered ? theme.button_hover : theme.button
+	if clay.UI()(clay.ElementDeclaration{
+		id = clay.ID(id),
+		layout = {padding = clay.PaddingAll(theme.padding)},
+		backgroundColor = ui_clay_color(state.disabled ? theme.panel : bg),
+		border = ui_focus_border(theme, state),
+		cornerRadius = clay.CornerRadiusAll(theme.corner_radius),
+	}) {
+		ui_image(ctx, sub, size, size, state.disabled ? theme.text_dim : foster.Color{255, 255, 255, 255})
+	}
+	return state.clicked
+}
+
+// value 按 0..1 归一化，越界钳制；零进度不产生最小可见填充。
+ui_progress_bar :: proc(
+	ctx: ^UI_Context,
+	theme: ^UI_Theme,
+	value: f32,
+	width: f32 = 200,
+	height: f32 = 12,
+) {
+	value := math.clamp(value, 0, 1)
+	if clay.UI()(clay.ElementDeclaration{
+		layout = {sizing = {width = clay.SizingFixed(max(width, 0)), height = clay.SizingFixed(max(height, 0))}},
+		backgroundColor = ui_clay_color(theme.button),
+		cornerRadius = clay.CornerRadiusAll(height * 0.5),
+	}) {
+		if value > 0 {
+			if clay.UI()(clay.ElementDeclaration{
+				layout = {sizing = {width = clay.SizingFixed(max(width, 0) * value), height = clay.SizingFixed(max(height, 0))}},
+				backgroundColor = ui_clay_color(theme.accent),
+				cornerRadius = clay.CornerRadiusAll(height * 0.5),
+			}) {}
+		}
+	}
+}
+
+// 返回本帧是否改变值。鼠标按下捕获后可拖出区域；导航 adjust 单位为 step。
+ui_slider :: proc(
+	ctx: ^UI_Context,
+	theme: ^UI_Theme,
+	id: string,
+	value: ^f32,
+	minimum: f32 = 0,
+	maximum: f32 = 1,
+	step: f32 = 0.05,
+	width: f32 = 200,
+	options: UI_Widget_Options = {},
+) -> bool {
+	state := ui_interact(ctx, id, options)
+	before := value^
+	span := maximum - minimum
+	width := max(width, 24)
+	if !state.disabled && span > 0 {
+		box := clay.GetElementData(clay.ID(id))
+		if box.found && (state.active || state.released) {
+			t := math.clamp((ctx.pointer_x - box.boundingBox.x - 8) / max(box.boundingBox.width - 16, 1), 0, 1)
+			value^ = minimum + span * t
+		}
+		if state.focused && ctx.navigation.adjust != 0 {
+			value^ += ctx.navigation.adjust * (step > 0 ? step : span * 0.01)
+		}
+		value^ = math.clamp(value^, minimum, maximum)
+	}
+	t := span > 0 ? math.clamp((value^ - minimum) / span, 0, 1) : 0
+	if clay.UI()(clay.ElementDeclaration{
+		id = clay.ID(id),
+		layout = {
+			sizing = {width = clay.SizingFixed(width), height = clay.SizingFixed(24)},
+			padding = {left = u16(t * (width - 16)), top = 4},
+		},
+		backgroundColor = ui_clay_color(state.disabled ? theme.panel : theme.button),
+		cornerRadius = clay.CornerRadiusAll(12),
+		border = ui_focus_border(theme, state),
+	}) {
+		if clay.UI()(clay.ElementDeclaration{
+			layout = {sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)}},
+			backgroundColor = ui_clay_color(state.disabled ? theme.text_dim : theme.accent),
+			cornerRadius = clay.CornerRadiusAll(8),
+		}) {}
+	}
+	return before != value^
+}
+
+// ------------------------------------------------------------------------------
+// 容器 —— 列 / 滚动区域 / 全屏模态遮罩
+// ------------------------------------------------------------------------------
+
+ui_column_decl :: proc(gap: u16 = 8) -> clay.ElementDeclaration {
+	decl := ui_row_decl(gap)
+	decl.layout.layoutDirection = .TopToBottom
+	decl.layout.childAlignment = {x = .Left, y = .Top}
+	return decl
+}
+
+// 内容竖排、滚轮滚动、双轴裁剪；width=0 时占满父容器。
+UI_Scroll_Entry :: struct {
+	id: u32,
+	offset: clay.Vector2,
+	seen: bool,
+}
+
+ui_scroll_decl :: proc(
+	ctx: ^UI_Context,
+	id: string,
+	height: f32,
+	width: f32 = 0,
+	gap: u16 = 8,
+) -> clay.ElementDeclaration {
+	ui_block_pointer(ctx, id)
+	decl := ui_column_decl(gap)
+	decl.id = clay.ID(id)
+	decl.layout.sizing = {width = width > 0 ? clay.SizingFixed(width) : clay.SizingGrow({}), height = clay.SizingFixed(height)}
+	decl.clip = {vertical = true, horizontal = true}
+	for &scroll in ctx.scrolls {
+		if scroll.id == decl.id.id {
+			decl.clip.childOffset = scroll.offset
+			scroll.seen = true
+			return decl
+		}
+	}
+	append(&ctx.scrolls, UI_Scroll_Entry{id = decl.id.id, seen = true})
+	return decl
+}
+
+// 配合 ui_set_modal/ui_set_scope；尺寸覆盖逻辑 viewport，内容居中。
+ui_modal_decl :: proc(ctx: ^UI_Context, id: string) -> clay.ElementDeclaration {
+	return {
+		id = clay.ID(id),
+		layout = {
+			sizing = {width = clay.SizingFixed(ctx.width), height = clay.SizingFixed(ctx.height)},
+			childAlignment = {x = .Center, y = .Center},
+		},
+		backgroundColor = {0, 0, 0, 0.65},
+		floating = {attachTo = .Root, zIndex = 100, pointerCaptureMode = .Capture},
 	}
 }

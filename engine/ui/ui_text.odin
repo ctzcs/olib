@@ -35,6 +35,7 @@ ui_measure_text :: proc "contextless" (
 	for r in text {
 		if prev_codepoint >= 0 {
 			width += ui_kerning(font, prev_codepoint, int(r)) * scale
+			width += f32(letter_spacing)
 		}
 		char, ok := ui_find_character(font, int(r))
 		if ok {
@@ -43,9 +44,6 @@ ui_measure_text :: proc "contextless" (
 			width += font.Size * scale * 0.5 // 未知字形给半宽
 		}
 		prev_codepoint = int(r)
-	}
-	if len(text) > 1 {
-		width += f32(letter_spacing) * f32(len(text) - 1)
 	}
 
 	h := f32(line_height)
@@ -59,8 +57,8 @@ ui_measure_text :: proc "contextless" (
 // 字形四边形
 // ------------------------------------------------------------------------------
 
-// 一个字形的绘制数据：屏幕四点 + 图集 UV + 颜色（msdf 抗锯齿由渲染端
-// 决定是否启用；v1 直采样图集）。
+// 一个字形的绘制数据：屏幕四点 + 图集 UV + 颜色。
+// 位图采样或 MSDF 解码由注册时的 Bitmap/MSDF 类型决定。
 UI_Glyph_Quad :: struct {
 	x0, y0: f32, // 左上（屏幕像素）
 	x1, y1: f32, // 右下
@@ -80,10 +78,14 @@ ui_push_glyph_quads :: proc(
 	color: foster.Color,
 	out: ^[dynamic]UI_Glyph_Quad,
 ) -> f32 {
-	if font == nil { return pen_x }
+	if font == nil || font.Size <= 0 {
+		return pen_x
+	}
 	atlas_w := f32(font.Image.Width)
 	atlas_h := f32(font.Image.Height)
-	if atlas_w <= 0 || atlas_h <= 0 { return pen_x }
+	if atlas_w <= 0 || atlas_h <= 0 {
+		return pen_x
+	}
 	scale := f32(font_size) / font.Size
 
 	x := pen_x
@@ -91,6 +93,7 @@ ui_push_glyph_quads :: proc(
 	for r in text {
 		if prev_codepoint >= 0 {
 			x += ui_kerning(font, prev_codepoint, int(r)) * scale
+			x += f32(letter_spacing)
 		}
 		char, ok := ui_find_character(font, int(r))
 		if ok {
@@ -109,9 +112,6 @@ ui_push_glyph_quads :: proc(
 			x += char.Advance * scale
 		} else {
 			x += font.Size * scale * 0.5
-		}
-		if prev_codepoint >= 0 {
-			x += f32(letter_spacing)
 		}
 		prev_codepoint = int(r)
 	}

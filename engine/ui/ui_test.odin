@@ -134,7 +134,9 @@ layout_translate_roundtrip :: proc(t: ^testing.T) {
 	// 至少：按钮背景 1 + 文本 2 字形 = 3 个 Quad
 	quads := 0
 	for &op in ops {
-		if op.kind == .Quad { quads += 1 }
+		if op.kind == .Quad {
+			quads += 1
+		}
 	}
 	testing.expectf(t, quads >= 3, "quad 数: %d", quads)
 }
@@ -143,130 +145,361 @@ layout_translate_roundtrip :: proc(t: ^testing.T) {
 // 控件状态机
 // ---------------------------------------------------------------------------
 
+// 真正按帧驱动交互；无字体时按钮仍有 80px 最小宽度和 20px padding 高度。
+@(private)
+button_frame :: proc(ctx: ^UI_Context, x, y: f32, down: bool, options: UI_Widget_Options = {}) -> bool {
+	ui_set_pointer(ctx, x, y, down)
+	ui_begin(ctx, 1.0 / 60)
+	theme := UI_THEME_DARK
+	clicked := ui_button(ctx, &theme, "button", "", options)
+	ui_end(ctx)
+	return clicked
+}
+
 @(test)
-button_click_requires_hover_and_edge :: proc(t: ^testing.T) {
+button_release_capture_cancel_and_disabled :: proc(t: ^testing.T) {
 	sync.mutex_lock(&clay_test_mutex)
 	defer sync.mutex_unlock(&clay_test_mutex)
-
-	font := make_test_font()
-	defer dispose_test_font(font)
-
 	ctx: UI_Context
 	testing.expect(t, ui_init(&ctx, 800, 600))
 	defer ui_dispose(&ctx)
-	ui_register_font(&ctx, font, {})
-	theme := UI_THEME_DARK
-
-	clicked := false
-
-	// 帧 1：指针在左上角（按钮布局未知，先跑一帧建立 id）
-	ui_set_pointer(&ctx, 5, 5, false)
-	ui_begin(&ctx, 1.0 / 60)
-	clicked = ui_button(&ctx, &theme, "btnX", "OK")
-	ui_end(&ctx)
-	testing.expect(t, !clicked)
-
-	// 找到按钮的实际包围盒（从布局命令反查），把指针放进去
-	ui_set_pointer(&ctx, 5, 5, false)
-	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_button(&ctx, &theme, "btnX", "OK")
-	commands := clay.EndLayout()
-	box := find_first_rect(commands, "btnX")
-	if box == nil {
-		testing.expect(t, false, "找不到按钮命令")
-		return
-	}
-
-	// 预热帧：指针移到中心但未按（让 clay 的 hover 表按新指针位置重建）
-	center_x := box.x + box.width * 0.5
-	center_y := box.y + box.height * 0.5
-	ui_set_pointer(&ctx, center_x, center_y, false)
-	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_button(&ctx, &theme, "btnX", "OK")
-	ui_end(&ctx)
-
-	// 点击帧：按下边沿 -> 点击（诊断 hover 状态）
-	ui_set_pointer(&ctx, center_x, center_y, true)
-	ui_begin(&ctx, 1.0 / 60)
-	clicked = ui_button(&ctx, &theme, "btnX", "OK")
-	ui_end(&ctx)
-	testing.expect(t, clicked)
-
-	// 帧 3：持续按住（无边沿）-> 不再点击
-	ui_begin(&ctx, 1.0 / 60)
-	clicked = ui_button(&ctx, &theme, "btnX", "OK")
-	ui_end(&ctx)
-	testing.expect(t, !clicked)
+	button_frame(&ctx, 5, 5, false)
+	testing.expect(t, !button_frame(&ctx, 5, 5, true))
+	testing.expect(t, ctx.active_id != 0)
+	testing.expect(t, !button_frame(&ctx, 5, 5, true))
+	testing.expect(t, button_frame(&ctx, 5, 5, false))
+	testing.expect(t, ctx.active_id == 0 && ui_input_capture(&ctx).pointer)
+	button_frame(&ctx, 5, 5, true)
+	testing.expect(t, !button_frame(&ctx, 500, 500, false), "outside release cancels")
+	button_frame(&ctx, 500, 500, true)
+	testing.expect(t, !button_frame(&ctx, 5, 5, false), "outside press cannot activate")
+	testing.expect(t, !button_frame(&ctx, 5, 5, true, {disabled = true}))
+	testing.expect(t, !button_frame(&ctx, 5, 5, false, {disabled = true}))
+	testing.expect(t, ui_input_capture(&ctx).pointer, "disabled still blocks world")
+	testing.expect(t, button_frame(&ctx, 5, 5, true, {trigger = .Press}))
+	testing.expect(t, !button_frame(&ctx, 5, 5, false, {trigger = .Press}))
 }
 
-@(private)
-find_first_rect :: proc(commands: clay.ClayArray(clay.RenderCommand), id_label: string) -> ^clay.BoundingBox {
-	cmds := commands
-	for i in 0..<cmds.length {
-		cmd := clay.RenderCommandArray_Get(&cmds, i)
-		if cmd == nil { continue }
-		if cmd.commandType == .Rectangle {
-			return &cmd.boundingBox
+@(test)
+toggle_flips_only_after_confirmation :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	theme := UI_THEME_DARK
+	value := false
+	for down, i in ([5]bool{false, true, false, true, false}) {
+		ui_set_pointer(&ctx, 5, 5, down)
+		ui_begin(&ctx, 1.0 / 60)
+		ui_toggle(&ctx, &theme, "toggle", &value)
+		ui_end(&ctx)
+		testing.expect(t, value == (i == 2 || i == 3))
+	}
+}
+
+@(test)
+unicode_spacing_and_glyph_positions_agree :: proc(t: ^testing.T) {
+	font := make_test_font()
+	defer dispose_test_font(font)
+	font.Characters[0].Codepoint = '中'
+	font.Characters[1].Codepoint = '文'
+	d := ui_measure_text(font, "中文", 16, 2, 0)
+	testing.expectf(t, d.width == 18.5, "Unicode width: %v", d.width)
+	testing.expect(t, ui_measure_text(font, "中", 16, 2, 0).width == 9)
+	quads: [dynamic]UI_Glyph_Quad
+	defer delete(quads)
+	end := ui_push_glyph_quads(font, "中文", 0, 0, 16, 2, {255, 255, 255, 255}, &quads)
+	testing.expect(t, end == d.width)
+	testing.expect(t, quads[1].x0 == 11.5, "spacing precedes second glyph")
+}
+
+@(test)
+image_uv_and_trimmed_atlas_frame :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	tex := foster.Texture{Width = 128, Height = 64}
+	commands := [1]clay.RenderCommand{{commandType = .Image,
+		boundingBox = {0, 0, 40, 40},
+		renderData = {image = {imageData = &tex}}}}
+	ops := ui_translate(&ctx, {capacity = 1, length = 1, internalArray = raw_data(commands[:])})
+	defer delete(ops)
+	testing.expect(t, ops[0].u0 == 0 && ops[0].v0 == 0 && ops[0].u1 == 1 && ops[0].v1 == 1)
+	testing.expect(t, ops[0].color == foster.White)
+	ui_begin(&ctx, 1.0 / 60)
+	sub := foster.SubtextureMake(&tex, {32, 16, 16, 16}, {-4, -8, 32, 32})
+	ui_image(&ctx, sub, 64, 64)
+	ui_translate_into(&ctx, ui_end(&ctx), &ops)
+	found := false
+	for op in ops {
+		if op.texture == &tex {
+			found = true
+			testing.expect(t, op.x0 == 8 && op.y0 == 16 && op.x1 == 40 && op.y1 == 48)
+			testing.expect(t, op.u0 == 0.25 && op.u1 == 0.375 && op.v0 == 0.25 && op.v1 == 0.5)
 		}
 	}
-	return nil
+	testing.expect(t, found)
 }
 
 @(test)
-toggle_flips_on_click :: proc(t: ^testing.T) {
+nested_scissor_and_scaled_batch_state :: proc(t: ^testing.T) {
+	ctx := UI_Context{width = 200, height = 200, scale = 2, viewport_origin = {10, 20}}
+	batch: foster.Batcher
+	foster.BatcherInit(&batch, nil)
+	defer foster.BatcherDispose(&batch)
+	foster.BatcherPushScissor(&batch, {0, 0, 500, 500})
+	foster.BatcherPushMatrixPosition(&batch, {100, 100})
+	saved_matrix := batch.Matrix
+	ops := make([dynamic]UI_Op)
+	defer delete(ops)
+	append(&ops,
+		UI_Op{kind = .Scissor_Start, clip_x = 10, clip_y = 10, clip_w = 50, clip_h = 50},
+		UI_Op{kind = .Scissor_Start, clip_x = 40, clip_y = 0, clip_w = 50, clip_h = 40},
+		quad(0, 0, 100, 100, {255, 255, 255, 255}),
+		UI_Op{kind = .Scissor_End},
+		quad(1, 1, 5, 5, {255, 255, 255, 255}),
+		UI_Op{kind = .Scissor_End},
+		quad(1, 1, 5, 5, {255, 255, 255, 255}))
+	ui_render(&ctx, &batch, &ops)
+	testing.expect(t, len(batch.Batches) == 3)
+	testing.expect(t, batch.Batches[0].Scissor == foster.RectInt{90, 40, 40, 60})
+	testing.expect(t, batch.Batches[1].Scissor == foster.RectInt{30, 40, 100, 100})
+	testing.expect(t, batch.Batches[2].Scissor == foster.RectInt{10, 20, 400, 400})
+	testing.expect(t, batch.Vertices[0].Pos == foster.Vec2{10, 20})
+	testing.expect(t, batch.Scissor == foster.RectInt{0, 0, 500, 500} && batch.HasScissor)
+	testing.expect(t, batch.Matrix == saved_matrix && len(batch.ScissorStack) == 1)
+	empty := ui_clip_intersection({0, 0, 10, 10}, {30, 30, 10, 10})
+	testing.expect(t, empty.Width == 0 && empty.Height == 0)
+}
+
+@(test)
+nine_slice_preserves_corners_and_draws_behind_children :: proc(t: ^testing.T) {
 	sync.mutex_lock(&clay_test_mutex)
 	defer sync.mutex_unlock(&clay_test_mutex)
-
-	font := make_test_font()
-	defer dispose_test_font(font)
-
 	ctx: UI_Context
 	testing.expect(t, ui_init(&ctx, 800, 600))
 	defer ui_dispose(&ctx)
-	ui_register_font(&ctx, font, {})
-	theme := UI_THEME_DARK
-
-	value := false
-
-	// 帧甲：建立布局
-	ui_set_pointer(&ctx, 5, 5, false)
-	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_toggle(&ctx, &theme, "tog1", &value)
-	ui_end(&ctx)
-
-	// 帧乙：点击 -> 翻转
-	ui_set_pointer(&ctx, 5, 5, false)
-	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_toggle(&ctx, &theme, "tog1", &value)
-	commands := clay.EndLayout()
-	box := find_first_rect(commands, "tog1")
-
-	if box == nil {
-		testing.expect(t, false, "找不到开关命令")
-		return
+	tex := foster.Texture{Width = 128, Height = 128}
+	for size in ([2]foster.Vec2{{240, 50}, {20, 12}}) {
+		ui_begin(&ctx, 1.0 / 60)
+		decl := ui_nine_slice_decl(&ctx, &tex, 32, 12)
+		decl.layout.sizing = {width = clay.SizingFixed(size.x), height = clay.SizingFixed(size.y)}
+		if clay.UI()(decl) {
+			if clay.UI()(clay.ElementDeclaration{
+				layout = {sizing = {width = clay.SizingFixed(2), height = clay.SizingFixed(2)}},
+				backgroundColor = {1, 0, 0, 1},
+			}) {}
+		}
+		ops := ui_translate(&ctx, ui_end(&ctx))
+		defer delete(ops)
+		testing.expect(t, len(ops) > 1)
+		testing.expect(t, ops[0].texture == &tex && ops[len(ops)-1].texture == nil,
+			"background must precede child content")
+		testing.expect(t, ops[0].x1 - ops[0].x0 == min(12, size.y * 0.5))
+		testing.expect(t, ops[0].u1 == 0.25 && ops[0].v1 == 0.25)
+		area: f32
+		for op in ops {
+			if op.texture != &tex {
+				continue
+			}
+			testing.expect(t, op.x1 > op.x0 && op.y1 > op.y0, "small widgets cannot invert slices")
+			testing.expect(t, op.x0 >= 0 && op.y0 >= 0 && op.x1 <= size.x && op.y1 <= size.y)
+			testing.expect(t, op.u0 >= 0 && op.v0 >= 0 && op.u1 <= 1 && op.v1 <= 1)
+			area += (op.x1 - op.x0) * (op.y1 - op.y0)
+		}
+		testing.expect(t, area == size.x * size.y, "slices must cover the requested rectangle")
 	}
-	tx := box.x + 4
-	ty := box.y + 4
+}
 
-	// 预热帧（指针就位未按）后点击 -> 翻转
-	ui_set_pointer(&ctx, tx, ty, false)
-	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_toggle(&ctx, &theme, "tog1", &value)
-	ui_end(&ctx)
-	ui_set_pointer(&ctx, tx, ty, true)
-	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_toggle(&ctx, &theme, "tog1", &value)
-	ui_end(&ctx)
-	testing.expect(t, value == true)
+@(test)
+msdf_batches_separate_even_with_same_texture :: proc(t: ^testing.T) {
+	ctx := UI_Context{width = 100, height = 100, scale = 1}
+	defer delete(ctx.font_renderers)
+	renderer := UI_Font_Renderer{kind = .MSDF, initialized = true}
+	foster.MaterialInit(&renderer.material)
+	foster.MaterialStageSetUniformBuffer(&renderer.material.Fragment, []u8{1, 2, 3, 4}, 0)
+	defer foster.MaterialDispose(&renderer.material)
+	append(&ctx.font_renderers, renderer)
+	batch: foster.Batcher
+	foster.BatcherInit(&batch, nil)
+	defer foster.BatcherDispose(&batch)
+	tex: foster.Texture
+	ops := make([dynamic]UI_Op)
+	defer delete(ops)
+	append(&ops,
+		UI_Op{texture = &tex, x1 = 10, y1 = 10},
+		UI_Op{texture = &tex, x1 = 10, y1 = 10, msdf = true},
+		UI_Op{texture = &tex, x1 = 10, y1 = 10})
+	ui_render(&ctx, &batch, &ops)
+	testing.expect(t, len(batch.Batches) == 3)
+	testing.expect(t, len(batch.Batches[0].Material.Fragment.UniformBuffers[0]) == 0)
+	testing.expect(t, len(batch.Batches[1].Material.Fragment.UniformBuffers[0]) == 4)
+	testing.expect(t, len(batch.Batches[2].Material.Fragment.UniformBuffers[0]) == 0)
+	testing.expect(t, len(batch.Material.Fragment.UniformBuffers[0]) == 0)
+}
 
-	// 松开帧 + 预热帧 + 再点击 -> 翻回
-	ui_set_pointer(&ctx, tx, ty, false)
+@(test)
+focus_navigation_and_modal_isolation :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	theme := UI_THEME_DARK
+	for frame in 0..<4 {
+		if frame == 1 {
+			ui_set_navigation(&ctx, {next = 1, activate = true})
+		}
+		if frame == 2 {
+			ui_set_modal(&ctx, "dialog")
+			ui_set_navigation(&ctx, {next = 1, activate = true})
+		}
+		ui_begin(&ctx, 1.0 / 60)
+		background := ui_button(&ctx, &theme, "background", "")
+		ui_button(&ctx, &theme, "disabled", "", {disabled = true})
+		ui_set_scope(&ctx, "dialog")
+		dialog := ui_button(&ctx, &theme, "confirm", "")
+		ui_set_scope(&ctx, "")
+		ui_end(&ctx)
+		if frame == 1 {
+			testing.expect(t, background && !dialog && ctx.input.keyboard)
+		}
+		if frame == 2 {
+			testing.expect(t, !background && dialog && ctx.input.pointer && ctx.input.keyboard)
+			testing.expect(t, ctx.focused_id == clay.ID("confirm").id)
+		}
+		if frame == 3 {
+			testing.expect(t, !background && !dialog, "navigation is one-shot")
+		}
+	}
+}
+
+@(test)
+slider_capture_scale_and_keyboard :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	ui_set_viewport(&ctx, {10, 20, 800, 600}, 2)
+	theme := UI_THEME_DARK
+	value: f32 = 0.5
+	for frame in 0..<5 {
+		ui_set_pointer(&ctx, frame == 2 ? 1000 : 26, 30, frame == 1 || frame == 2)
+		if frame == 4 {
+			ui_set_navigation(&ctx, {adjust = -1})
+		}
+		ui_begin(&ctx, 1.0 / 60)
+		ui_slider(&ctx, &theme, "volume", &value)
+		ui_end(&ctx)
+		if frame == 1 {
+			testing.expect(t, value == 0)
+		}
+		if frame == 2 {
+			testing.expect(t, value == 1 && ctx.input.pointer, "drag clamps outside")
+		}
+		if frame == 4 {
+			testing.expect(t, value == 0 && ctx.input.keyboard)
+		}
+	}
+}
+
+@(test)
+context_reinitialization_and_pool_diagnostics :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	testing.expect(t, ui_init(&ctx, 400, 300))
+	defer ui_dispose(&ctx)
 	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_toggle(&ctx, &theme, "tog1", &value)
+	ctx.text_config_len = len(ctx.text_config_pool)
+	testing.expect(t, ui_text_config(&ctx, {}) == nil && ctx.pool_overflow)
 	ui_end(&ctx)
-	ui_set_pointer(&ctx, tx, ty, true)
 	ui_begin(&ctx, 1.0 / 60)
-	_ = ui_toggle(&ctx, &theme, "tog1", &value)
+	testing.expect(t, !ctx.pool_overflow && ui_text_config(&ctx, {}) != nil)
 	ui_end(&ctx)
-	testing.expect(t, value == false)
+	testing.expect(t, ui_color({1, 1, 1, 0.5}) == foster.Color{128, 128, 128, 128})
+}
+
+@(test)
+scroll_layout_starts_at_top_and_clips_after_wheel :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 300, 300))
+	defer ui_dispose(&ctx)
+	for frame in 0..<3 {
+		ui_set_pointer(&ctx, 5, 5, false)
+		if frame == 2 {
+			ui_add_scroll(&ctx, 0, -2)
+		}
+		ui_begin(&ctx, 1.0 / 60)
+		if clay.UI()(ui_scroll_decl(&ctx, "list", 50, 100)) {
+			for i in 0..<8 {
+				if clay.UI()(clay.ElementDeclaration{
+					id = clay.ID("row", u32(i)),
+					layout = {sizing = {width = clay.SizingFixed(80), height = clay.SizingFixed(20)}},
+					backgroundColor = {1, 1, 1, 1},
+				}) {}
+			}
+		}
+		commands := ui_end(&ctx)
+		data := clay.GetScrollContainerData(clay.ID("list"))
+		testing.expect(t, data.found)
+		if frame == 0 {
+			testing.expect(t, clay.GetElementData(clay.ID("row", 0)).boundingBox.y == 0)
+		}
+		if frame == 2 {
+			testing.expect(t, data.scrollPosition.y < 0)
+			testing.expectf(t, clay.GetElementData(clay.ID("row", 0)).boundingBox.y < 0, "row=%v scroll=%v", clay.GetElementData(clay.ID("row", 0)), data.scrollPosition^)
+		}
+		ops := ui_translate(&ctx, commands)
+		has_start, has_end := false, false
+		for op in ops {
+			has_start = has_start || op.kind == .Scissor_Start
+			has_end = has_end || op.kind == .Scissor_End
+		}
+		testing.expect(t, has_start && has_end)
+		delete(ops)
+	}
+}
+
+@(test)
+contexts_switch_without_stealing_layout_or_lifetime :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	a, b: UI_Context
+	testing.expect(t, ui_init(&a, 200, 100))
+	testing.expect(t, ui_init(&b, 400, 300))
+	defer ui_dispose(&b)
+	button_frame(&a, 5, 5, false)
+	testing.expect(t, clay.GetCurrentContext() == a.clay_context)
+	button_frame(&b, 5, 5, false)
+	ui_dispose(&a)
+	testing.expect(t, clay.GetCurrentContext() == b.clay_context)
+	button_frame(&b, 5, 5, true)
+	testing.expect(t, button_frame(&b, 5, 5, false))
+}
+
+@(test)
+cancel_and_disappearing_widget_release_capture :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 200, 100))
+	defer ui_dispose(&ctx)
+	button_frame(&ctx, 5, 5, false)
+	button_frame(&ctx, 5, 5, true)
+	ui_set_navigation(&ctx, {cancel = true})
+	testing.expect(t, !button_frame(&ctx, 5, 5, false))
+	testing.expect(t, ctx.active_id == 0 && ctx.focused_id == 0)
+	button_frame(&ctx, 5, 5, true)
+	ui_begin(&ctx, 1.0 / 60)
+	ui_end(&ctx)
+	testing.expect(t, ctx.active_id == 0 && ctx.focused_id == 0)
+	testing.expect(t, !button_frame(&ctx, 5, 5, false))
 }

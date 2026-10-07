@@ -25,7 +25,7 @@ engine/      引擎层（依赖 ofoster）
 ├── storage/     资源根 / 用户存档路径策略
 ├── app/         CLI 参数 + 调试控制台 + Game_App（using 嵌入 App）
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
-└── ui/          clay v0.14 布局 + ofoster 渲染后端 + Button/Label/Toggle 控件层
+└── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
 
 thirdparty/  外部绑定：clay-odin / odin-imgui（含 ofoster 后端）/ oflecs
 ```
@@ -44,7 +44,9 @@ import asset "olib:engine/asset"
 import world "olib:engine/world"
 ```
 
-各模块文档见包内注释与 `engine/asset/README.md`。
+各模块文档见包内注释、[资源管线](engine/asset/README.md)与 [游戏 UI](engine/ui/README.md)。
+游戏 UI 示例见 `examples/game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
+基础控件验收页见 `examples/ui_gallery`。
 
 ## 测试
 

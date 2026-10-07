@@ -60,9 +60,10 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 
 ## UI 路线（2026-10 追加）
 
-- **已完成**：clay v0.14 升级（绑定+预编库）、`engine/ui` —— clay→ofoster 渲染后端（rect/border/scissor 翻译 + msdf 文本字形四边形）、Theme + Button/Label/Toggle 控件层（hover/按下态、点击边沿）。测试 5/5（clay 布局真跑）。
-- **v1 已知限制**（ui_backend.odin 头注释）：圆角直角化、scissor 未生效、文本图集直采样（非 msdf 抗锯齿）。
-- **后续增量**：msdf 材质文本路径（ofoster 已有 InitDefaultMsdfMaterial）、scissor（DrawCommand.Scissor 已有字段）、过渡动画（clay transition API）、Slider/Dropdown、**文本输入框**（clay v0.14 无此能力，需自建：光标/选区/IME）。
+- **已完成**：clay v0.14 布局与 OFoster 后端；统一圆角、矩形嵌套裁剪、位图/MSDF 材质、完整贴图/裁切图集 UV、图片背景容器与对称九宫格、Unicode 字距、预乘透明色。
+- **控件与输入**：Theme、Button/Label/Toggle、Image/ImageButton、ProgressBar/Slider、行/列/面板/滚动区/模态遮罩；松开确认、指针捕获、禁用态、顺序焦点导航、输入消费、模态作用域、viewport 缩放。
+- **验证**：CPU 回归覆盖布局/翻译/合批与交互，`examples/game_ui` 提供遗迹场景、HUD、技能栏、格子背包、暂停菜单及自动交互验收；原设置页和距离场着色器探针保留在 `examples/ui_gallery`。用法和兼容变更见 [UI README](../engine/ui/README.md)。
+- **后续增量**：文本输入/IME、Dropdown、富文本与字体 fallback、空间方向导航与焦点自动滚动、拖放、列表虚拟化、过渡动画、圆角遮罩及完整圆角描边。
 
 ## 明确不做
 

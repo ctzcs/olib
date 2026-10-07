@@ -22,7 +22,7 @@ import "core:os"
 import "core:strings"
 import "core:time"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // =============================================================================
 // 导入器

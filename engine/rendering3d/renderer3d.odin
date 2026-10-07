@@ -9,7 +9,7 @@ package rendering3d
 import "core:mem"
 
 import world "olib:engine/world"
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   类型与生命周期 —— Renderer3D / init / dispose

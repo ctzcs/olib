@@ -2,7 +2,7 @@
 package rendering3d
 
 import dasset "olib:engine/dasset"
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   顶点格式 —— 静态 / 蒙皮（与 dasset 二进制布局一致）

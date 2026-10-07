@@ -2,7 +2,7 @@ package main
 
 import "core:fmt"
 import "core:mem"
-import foster "ofoster:."
+import foster "olib:foster"
 
 verify_graphics :: proc(device: ^foster.GraphicsDevice, flush: proc(_: ^foster.GraphicsDevice)) {
 	verify_font_graphics(device, flush)

@@ -5,8 +5,8 @@ import "core:math"
 
 import app "olib:engine/app"
 import ui "olib:engine/ui"
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 布局与交互来自 engine/ui；游戏皮肤、道具语义、冷却遮罩属于示例。
 skill_names := [6]string{"Riven blade", "Iron vow", "Ember burst", "Moonfall", "Ember flask", "Windstep"}

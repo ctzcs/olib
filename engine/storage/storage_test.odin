@@ -6,7 +6,7 @@ import "core:os"
 import "core:strings"
 import "core:testing"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 @(private)
 TEST_APP :: "olib_storage_test_app"

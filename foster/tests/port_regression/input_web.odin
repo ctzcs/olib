@@ -3,7 +3,7 @@
 package main
 
 import "core:fmt"
-import foster "ofoster:."
+import foster "olib:foster"
 
 foreign import input_regression "input_regression"
 

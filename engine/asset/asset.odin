@@ -51,7 +51,7 @@ import "core:strings"
 import "core:time"
 
 import ha "olib:core/handle/array"
-import foster "ofoster:."
+import foster "olib:foster"
 
 // =============================================================================
 // Guid —— 资产身份

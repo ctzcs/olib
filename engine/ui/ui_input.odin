@@ -1,7 +1,7 @@
 package ui
 
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 分区：
 //   输入 —— 逻辑坐标 / 导航动作 / 游戏输入消费

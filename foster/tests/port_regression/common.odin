@@ -2,7 +2,7 @@ package main
 
 import "core:fmt"
 import "core:io"
-import foster "ofoster:."
+import foster "olib:foster"
 
 verify_common :: proc() {
 	verify_api_completion()

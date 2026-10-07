@@ -13,7 +13,7 @@ import "core:fmt"
 import "core:os"
 import "core:strings"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // ------------------------------------------------------------------------------
 // 类型 —— 打包产物

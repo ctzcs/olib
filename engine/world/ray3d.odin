@@ -6,7 +6,7 @@ package world
 
 import "core:math"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   Ray3D —— 构造与采样

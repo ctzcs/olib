@@ -9,7 +9,7 @@ import "core:fmt"
 import "core:mem"
 import "core:strings"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // ------------------------------------------------------------------------------
 // 类型

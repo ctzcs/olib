@@ -1,10 +1,11 @@
 package main
 
-import "core:os"
 import "core:math"
+import "core:os"
+
 import ui "olib:engine/ui"
-import foster "ofoster:."
-import stbtt "ofoster:internal/third_party"
+import foster "olib:foster"
+import stbtt "olib:foster/internal/third_party"
 
 // 演示用 ASCII 位图图集；产品可换成资产管线提供的位图或 MSDF 字体。
 FONT_ATLAS_SIZE :: 48

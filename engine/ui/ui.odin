@@ -13,8 +13,8 @@ package ui
 
 import "core:mem"
 
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 分区：
 //   类型 —— UI_Context

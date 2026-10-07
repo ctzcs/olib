@@ -18,7 +18,7 @@ package imgui_impl_ofoster
 //
 //   import imgui "../.."
 //   import imgui_ofoster "../../imgui_impl_ofoster"
-//   import foster "ofoster:."
+//   import foster "olib:foster"
 //
 //   startup :: proc(app: ^foster.App) {
 //       imgui_ofoster.Init(app)
@@ -45,7 +45,7 @@ import "core:fmt"
 
 import imgui "../"
 import imgui_sdlgpu3 "../imgui_impl_sdlgpu3"
-import foster "ofoster:."
+import foster "olib:foster"
 import sdl "vendor:sdl3"
 
 Style :: enum {

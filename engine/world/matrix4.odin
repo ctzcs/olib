@@ -11,7 +11,7 @@ package world
 
 import "core:math"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   类型 —— Vec4 / Matrix4

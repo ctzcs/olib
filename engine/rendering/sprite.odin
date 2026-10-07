@@ -7,7 +7,7 @@ package rendering
 
 import "core:math"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   类型 —— 帧 / 动画 / Sprite

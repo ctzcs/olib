@@ -6,7 +6,7 @@ package world
 
 import "core:math"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   提取 —— 从 ViewProjection 得 6 平面

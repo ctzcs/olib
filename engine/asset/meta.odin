@@ -14,7 +14,7 @@ package asset
 import "core:strings"
 
 import enc "olib:core/encoding"
-import foster "ofoster:."
+import foster "olib:foster"
 
 META_EXT :: ".meta"
 

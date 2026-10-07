@@ -6,8 +6,8 @@ import "core:math"
 import "core:testing"
 
 import dasset "olib:engine/dasset"
-import foster "ofoster:."
 import world "olib:engine/world"
+import foster "olib:foster"
 
 @(test)
 material_render_state_dispatch :: proc(t: ^testing.T) {

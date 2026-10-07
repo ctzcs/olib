@@ -3,8 +3,8 @@ package ui
 import "core:math"
 import "core:mem"
 
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 分区：
 //   翻译 —— ui_translate

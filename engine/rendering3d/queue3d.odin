@@ -8,7 +8,7 @@ package rendering3d
 import "core:math"
 
 import world "olib:engine/world"
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   类型 —— Render_Item / Render_Queue

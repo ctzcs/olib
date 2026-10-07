@@ -6,7 +6,7 @@ import "core:mem"
 import "core:os"
 import "core:strings"
 import SDL "vendor:sdl3"
-import foster "ofoster:."
+import foster "olib:foster"
 
 pipeline_errors: int
 validation_errors: int

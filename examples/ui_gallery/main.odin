@@ -5,8 +5,8 @@ import "core:os"
 
 import app "olib:engine/app"
 import ui "olib:engine/ui"
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 设置 + 滚动背包 + 模态确认；可运行，也可用 shot 参数自动输出验收图。
 game: app.Game_App

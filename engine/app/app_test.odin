@@ -5,7 +5,7 @@ package app
 import "core:testing"
 
 import msg "olib:engine/messaging"
-import foster "ofoster:."
+import foster "olib:foster"
 
 @(test)
 has_arg_matches_flags :: proc(t: ^testing.T) {

@@ -18,7 +18,7 @@ import "core:fmt"
 import "core:strings"
 
 import enc "olib:core/encoding"
-import foster "ofoster:."
+import foster "olib:foster"
 
 MANIFEST_VERSION :: u32(1)
 

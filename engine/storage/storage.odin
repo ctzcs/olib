@@ -20,7 +20,7 @@ import "core:mem"
 import "core:os"
 import "core:strings"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // ------------------------------------------------------------------------------
 // 资源根 —— 开发期 cwd / 发布版 exe 目录

@@ -6,7 +6,7 @@ package rendering
 
 import "core:fmt"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 按等分网格产出矩形表（分配于 context.allocator，键随表存活；
 // 注入图集后用 grid_rects_dispose 释放原件）。

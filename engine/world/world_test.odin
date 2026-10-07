@@ -5,7 +5,7 @@ package world
 import "core:math"
 import "core:testing"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // ---------------------------------------------------------------------------
 // Camera2D

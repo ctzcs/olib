@@ -4,7 +4,7 @@ package rendering
 
 import "core:testing"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // ---------------------------------------------------------------------------
 // Grid 图集来源

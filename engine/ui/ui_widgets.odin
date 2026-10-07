@@ -2,8 +2,8 @@ package ui
 
 import "core:math"
 
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 分区：
 //   主题 —— UI_Theme / 默认深色主题

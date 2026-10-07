@@ -2,7 +2,7 @@ package main
 
 import "core:fmt"
 import "core:mem"
-import foster "ofoster:."
+import foster "olib:foster"
 
 font_data :: #load("fonts/Abel-Regular.ttf")
 

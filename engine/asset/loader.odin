@@ -16,7 +16,7 @@ package asset
 
 import "core:mem"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 Asset_Storage :: struct {
 	read:     proc (storage: ^Asset_Storage, guid: Guid, allocator: mem.Allocator) -> ([]u8, bool),

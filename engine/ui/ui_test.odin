@@ -5,8 +5,8 @@ package ui
 import "core:sync"
 import "core:testing"
 
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // clay 的 context 是进程级全局：ui_init/ui_dispose 并发会段错误，测试串行化。
 @(private)

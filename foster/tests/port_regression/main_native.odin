@@ -1,6 +1,6 @@
 #+build !js
 package main
-import foster "ofoster:."
+import foster "olib:foster"
 import SDL "vendor:sdl3"
 import "core:fmt"
 

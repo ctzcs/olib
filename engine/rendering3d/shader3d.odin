@@ -5,7 +5,7 @@
 // 目标需在各自平台补编 .msl/.glsl 后加入同一分发。
 package rendering3d
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   内嵌二进制 —— #load 编译期嵌入

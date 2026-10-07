@@ -9,7 +9,7 @@ package imgui_example_ofoster
 
 import "core:fmt"
 
-import foster "ofoster:."
+import foster "olib:foster"
 import imgui "../.."
 import imgui_ofoster "../../imgui_impl_ofoster"
 

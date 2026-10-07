@@ -2,7 +2,7 @@
 package main
 
 import "core:fmt"
-import foster "ofoster:."
+import foster "olib:foster"
 
 app: foster.App
 tested: bool

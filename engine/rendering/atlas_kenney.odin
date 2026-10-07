@@ -8,7 +8,7 @@ import "core:encoding/xml"
 import "core:strconv"
 import "core:strings"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 解析 Kenney/Starling XML 坐标（分配于 context.allocator，键随表存活；
 // 注入图集后用 kenney_rects_dispose 释放原件）。解析失败返回 nil。

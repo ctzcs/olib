@@ -1,7 +1,8 @@
 package main
 
 import "core:math"
-import foster "ofoster:."
+
+import foster "olib:foster"
 
 // 场景与图标均由几何生成，示例不依赖外部美术资产。
 GOLD :: foster.Color{196, 167, 105, 255}

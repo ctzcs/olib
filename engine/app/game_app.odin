@@ -12,7 +12,7 @@
 //   cli_console.odin 调试控制台 + has_arg
 package app
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   类型 —— Game_App / App 视图转换

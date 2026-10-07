@@ -12,7 +12,7 @@ import "core:os"
 import "core:strings"
 import "core:testing"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 测试工作区根：优先系统临时目录。
 @(private)

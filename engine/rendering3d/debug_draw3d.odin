@@ -10,7 +10,7 @@ import "core:math"
 
 import dasset "olib:engine/dasset"
 import world "olib:engine/world"
-import foster "ofoster:."
+import foster "olib:foster"
 
 // 分区：
 //   类型 —— Debug_Draw_3D / 线顶点

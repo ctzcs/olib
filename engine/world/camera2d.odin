@@ -3,7 +3,7 @@ package world
 
 import "core:math"
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 // -----------------------------------------------------------------------------
 // Camera2D —— 屏幕空间 = 相机空间、y 向下的 2D 相机

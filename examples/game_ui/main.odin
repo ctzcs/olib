@@ -6,8 +6,8 @@ import "core:os"
 
 import app "olib:engine/app"
 import ui "olib:engine/ui"
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 遗迹探索 HUD；旧控件验收页保留在 examples/ui_gallery。
 VIEW_W :: 1280

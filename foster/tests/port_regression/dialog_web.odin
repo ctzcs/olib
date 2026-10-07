@@ -3,7 +3,7 @@ package main
 
 import "core:fmt"
 import "core:strings"
-import foster "ofoster:."
+import foster "olib:foster"
 
 foreign import dialog_fixture "input_regression"
 @(default_calling_convention = "contextless")

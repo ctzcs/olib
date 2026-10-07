@@ -2,7 +2,7 @@ package main
 
 import "core:fmt"
 import "core:math"
-import foster "ofoster:."
+import foster "olib:foster"
 
 verify_api_completion :: proc() {
 	assert(foster.ColorGrayscale(80, 128) == foster.Color{80, 80, 80, 128})

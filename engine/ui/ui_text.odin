@@ -5,8 +5,8 @@
 // UV 取图集 SourceRect 归一化。
 package ui
 
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
-import foster "ofoster:."
 
 // 分区：
 //   测量 —— ui_measure_text

@@ -1,6 +1,6 @@
 # 游戏 UI
 
-Clay 负责布局，`engine/ui` 提供控件、交互与 OFoster Batcher 后端。
+Clay 负责布局，`engine/ui` 提供控件、交互与 Foster Batcher 后端。
 可运行游戏界面位于 [`examples/game_ui`](../../examples/game_ui)：遗迹场景上的生命/能量 HUD、
 带冷却遮罩的技能栏、格子背包和暂停菜单。它使用同一套布局与交互，游戏皮肤在示例中定义。
 原来的设置页和控件验收示例保留在 [`examples/ui_gallery`](../../examples/ui_gallery)。
@@ -53,7 +53,7 @@ foster.BatcherRender(&batcher, target)
 | `ui_toggle` | 修改 bool，返回当前值 |
 | `ui_slider` | 修改 f32，返回是否改变；支持拖动和导航步进 |
 | `ui_progress_bar` | 0..1 进度，越界钳制 |
-| `ui_image` | OFoster Subtexture，支持图集及裁切帧 |
+| `ui_image` | Foster Subtexture，支持图集及裁切帧 |
 | `ui_image_decl` | 图片背景容器，可叠加文字、图标等子元素 |
 | `ui_nine_slice_decl` | 整张纹理的对称九宫格背景，固定圆角和边框尺寸 |
 | `ui_image_button` | 带焦点、禁用态的图像按钮 |
@@ -93,7 +93,7 @@ if clay.UI()(ui.ui_scroll_decl(&ctx, "inventory", height = 300)) {
 - 普通容器不会自动消费鼠标：给面板设稳定 ID，调用 `ui_block_pointer(&ctx, id)`
   可让整个面板挡住世界输入。滚动区会自动调用它。
 - 在声明完成之后读取 `ui_input_capture`，再处理游戏世界输入，避免点击穿透。
-  该查询只报告消费意图，不会修改 OFoster 原始输入状态。
+  该查询只报告消费意图，不会修改 Foster 原始输入状态。
 
 模态应在帧开始前设置，并且每帧保持一致：
 
@@ -153,7 +153,7 @@ odin test engine/ui -collection:olib=.
 odin build examples/game_ui -collection:olib=. -out:game_ui.exe
 ```
 
-运行时需 OFoster 的平台动态库（Windows 为 SDL3.dll）。Windows 自动尝试系统字体；
+运行时需 Foster 的平台动态库（Windows 为 SDL3.dll）。Windows 自动尝试系统字体；
 其他平台或自定义字体可传 `font <ttf路径>`。示例使用 ASCII 位图字体，测试中另有中文测量用例。
 
 `game_ui.exe` 的交互：点击地面移动角色；点击技能或按 1–6 施放；B 切换背包；

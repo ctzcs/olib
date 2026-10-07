@@ -1,16 +1,16 @@
 # OFoster 源码布局与排版规范
 
-本规范适用于 OFoster 的新增、移植和维护代码。保留一个模块一个主题文件，
+本规范适用于 olib 内 Foster 移植（原 OFoster）的新增、移植和维护代码。保留一个模块一个主题文件，
 通过文件内的导航和分区注释表达 Foster 的目录、类型与子功能层级。
 
 ## 文件组织
 
-- 公共 API 保持在 `src/` 的 `foster_framework` 包中，按主题放入
+- 公共 API 保持在 `foster/` 的 `foster` 包中，按主题放入
   `graphics.odin`、`input.odin`、`spatial.odin` 等现有文件。
 - 同一类型的声明、构造、查询、修改和释放函数尽量集中在对应分区。
   新增函数放入已有分区；出现新的功能组时，补充分区标题和顶部导航。
 - 平台适配继续使用带 `#+build` 的文件；内部绑定和 Web 桥继续放在
-  `src/internal/`。文件对应关系见 [移植映射](PORTING_MAP.md)。
+  `foster/internal/`。文件对应关系见 [移植映射](PORTING_MAP.md)。
 
 ## 文件内层级
 
@@ -86,7 +86,7 @@ ClampIndex :: proc(index, count: int) -> int {
 
 ## 格式配置与维护
 
-根目录的 [odinfmt.json](../odinfmt.json) 是格式参数的依据：
+本目录上一级的 [odinfmt.json](../odinfmt.json) 是格式参数的依据：
 
 | 项目 | 当前约定 |
 | --- | --- |
@@ -98,14 +98,14 @@ ClampIndex :: proc(index, count: int) -> int {
 | 控制流 | 将 `do` 转换为花括号；case 的执行语句拆行 |
 | 复合字面量 | 较长内容使用多行，保留结构体中的分组空行 |
 
-在仓库根目录运行：
+在 olib 根目录运行：
 
 ```powershell
 # 格式化整个库
-odinfmt -path:src -config:odinfmt.json -w
+odinfmt -path:foster -config:foster/odinfmt.json -w
 
 # 仅格式化当前修改的模块
-odinfmt -path:src/input.odin -config:odinfmt.json -w
+odinfmt -path:foster/input.odin -config:foster/odinfmt.json -w
 ```
 
 格式化器负责统一缩进、空格和换行参数；文件层级、函数归属和顶部导航需要
@@ -122,5 +122,5 @@ git diff --check
 ```
 
 纯文档修改无需重跑运行时测试。涉及源码的排版调整至少运行
-`odin check src -no-entry-point`；存在逻辑或块结构改动时，再按
+`odin check foster -collection:olib=. -no-entry-point`；存在逻辑或块结构改动时，再按
 [README 的验证说明](../README.md#port-coverage-and-verification)运行相关回归。

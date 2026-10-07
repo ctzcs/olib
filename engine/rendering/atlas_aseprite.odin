@@ -1,8 +1,8 @@
 // atlas:aseprite —— .aseprite 目录 -> 单张图集的构建器（对位 DragonLib AsepriteAtlasBuilder）。
 //
-// 解析 .aseprite 二进制（ofoster 的 Aseprite），拍平可见图层渲染每一帧
+// 解析 .aseprite 二进制（Foster 的 Aseprite），拍平可见图层渲染每一帧
 // （bg/shadow 这类预览图层默认跳过），frame tag 变成命名动画、帧时长毫秒
-// 转秒；装箱用 ofoster 的 Packer（二叉树 + 透明裁剪 + 边缘出血 + 重复帧
+// 转秒；装箱用 Foster 的 Packer（二叉树 + 透明裁剪 + 边缘出血 + 重复帧
 // 合并）。PingPong 标签展开帧列表（a b c -> a b c b），Reverse 反转帧序。
 //
 // 注意：构建器固定 Trim=true（PackerAdd 立即拷贝像素，渲染帧当轮释放）；

@@ -4,7 +4,7 @@
 // + 骨架/动画剪辑。静态 primitive 的节点变换烘焙进顶点；蒙皮 primitive
 // 顶点保持 mesh bind 空间，由骨骼 palette 驱动（见 SkeletonAnimator）。
 //
-// 类型只用裸数组（[3]f32 / [4]f32），不依赖 ofoster/world——数据层可独立
+// 类型只用裸数组（[3]f32 / [4]f32），不依赖 Foster/world——数据层可独立
 // 测试；矩阵按 System.Numerics 的 M11..M44 行主序存 [16]f32。
 //
 // 分区：

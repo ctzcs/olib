@@ -8,7 +8,7 @@
 依赖关系总览：
 
 ```
-原则：不改 OFoster —— 引擎侧能力全部在 olib 内拼装。
+原则：foster/ 保持 Foster API 对齐；引擎侧能力优先在 engine/ 拼装。
 3D 数学直接用 core:math/linalg（Matrix4 全套现成：inverse/determinant/
 translate/from_trs/from_quaternion/look_at），投影矩阵等少数缺口在
 engine/world 内做薄助手。
@@ -19,7 +19,7 @@ P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
 
 ## P0 —— 2D 游戏支撑（近期）
 
-目标：用 olib + ofoster 能把一个 2D 游戏做起来。
+目标：用 olib（含内置 foster/）能把一个 2D 游戏做起来。
 
 | # | 项目 | DragonLib 来源 | 落点 | 规模 | 验收 |
 |---|------|----------------|------|------|------|
@@ -41,16 +41,16 @@ P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
 |---|------|----------------|------|
 | 8 | ~~Dasset 模型格式（数据层）~~ **已完成（2026-10，`engine/dasset`）** | 比特兼容 DragonLib v4 布局的读写（贴图/骨架/蒙皮顶点/PBR 材质/动画剪辑，v1~v4 读兼容，坏文件防御） |
 | 9 | ~~SkeletonAnimator~~ **已完成（2026-10，`engine/animation`）** | 采样（bind pose 填充+channel 覆盖，Step/Linear/CubicSpline、四元数最短弧）、palette 传播、advance_time、blend_poses、蒙皮包围盒 |
-| 10 | ~~3D 渲染栈~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传、材质状态、渲染排序 + **着色器管线**（dxil/spv 入库 #load、按驱动分发）+ Renderer3D 前向主 pass（方向光/点光/**聚光灯**/透明混合/蒙皮 palette）+ **DebugDraw3D**（Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton；ofoster 无线拓扑，走朝向相机的四边形展开复用 DebugLine3D 着色器）+ **LOD**（Lod_Selector 滞回阈值 + 泛型 Model_Lod）。**剩余增量**：.msl/.glsl 平台补编、阴影 pass + CSM（DepthOnly 已备）、Tonemap/后处理（DragonLib 已有 PostBloom/Fxaa/Sky3D HLSL 源可移植）、天空盒、IBL/环境烘焙 |
+| 10 | ~~3D 渲染栈~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传、材质状态、渲染排序 + **着色器管线**（dxil/spv 入库 #load、按驱动分发）+ Renderer3D 前向主 pass（方向光/点光/**聚光灯**/透明混合/蒙皮 palette）+ **DebugDraw3D**（Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton；foster/ 无线拓扑，走朝向相机的四边形展开复用 DebugLine3D 着色器）+ **LOD**（Lod_Selector 滞回阈值 + 泛型 Model_Lod）。**剩余增量**：.msl/.glsl 平台补编、阴影 pass + CSM（DepthOnly 已备）、Tonemap/后处理（DragonLib 已有 PostBloom/Fxaa/Sky3D HLSL 源可移植）、天空盒、IBL/环境烘焙 |
 
-## olib 之外但卡脖子（不改 OFoster 前提下）
+## 平台与 foster/ 后续演进
 
 - ~~**音频**~~ **已完成（2026-10，`engine/audio`）**：直接绑 `vendor:sdl3`
   （默认回放设备流 f32/队列模式、WAV 装载转换、音量缩放入队、样本级裁剪）。
 - （可选）web 目标：asset v1 native-only；web 路线 = `storage_map` + `#load`
   预烘焙 blob，前置 `core/encoding` 的 js 兼容。
-- OFoster 自身的演进（如补齐 Foster C# API 面）由 OFoster 仓库自行决定，
-  olib 只消费其已提交的 API（Matrix3x2 构造/乘法已在 e51ceb8 收编）。
+- Foster 移植自身的演进（如补齐 Foster C# API 面）在 `foster/` 内进行，
+  引擎侧能力优先在 `engine/` 拼装（Matrix3x2 构造/乘法已在原仓库 e51ceb8 收编）。
 
 ## 工具链（Tools/，不排期，随需启动）
 
@@ -60,7 +60,7 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 
 ## UI 路线（2026-10 追加）
 
-- **已完成**：clay v0.14 布局与 OFoster 后端；统一圆角、矩形嵌套裁剪、位图/MSDF 材质、完整贴图/裁切图集 UV、图片背景容器与对称九宫格、Unicode 字距、预乘透明色。
+- **已完成**：clay v0.14 布局与 foster/ 后端；统一圆角、矩形嵌套裁剪、位图/MSDF 材质、完整贴图/裁切图集 UV、图片背景容器与对称九宫格、Unicode 字距、预乘透明色。
 - **控件与输入**：Theme、Button/Label/Toggle、Image/ImageButton、ProgressBar/Slider、行/列/面板/滚动区/模态遮罩；松开确认、指针捕获、禁用态、顺序焦点导航、输入消费、模态作用域、viewport 缩放。
 - **验证**：CPU 回归覆盖布局/翻译/合批与交互，`examples/game_ui` 提供遗迹场景、HUD、技能栏、格子背包、暂停菜单及自动交互验收；原设置页和距离场着色器探针保留在 `examples/ui_gallery`。用法和兼容变更见 [UI README](../engine/ui/README.md)。
 - **后续增量**：文本输入/IME、Dropdown、富文本与字体 fallback、空间方向导航与焦点自动滚动、拖放、列表虚拟化、过渡动画、圆角遮罩及完整圆角描边。
@@ -70,7 +70,7 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 | 项 | 理由 |
 |----|------|
 | **ECS 全线**（DragonECS / Engine.ECS / 预制体序列化） | 2026-10 决定不采用 ECS 路线；`thirdparty/oflecs` 与 `core/entities` 保留但无排期 |
-| Mathf（861 行） | ofoster `utility.odin` 已覆盖 |
+| Mathf（861 行） | `foster/utility.odin` 已覆盖 |
 | Paper UI | clay-odin / odin-imgui 替代 |
 | SlotMap 系 / GrowArray | `core/handle` 更全 |
 | Vector2Int | `core:math` 已有 |
@@ -80,7 +80,7 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 ## 已完成
 
 - asset 管线 v1（.meta/Library/blob/manifest，打包零改动）→ `engine/asset`
-- Camera2D / SceneRouter → `engine/world`（Matrix3x2 构造/乘法用 ofoster
+- Camera2D / SceneRouter → `engine/world`（Matrix3x2 构造/乘法用 foster/
   已提交的 API，e51ceb8）
 - CommandQueue / BroadcastChannel → `engine/messaging`
 - **P0-1** Sprite/SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器 → `engine/rendering`

@@ -1,4 +1,4 @@
-// ui —— clay 布局引擎的 ofoster 集成 + 控件/主题层。
+// ui —— clay 布局引擎的 Foster 集成 + 控件/主题层。
 //
 // 分层（自底向上）：
 //   ui.odin          UI_Context：clay 初始化/帧流程（指针/滚动/输入边沿）、字体表
@@ -7,7 +7,7 @@
 //   ui_input.odin    鼠标捕获 / 导航焦点 / 禁用态 / 模态 / 输入消费
 //   ui_widgets.odin  主题、基础控件、图像、滑条、进度和容器
 //
-// clay 只做布局与交互查询，渲染由本包翻译后经 ofoster Batcher 发射；
+// clay 只做布局与交互查询，渲染由本包翻译后经 Foster Batcher 发射；
 // 支持位图/MSDF 字体、嵌套裁剪、逻辑坐标缩放与鼠标/导航输入。
 package ui
 

@@ -1,6 +1,6 @@
 // audio —— SDL3 音频的最小可用层（native；对位 DragonLib Foster.Audio 的用途）。
 //
-// 不改 OFoster 的原则下，音频直接绑 Odin vendor:sdl3：
+// 音频直接绑 Odin vendor:sdl3：
 //   audio_init        初始化 SDL audio 子系统
 //   Audio_Device      默认回放设备 + 队列模式流（f32/2ch/48k，SDL 自动重采样）
 //   Audio_Sound       WAV 装载并转换到设备格式；play 入队（音量在样本上缩放）

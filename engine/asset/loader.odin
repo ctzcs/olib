@@ -7,7 +7,7 @@
 //   测试/内嵌: guid -> 内存 map                 (storage_map)
 //   将来发布: guid -> pak 索引 -> offset/size   (再加一个后端即可)
 //
-// 注：read/exists 故意不是 contextless——directory 后端内部要走 ofoster 的
+// 注：read/exists 故意不是 contextless——directory 后端内部要走 Foster 的
 // storage 读路径（带隐式 context）；allocator 显式传入这一点保持不变。
 // 分区：
 //   Directory 后端 —— 开发期默认（Library/ 目录）

@@ -38,7 +38,7 @@ Payload_Builder :: struct {
 }
 
 // 自定义导入器签名。source 是源文件字节，ext 是小写含点扩展名（".aseprite"），
-// 仅在导入调用期间有效。非 contextless：内建贴图导入要走 ofoster 的解码路径。
+// 仅在导入调用期间有效。非 contextless：内建贴图导入要走 Foster 的解码路径。
 Import_Proc :: #type proc (
 	source:    []u8,
 	ext:       string,

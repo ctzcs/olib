@@ -1,4 +1,4 @@
-// rendering3d:mesh3d —— dasset 顶点 -> ofoster Mesh 上传（对位 DragonLib MeshUpload3D）。
+// rendering3d:mesh3d —— dasset 顶点 -> Foster Mesh 上传（对位 DragonLib MeshUpload3D）。
 package rendering3d
 
 import dasset "olib:engine/dasset"
@@ -6,7 +6,7 @@ import foster "olib:foster"
 
 // 分区：
 //   顶点格式 —— 静态 / 蒙皮（与 dasset 二进制布局一致）
-//   上传 —— dasset primitive -> ofoster Mesh
+//   上传 —— dasset primitive -> Foster Mesh
 
 // ------------------------------------------------------------------------------
 // 顶点格式 —— 静态 / 蒙皮
@@ -41,10 +41,10 @@ mesh3d_skin_format :: proc() -> foster.VertexFormat {
 }
 
 // ------------------------------------------------------------------------------
-// 上传 —— dasset primitive -> ofoster Mesh
+// 上传 —— dasset primitive -> Foster Mesh
 // ------------------------------------------------------------------------------
 
-// 把 dasset primitive 的顶点/索引整块上传为 ofoster Mesh。
+// 把 dasset primitive 的顶点/索引整块上传为 Foster Mesh。
 // 顶点是 #packed 不了的普通 struct，但 dasset 布局与格式步长一致，
 // 直接按字节整块拷贝。失败（空 primitive / 无 device）返回 false。
 mesh3d_upload :: proc(mesh: ^foster.Mesh, device: ^foster.GraphicsDevice, p: ^dasset.Dasset_Primitive, name := "") -> bool {

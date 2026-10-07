@@ -118,7 +118,7 @@ ui_push_glyph_quads :: proc(
 	return x
 }
 
-// ofoster 的 MsdfFontFindCharacter 未标 contextless（clay 测量回调是 C 调用约定），
+// Foster 的 MsdfFontFindCharacter 未标 contextless（clay 测量回调是 C 调用约定），
 // 这里自写等价查找（线性扫描，图集字符量级 ~百）。
 @(private)
 ui_find_character :: proc "contextless" (font: ^foster.MsdfFont, codepoint: int) -> (foster.MsdfCharacter, bool) {

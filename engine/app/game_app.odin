@@ -1,6 +1,6 @@
 // app —— 启动模板与 CLI 辅助（对位 DragonLib GameApp）。
 //
-// ofoster 的 App 已经承担 Foster 的生命周期；本包在其上补：
+// Foster 的 App 已经承担 Foster 的生命周期；本包在其上补：
 //   - Game_App：using 嵌入 foster.App（字段全提升），回调使用
 //     foster.AppCallback，游戏状态统一挂在 App.UserData；
 //     可选 CLI 控制台自动接好 quit、每帧消费与退出时停止；
@@ -34,7 +34,7 @@ Game_App :: struct {
 	has_console: bool,
 }
 
-// 从 ofoster 回调里的 ^foster.App 取回外层 Game_App。
+// 从 Foster 回调里的 ^foster.App 取回外层 Game_App。
 // 仅对 game_app_init 建立的、经 game_app_run 桥接的实例有效。
 // 只做布局转换，不验证 a 的来源；普通 foster.App 不可传入。
 game_app_from :: proc(a: ^foster.App) -> ^Game_App {

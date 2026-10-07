@@ -61,7 +61,7 @@ bake_font :: proc() -> bool {
 			for by in 0..<h_i {
 				for bx in 0..<w_i {
 					a := bitmap[by * w_i + bx]
-					// 预乘 alpha：ofoster Batcher 默认 BlendModePremultiply
+					// 预乘 alpha：Foster Batcher 默认 BlendModePremultiply
 					atlas[(y + by) * atlas_w + (x + bx)] = foster.Color{a, a, a, a}
 				}
 			}

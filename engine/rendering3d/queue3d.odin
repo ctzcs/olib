@@ -2,7 +2,7 @@
 //
 // 每帧：clear -> 提交 Render_Item（world 矩阵 + 视深度）->
 // queue_sort（不透明前到后省 early-z，透明后到前保正确混合）->
-// 按序发射 GPU 命令（发射端接 ofoster Mesh/Shader，属着色器管线侧）。
+// 按序发射 GPU 命令（发射端接 Foster Mesh/Shader，属着色器管线侧）。
 package rendering3d
 
 import "core:math"
@@ -19,7 +19,7 @@ import foster "olib:foster"
 // ------------------------------------------------------------------------------
 
 Render_Item :: struct {
-	mesh:     ^foster.Mesh, // ofoster Mesh（上传于 mesh3d_upload）
+	mesh:     ^foster.Mesh, // Foster Mesh（上传于 mesh3d_upload）
 	material: Standard_Material_3D,
 	world:    world.Matrix4,
 	skinned:  bool, // 蒙皮走 palette 槽的材质变体

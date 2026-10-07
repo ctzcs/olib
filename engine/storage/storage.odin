@@ -1,7 +1,7 @@
 // storage —— 游戏资源与用户数据的平台路径策略（对位 DragonLib GameStorage）。
 //
 // 职责：决定"资源在哪、用户数据（设置/存档/截图）在哪"，读写本身交给
-// ofoster 的 DirectoryStorage。独立于 App（可在创建游戏之前用），
+// Foster 的 DirectoryStorage。独立于 App（可在创建游戏之前用），
 // 路径算法与 SDL GetPrefPath 一致（env 直算，不依赖 SDL 初始化）：
 //
 //   Windows: %APPDATA%\<app>

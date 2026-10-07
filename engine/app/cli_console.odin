@@ -4,7 +4,7 @@
 // cli_update（在 UpdateProc 里），handler 里可以安全读写游戏状态。
 //
 // 与 DragonLib 的差异：
-//   - 不走 App.RunOnMainThread（ofoster 的 AppCallback 无 userdata 参数），
+//   - 不走 App.RunOnMainThread（Foster 的 AppCallback 无 userdata 参数），
 //     改用 olib:messaging 的单消费者队列 + 每帧 drain，语义相同；
 //   - quit 不内建退出（Game_App 的 enable_cli 会自动接上真正的退出）；
 //   - 单实例：thread.create 无 data 参数，控制台指针走包级 active 指针。

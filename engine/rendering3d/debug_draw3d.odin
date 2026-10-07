@@ -1,7 +1,7 @@
 // rendering3d:debug_draw3d —— 立即模式调试线（对位 DragonLib DebugDraw3D）。
 //
 // 提供 Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton 的排队绘制，render 后清空。
-// GPU 路径走"朝向相机的细四边形"：ofoster 管线固定为三角列表（无线拓扑），
+// GPU 路径走"朝向相机的细四边形"：Foster 管线固定为三角列表（无线拓扑），
 // 每段线扩成两个三角形仍用 DebugLine3D 着色器（位置+颜色顶点，拓扑无关），
 // 深度测试可选、始终不写深度。厚度是世界单位。
 package rendering3d

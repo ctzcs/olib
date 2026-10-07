@@ -2,13 +2,15 @@
 
 适用范围：`core/` 与 `engine/` 的第一方源码（含测试）。
 `thirdparty/` 是外部绑定的 vendored 代码，保持与上游一致，**不适用**本规范。
+`foster/` 是 Foster 移植，**豁免**本规范，沿用 [foster/docs/CODE_STYLE.md](../foster/docs/CODE_STYLE.md)。
 
 ## 1. 仓库布局
 
 ```
 olib/
 ├── core/        基础库：无引擎依赖（handle / entities / encoding / tween / debug / profiler）
-├── engine/      引擎层：依赖 ofoster（asset / world / messaging）
+├── engine/      引擎层：依赖 foster/（asset / world / messaging）
+├── foster/      Foster 移植，豁免本规范，见 foster/docs/CODE_STYLE.md
 ├── thirdparty/  外部绑定：clay-odin / odin-imgui / oflecs
 └── docs/        本文档
 ```
@@ -17,7 +19,8 @@ olib/
 - 同一主题的声明、构造、查询、修改和释放函数放在一起，不为层级拆小文件；
   单主题的小包（如 `meta.odin`）一个文件即可，多主题包按主题分文件
   （参考 `core/tween/`：manager / tween / interpolated / managed_*）。
-- 依赖方向单向：`engine → core → (Odin core/base)`；core 不得 import ofoster。
+- 依赖方向单向：`engine → foster`、`engine → core → (Odin core/base)`；
+  core 不得 import foster；foster 不依赖 olib 其他任何包。
 
 ## 2. 分节注释（表达层级）
 
@@ -70,7 +73,7 @@ package tween
   - `if cond do return` / `if cond do continue`（Odin 惯用单语句）；
   - 短向量/颜色/坐标字面量（`{0, 0}`、`Color{255, 0, 0, 255}`）；
   - switch 的 `case 值:` 标签行本身（语句体换行）。
-- **imports 排序**：按库分组字母序——`base:` < `core:` < `olib:` < `ofoster:`，
+- **imports 排序**：按库分组字母序——`base:` < `core:` < `olib:`，
   别名紧跟（`import ha "olib:core/handle/array"`）。
 - 保留语言自然写法：proc 分组重载（`remove :: proc {…}`）、`or_return`、
   `do` 单语句、`#optional_ok/error` 等按 Odin 惯例使用，不模仿 C#。

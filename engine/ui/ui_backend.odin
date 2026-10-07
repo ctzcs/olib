@@ -315,7 +315,7 @@ ui_render :: proc(ctx: ^UI_Context, batcher: ^foster.Batcher, ops: ^[dynamic]UI_
 	}
 }
 
-// OFoster 当前按纹理/裁剪等合批，不比较材质；材质切换时显式建立批次边界。
+// Foster 当前按纹理/裁剪等合批，不比较材质；材质切换时显式建立批次边界。
 // 保持相同 Layer 和插入顺序，也覆盖相同纹理在位图/MSDF 路径间切换。
 @(private)
 ui_material_boundary :: proc(b: ^foster.Batcher) {

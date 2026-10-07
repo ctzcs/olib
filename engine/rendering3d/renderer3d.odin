@@ -1,7 +1,7 @@
 // rendering3d:renderer3d —— 前向渲染主路径（对位 DragonLib Renderer3D 的主 pass）。
 //
 // 每帧：renderer3d_render —— 片元公共槽（光照/阴影关闭/点光）设一次，
-// 逐项设顶点矩阵块 + 片元材质块后经 ofoster DrawCommand 发射。
+// 逐项设顶点矩阵块 + 片元材质块后经 Foster DrawCommand 发射。
 // 蒙皮项经 palette 槽（2、3）注入骨骼矩阵（animation.compute_palette 产出）。
 // 阴影/CSM 与 Tonemap 后处理是后续增量（DepthOnly 着色器已备好）。
 package rendering3d

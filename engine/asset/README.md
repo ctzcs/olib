@@ -1,4 +1,4 @@
-# olib:engine/asset —— ofoster 资源管线 v1
+# olib:engine/asset —— Foster 资源管线 v1
 
 `.meta` 管身份，`Library/` 管派生物，blob 是 Importer 与 Runtime 的边界，pak 将来只是 Storage 后端的变化。
 

@@ -1,7 +1,10 @@
-# OFoster
+# Foster Odin port
 
 OFoster is an Odin implementation of the [Foster](https://github.com/FosterFramework/Foster)
 2D game framework.
+
+本目录已并入 olib，原 OFoster 仓库停止维护。上游 MIT 声明见 [LICENSE](LICENSE)，
+版权文本取自下述 Foster sync baseline 的 [上游 LICENSE](https://github.com/FosterFramework/Foster/blob/06213b9cec2b29c715795a23253595d517ca13d2/LICENSE)。
 
 ## Requirements
 
@@ -10,7 +13,7 @@ OFoster is an Odin implementation of the [Foster](https://github.com/FosterFrame
 
 ## Foster sync baseline
 
-OFoster tracks the following upstream Foster source baseline:
+This Odin port tracks the following upstream Foster source baseline:
 
 - Upstream: [FosterFramework/Foster](https://github.com/FosterFramework/Foster)
 - Foster version: `v0.4.2`
@@ -32,12 +35,12 @@ convex hull and rectangle difference helpers, and virtual-input
 activation/manual-update helpers. The SDL3 bindings supplied with Odin are
 used directly.
 
-The library package is `src/`. Runnable examples are
+The library package is `foster/` in the olib repository. Runnable examples are
 maintained in the separate `OFoster_Sample` project.
 
 ## Use the framework
 
-Import the OFoster package from an Odin program. When building from the repository root,
+Import the Foster package from an Odin program. When building from the olib repository root,
 use `-collection:olib=.`:
 
 ```odin
@@ -47,22 +50,22 @@ import foster "olib:foster"
 The package mirrors Foster's public concepts: `App`, `Window`, `GraphicsDevice`,
 `Texture`, `Target`, `Shader`, `Material`, `Mesh`, input bindings, spatial
 primitives, storage helpers, and utility functions. Everything lives in the
-single package under `src/`, organized as topic files (`framework.odin`, `input.odin`,
+single package under `foster/`, organized as topic files (`framework.odin`, `input.odin`,
 `spatial.odin`, `storage.odin`, ...). The mapping from upstream Foster's C#
 files to these files, plus intentional API differences, is documented in
 [PORTING_MAP.md](docs/PORTING_MAP.md). The only subpackages are the internal ones:
 `internal/third_party` (vendored C bindings) and `internal/web` (JS side of
 the web bridge).
 
-## Repository layout
+## Directory layout (relative to `foster/`)
 
-- `src/`: the library package itself — `framework.odin` (app lifecycle, window,
+- `./`: the library package itself — `framework.odin` (app lifecycle, window,
   version), `foundation.odin` (math/color basics), `graphics.odin` (the GPU
   layer incl. Batcher), `images.odin` (image loading and fonts), `input.odin`,
   `spatial.odin`, `utility.odin`, `storage.odin`, `web.odin` (js bridge), plus
   `#+build` platform pair (`platform_native.odin` / `platform_web.odin`).
-- `src/assets/shaders/`: default shaders embedded at compile time via `#load`.
-- `src/internal/`: vendored C bindings (`third_party`) and the web bridge JS
+- `assets/shaders/`: default shaders embedded at compile time via `#load`.
+- `internal/`: vendored C bindings (`third_party`) and the web bridge JS
   (`web`).
 - `tests/`: `webtest` (web acceptance program), `graphics_regression`
   (native GPU suite) and `port_regression` (shared native/Web port checks).
@@ -70,7 +73,7 @@ the web bridge).
   mapping and API differences), `CODE_STYLE.md` (source layout and formatting),
   and `WEB_TARGET_REQUIREMENTS.md` (web target
   requirements and acceptance notes).
-- `build/`: git-ignored scratch space for local harnesses and artifacts.
+- `../build/`: git-ignored scratch space at the olib root for local harnesses and artifacts.
 
 ## Source layout and formatting
 
@@ -85,10 +88,10 @@ and examples. Keep related procedures in their existing sections and update the
 file's section index when adding a new group.
 
 The shared formatter settings are in `odinfmt.json`. With `odinfmt` available,
-format the library from the repository root:
+format the library from the olib repository root:
 
 ```powershell
-odinfmt -path:src -config:odinfmt.json -w
+odinfmt -path:foster -config:foster/odinfmt.json -w
 ```
 
 ## Port coverage and verification
@@ -138,7 +141,7 @@ for browser completion and permission failures. Callback text/paths are borrowed
 for the callback duration. See [PORTING_MAP.md](docs/PORTING_MAP.md) for API adaptations and verification
 limits; the baseline above is not a claim of complete C# API equivalence.
 
-Run from the repository root on Windows:
+Run from the olib repository root on Windows:
 
 ```powershell
 odin check foster -collection:olib=. -no-entry-point
@@ -209,7 +212,7 @@ Follow the [SDL GPU shader binding conventions](https://wiki.libsdl.org/SDL3/SDL
 | Fragment / DXIL | `t[n]` / `s[n]`, space2 | `b[n]`, space3 |
 
 Start each set/register sequence at zero without gaps. Order sampled textures
-and samplers first, then storage textures, then storage buffers. OFoster's
+and samplers first, then storage textures, then storage buffers. The port's
 graphics shader API currently exposes sampled textures and storage buffers;
 it does not expose graphics-stage storage textures.
 
@@ -230,7 +233,7 @@ float4 main(float2 uv : TEXCOORD0) : SV_Target0 {
 
 Use `TEXCOORD0`, `TEXCOORD1`, etc. for vertex attributes under SDL's default
 D3D12 semantic mapping; system semantics such as `SV_Position` are separate.
-OFoster's `BatcherVertex` is 24 bytes: location 0 is `float2` position,
+The port's `BatcherVertex` is 24 bytes: location 0 is `float2` position,
 location 1 is `float2` UV, and locations 2/3 are normalized four-byte colors.
 Match this layout or supply your own vertex format.
 
@@ -238,7 +241,7 @@ Match this layout or supply your own vertex format.
 
 Set `ShaderCreateInfo.SamplerCount`, `UniformBufferCount` and
 `StorageBufferCount` to match the compiled shader's resources. In the example
-above they are 1, 1 and 0. OFoster chooses the shader binary format from the
+above they are 1, 1 and 0. The port chooses the shader binary format from the
 device's `Driver`; pass the corresponding SPIR-V, DXIL or MSL code.
 
 Use `MaterialStageSetUniformBuffer` to supply bytes. The draw path pushes

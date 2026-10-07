@@ -7,7 +7,7 @@
 //   atlas_aseprite.odin .aseprite 目录 -> 单张图集的构建器（打包侧）
 //   sprite.odin         帧动画集合（图集子图 + 时长 + 命名动画）
 //
-// 渲染底座全部用 ofoster 现成能力：Subtexture / Packer / Aseprite / Batcher。
+// 渲染底座全部用 Foster 现成能力：Subtexture / Packer / Aseprite / Batcher。
 package rendering
 
 import "core:strings"

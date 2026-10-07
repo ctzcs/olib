@@ -1,6 +1,6 @@
 // world:matrix4 —— System.Numerics 语义的 4x4 矩阵（3D 渲染组的地基）。
 //
-// 约定（与 DragonLib / Foster / ofoster 着色器一致，写死为本包规范）：
+// 约定（与 DragonLib / Foster / Foster 着色器一致，写死为本包规范）：
 //   - 行向量变换：v' = v * M（Vector4.Transform 语义）；
 //   - 存储为 4 个列向量 c0..c3，c_j 即输出分量 j 的系数向量
 //     （对应 System.Numerics 的 M11/M21/M31/M41 一列）；

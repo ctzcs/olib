@@ -92,7 +92,7 @@ Input 的 provider 默认借用，独立 Input 用 `InputDispose` 释放。
   这样的路径，便于搜索与对照上游。平台适配按 `Platform / ...` 分区。
 - 函数体、分支、循环和结构体字段使用多行排版；较长的参数列表与复合字面量
   也拆行。根目录 `odinfmt.json` 保存统一格式配置。
-- 公共 API 全部在根包 `foster_framework`（`import foster "ofoster:."`），
+- 公共 API 全部在根包 `foster`（`import foster "olib:foster"`），
   以少量主题文件组织（`framework`/`foundation`/`graphics`/`images`/`input`/
   `spatial`/`utility`/`storage`/`web`，外加 `#+build` 平台对与 `web.odin`）。
   仅保留两个内部子包：`internal/third_party`（vendored C 绑定）与
@@ -147,7 +147,7 @@ C# 的重载/实例方法在 Odin 侧多为"前缀 + 显式名"或 proc group，
 | `IProjectableExt.AxisOverlaps(a,b,axis)` | `AxisOverlaps(minA,maxA,minB,maxB)` | 将两个形状 Project 的区间传入，返回严格相交与有符号位移 |
 | `Vector128<int>.AsPoint2/3` | `AsPoint2/3([4]i32)` | 四分量整数数组代替 C# SIMD 类型 |
 | `Batcher.Text/ TextWrapped` | `BatcherText/BatcherTextWrapped` | 使用 SpriteFontDraw 的参数顺序；传入显式 font，默认字体调用由应用持有 font |
-| 子包导入（`ofoster:Graphics` 等） | 一律 `import foster "ofoster:."` | 门面层已删除 |
+| 子包导入（`ofoster:Graphics` 等） | 一律 `import foster "olib:foster"` | 门面层已删除 |
 
 另有若干类型并存但语义不同，属于历史形态，暂不合并：
 

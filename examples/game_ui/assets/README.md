@@ -2,7 +2,7 @@
 
 `button-skin.png` is the actual RGBA texture used by the game UI demo, embedded at
 compile time in `skin.odin`. The original generated PNG is preserved unchanged.
-Runtime upload converts straight alpha to premultiplied alpha for OFoster.
+Runtime upload converts straight alpha to premultiplied alpha for Foster.
 
 Generated with the built-in imagegen tool on 2026-10-07, transparent background.
 Nine-slice source insets are 18% of the shorter image dimension; destination

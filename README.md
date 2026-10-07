@@ -1,6 +1,6 @@
 # olib
 
-Odin 游戏库集合，配合 [OFoster](https://github.com/ctzcs)（Foster 框架的 Odin 移植）使用。
+Odin 游戏库集合，内置 `foster/`（Foster 框架的 Odin 移植，原 OFoster 仓库）。
 结构对位 [DragonLib](https://github.com/ctzcs/DragonLib)（C#/Foster）。
 
 ## 布局
@@ -14,7 +14,9 @@ core/        基础库（无引擎依赖）
 ├── debug/     Tracking_Allocator 的 defer 包装
 └── profiler/  作用域计时统计
 
-engine/      引擎层（依赖 ofoster）
+foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组织与 Git 历史）
+
+engine/      引擎层（依赖 foster/）
 ├── asset/       资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
 ├── messaging/   CommandQueue（单消费者）/ BroadcastChannel（延迟一帧广播）
@@ -27,7 +29,7 @@ engine/      引擎层（依赖 ofoster）
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
 └── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
 
-thirdparty/  外部绑定：clay-odin / odin-imgui（含 ofoster 后端）/ oflecs
+thirdparty/  外部绑定：clay-odin / odin-imgui（含 Foster 后端）/ oflecs
 ```
 
 ## 使用
@@ -35,13 +37,14 @@ thirdparty/  外部绑定：clay-odin / odin-imgui（含 ofoster 后端）/ ofle
 以 collection 方式引用（olib 根 = 仓库根）：
 
 ```sh
-odin build <app> -collection:olib=<olib 路径> -collection:ofoster=<OFoster/src 路径>
+odin build <app> -collection:olib=<olib 路径>
 ```
 
 ```odin
 import ha    "olib:core/handle/array"
 import asset "olib:engine/asset"
 import world "olib:engine/world"
+import foster "olib:foster"
 ```
 
 各模块文档见包内注释、[资源管线](engine/asset/README.md)与 [游戏 UI](engine/ui/README.md)。
@@ -51,7 +54,7 @@ import world "olib:engine/world"
 ## 测试
 
 ```sh
-odin test core/handle/array -collection:olib=. -collection:ofoster=<OFoster/src>
+odin test core/handle/array -collection:olib=.
 # 其余包同理：core/entities core/tween engine/asset engine/messaging engine/world ...
 ```
 

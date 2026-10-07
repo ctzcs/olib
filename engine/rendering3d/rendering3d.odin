@@ -6,7 +6,7 @@
 // 阴影 pass（DepthOnly 已备好着色器）、CSM、Tonemap 后处理是后续增量。
 //
 // 分区：
-//   mesh3d.odin      dasset 顶点 -> ofoster Mesh 上传（静态/蒙皮格式）
+//   mesh3d.odin      dasset 顶点 -> Foster Mesh 上传（静态/蒙皮格式）
 //   material3d.odin  StandardMaterial3D 数据 + 渲染状态推导
 //   queue3d.odin     渲染项队列（不透明前到后 / 透明后到前）
 //   shaders/         HLSL 源 + 编译脚本 + Compiled 二进制（入库）

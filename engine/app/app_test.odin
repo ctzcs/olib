@@ -5,6 +5,7 @@ package app
 import "core:testing"
 
 import msg "olib:engine/messaging"
+import foster "ofoster:."
 
 @(test)
 has_arg_matches_flags :: proc(t: ^testing.T) {
@@ -38,7 +39,8 @@ Echo_State :: struct {
 @(private)
 echo_handler :: proc(args: string, ud: rawptr) {
 	state := (^Echo_State)(ud)
-	state.got = args
+	delete(state.got)
+	state.got = clone_owned(args)
 }
 
 @(test)
@@ -48,11 +50,12 @@ cli_dispatch_and_update_roundtrip :: proc(t: ^testing.T) {
 	defer cli_dispose(&console)
 
 	state: Echo_State
+	defer delete(state.got)
 	state.console = &console
 	cli_register(&console, "Echo", "回显参数", echo_handler, &state)
 
 	// 模拟读取线程收到一行：未知名报错不入队；已知名入队
-	cli_dispatch_line(&console, "echo hello world")
+	cli_dispatch_line(&console, clone_owned("echo hello world"))
 	if !testing.expect(t, msg.queue_count(&console.queue) == 1) { return }
 
 	// 主线程消费前不可见
@@ -63,7 +66,7 @@ cli_dispatch_and_update_roundtrip :: proc(t: ^testing.T) {
 	testing.expect(t, msg.queue_count(&console.queue) == 0)
 
 	// 大小写不敏感注册键
-	cli_dispatch_line(&console, "ECHO again")
+	cli_dispatch_line(&console, clone_owned("ECHO again"))
 	cli_update(&console)
 	testing.expect(t, state.got == "again")
 }
@@ -74,20 +77,35 @@ cli_dispatch_and_update_roundtrip :: proc(t: ^testing.T) {
 
 @(private)
 Bridge_State :: struct {
-	startups: int,
-	updates:  int,
+	startups:                    int,
+	updates:                     int,
+	shutdowns:                   int,
+	console_running_on_shutdown: bool,
 }
 
 @(private)
-bridge_startup :: proc(g: ^Game_App) {
-	s := (^Bridge_State)(g.userdata)
-	if s != nil { s.startups += 1 }
+bridge_startup :: proc(a: ^foster.App) {
+	s := (^Bridge_State)(a.UserData)
+	if s != nil {
+		s.startups += 1
+	}
 }
 
 @(private)
-bridge_update :: proc(g: ^Game_App) {
-	s := (^Bridge_State)(g.userdata)
-	if s != nil { s.updates += 1 }
+bridge_update :: proc(a: ^foster.App) {
+	s := (^Bridge_State)(a.UserData)
+	if s != nil {
+		s.updates += 1
+	}
+}
+
+@(private)
+bridge_shutdown :: proc(a: ^foster.App) {
+	s := (^Bridge_State)(a.UserData)
+	if s != nil {
+		s.shutdowns += 1
+		s.console_running_on_shutdown = game_app_from(a).console.running
+	}
 }
 
 @(test)
@@ -95,22 +113,22 @@ game_app_trampoline_bridge :: proc(t: ^testing.T) {
 	g: Game_App
 	state: Bridge_State
 
-	g.startup = bridge_startup
+	g.StartupProc = bridge_startup
 	g.update = bridge_update
 
 	// 桥接：^foster.App 视图 -> ^Game_App（using 字段在首位，地址相同）
 	app_view := &g.App
-	back, ok := game_app_from(app_view)
-	testing.expect(t, ok && back == (&g))
+	back := game_app_from(app_view)
+	testing.expect(t, back == (&g))
 
-	// 未挂 userdata：trampoline 安全空转
-	trampoline_startup(&g.App)
+	// 未挂 UserData：用户回调安全空转
+	g.StartupProc(&g.App)
 	trampoline_update(&g.App)
 	testing.expect(t, state.startups == 0 && state.updates == 0)
 
 	// 挂上后回调可达
-	g.userdata = &state
-	trampoline_startup(&g.App)
+	g.UserData = &state
+	g.StartupProc(&g.App)
 	trampoline_update(&g.App)
 	testing.expect(t, state.startups == 1 && state.updates == 1)
 
@@ -120,8 +138,28 @@ game_app_trampoline_bridge :: proc(t: ^testing.T) {
 	_ = g.GraphicsDevice
 	testing.expect(t, g.has_console == false)
 
+	// 不启动 stdin 线程，验证 CLI 消费和 shutdown 后停止。
+	cli_init(&g.console)
+	defer cli_dispose(&g.console)
+	g.has_console = true
+	g.console.running = true
+	echo: Echo_State
+	defer delete(echo.got)
+	cli_register(&g.console, "echo", "回显参数", echo_handler, &echo)
+	cli_dispatch_line(&g.console, clone_owned("echo bridge"))
+	trampoline_update(&g.App)
+	testing.expect(t, echo.got == "bridge" && state.updates == 2)
+
+	g.shutdown = bridge_shutdown
+	trampoline_shutdown(&g.App)
+	testing.expect(t, state.shutdowns == 1 && state.console_running_on_shutdown)
+	testing.expect(t, !g.console.running)
+	testing.expect(t, g.UserData == rawptr(&state))
+
 	// nil 回调安全
-	g.startup = nil
-	trampoline_startup(&g.App)
-	testing.expect(t, state.startups == 1)
+	g.update = nil
+	g.shutdown = nil
+	trampoline_update(&g.App)
+	trampoline_shutdown(&g.App)
+	testing.expect(t, state.updates == 2 && state.shutdowns == 1)
 }

@@ -45,10 +45,10 @@ main :: proc() {
 	app.game_app_run(&game, startup, update, render, shutdown)
 }
 
-startup :: proc(g: ^app.Game_App) {
+startup :: proc(g: ^foster.App) {
 	if !ui.ui_init(&ctx, 1100, 760) || !bake_font() {
 		fmt.eprintln("Font unavailable. Pass: font <path-to-ttf>")
-		app.game_app_exit(g)
+		foster.Exit(g)
 		return
 	}
 	theme = ui.UI_THEME_DARK
@@ -73,7 +73,7 @@ startup :: proc(g: ^app.Game_App) {
 	}
 }
 
-shutdown :: proc(g: ^app.Game_App) {
+shutdown :: proc(g: ^foster.App) {
 	foster.BatcherDispose(&batcher)
 	ui.ui_dispose(&ctx)
 	foster.TextureDispose(&font_texture)
@@ -86,17 +86,17 @@ shutdown :: proc(g: ^app.Game_App) {
 	}
 }
 
-update :: proc(g: ^app.Game_App) {
+update :: proc(g: ^foster.App) {
 	if foster.KeyboardPressed(&g.Input.State.Keyboard, .Escape) {
 		if dialog {
 			dialog = false
 		} else {
-			app.game_app_exit(g)
+			foster.Exit(g)
 		}
 	}
 }
 
-render :: proc(g: ^app.Game_App) {
+render :: proc(g: ^foster.App) {
 	target := foster.DrawableTargetFromWindow(&g.Window)
 	window_size := foster.Size(&g.Window)
 	w, h := f32(target.WidthInPixels), f32(target.HeightInPixels)
@@ -213,7 +213,7 @@ render :: proc(g: ^app.Game_App) {
 	if shot && pending {
 		save_capture()
 		fmt.printf("UI diagnostics: errors=%d, pool_overflow=%v\n", ctx.error_count, ctx.pool_overflow)
-		app.game_app_exit(g)
+		foster.Exit(g)
 	} else if shot && frame >= 10 {
 		offscreen := foster.DrawableTargetFromTarget(&capture)
 		foster.GraphicsDeviceClear(&g.GraphicsDevice, offscreen, theme.window_bg)

@@ -25,7 +25,7 @@ kit/      扩展层（kit）（依赖 foster/）
 ├── rendering3d/ 3D 数据与队列层：Mesh 上传 / 材质状态 / 渲染排序
 ├── animation/   骨骼动画采样 / palette / 混合
 ├── storage/     资源根 / 用户存档路径策略
-├── app/         CLI 参数 + 调试控制台 + Game_App（using 嵌入 App）
+├── app/         CLI 参数 + 调试控制台（可选 cli_open 接入 foster.App）
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
 └── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
 

@@ -12,7 +12,8 @@ import clay "olib:thirdparty/clay-odin"
 // 遗迹探索 HUD；旧控件验收页保留在 examples/ui_gallery。
 VIEW_W :: 1280
 VIEW_H :: 800
-game: app.Game_App
+game: foster.App
+console: app.Cli_Console
 ctx: ui.UI_Context
 theme: ui.UI_Theme
 batcher: foster.Batcher
@@ -51,12 +52,19 @@ main :: proc() {
 	if app.has_arg(os.args, "scaled") {
 		ui_scale = 1.25
 	}
-	app.game_app_init(&game, "ASHEN VALE - game UI", VIEW_W, VIEW_H)
-	defer app.game_app_dispose(&game)
-	app.game_app_run(&game, startup, update, render, shutdown)
+	foster.InitApp(&game, foster.DefaultAppConfig("ASHEN VALE - game UI", VIEW_W, VIEW_H))
+	defer foster.Dispose(&game)
+	game.StartupProc = startup
+	game.UpdateProc = update
+	game.RenderProc = render
+	game.ShutdownProc = shutdown
+	foster.Run(&game)
 }
 
 startup :: proc(g: ^foster.App) {
+	if app.has_arg(os.args, "cli") {
+		_ = app.cli_open(&console, g)
+	}
 	if !ui.ui_init(&ctx, VIEW_W, VIEW_H) || !bake_font() {
 		fmt.eprintln("Font unavailable. Pass: font <path-to-ttf>")
 		foster.Exit(g)
@@ -88,6 +96,7 @@ startup :: proc(g: ^foster.App) {
 }
 
 shutdown :: proc(g: ^foster.App) {
+	app.cli_dispose(&console)
 	foster.BatcherDispose(&batcher)
 	ui.ui_dispose(&ctx)
 	foster.TextureDispose(&font_texture)
@@ -100,6 +109,7 @@ shutdown :: proc(g: ^foster.App) {
 }
 
 update :: proc(g: ^foster.App) {
+	app.cli_update(&console)
 	if foster.KeyboardPressed(&g.Input.State.Keyboard, .Escape) {
 		paused = !paused
 		settings = false

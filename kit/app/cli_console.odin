@@ -1,4 +1,4 @@
-// app:cli_console —— CLI 后台调试控制台（对位 DragonLib CliConsole）。
+// app —— CLI 参数与后台调试控制台（对位 DragonLib CliConsole）。
 //
 // 后台线程读 stdin，命令经 Command_Queue 转到主线程——游戏每帧调一次
 // cli_update（在 UpdateProc 里），handler 里可以安全读写游戏状态。
@@ -6,7 +6,7 @@
 // 与 DragonLib 的差异：
 //   - 不走 App.RunOnMainThread（Foster 的 AppCallback 无 userdata 参数），
 //     改用 olib:messaging 的单消费者队列 + 每帧 drain，语义相同；
-//   - quit 不内建退出（Game_App 的 enable_cli 会自动接上真正的退出）；
+//   - cli_open / cli_register_quit 可把 quit 接到 foster.Exit；
 //   - 单实例：thread.create 无 data 参数，控制台指针走包级 active 指针。
 //
 // 本文件还带包内的 CLI 参数判断（has_arg）。
@@ -18,6 +18,7 @@ import "core:strings"
 import "core:thread"
 
 import msg "olib:core/messaging"
+import foster "olib:foster"
 
 // ------------------------------------------------------------------------------
 // CLI 参数 —— has_arg
@@ -96,6 +97,25 @@ cli_init :: proc(console: ^Cli_Console) {
 	cli_register(console, "quit", "退出程序（游戏应覆盖注册真正的退出）", cli_builtin_quit, nil)
 }
 
+// 一步开启控制台；quit_app 非 nil 时 quit 调用 foster.Exit。
+// 开启前 console 应为零值或已 dispose；失败时释放资源，update / dispose 可安全调用。
+cli_open :: proc(console: ^Cli_Console, quit_app: ^foster.App = nil) -> bool {
+	cli_init(console)
+	if quit_app != nil {
+		cli_register_quit(console, quit_app)
+	}
+	if !cli_start(console) {
+		cli_dispose(console)
+		return false
+	}
+	return true
+}
+
+// 将 quit 命令接到 foster.Exit；app 必须在控制台使用期间保持有效。
+cli_register_quit :: proc(console: ^Cli_Console, app: ^foster.App) {
+	cli_register(console, "quit", "退出程序", cli_quit_app, app)
+}
+
 cli_dispose :: proc(console: ^Cli_Console) {
 	cli_stop(console)
 	msg.queue_clear(&console.queue) // 未执行的命令直接丢弃
@@ -114,9 +134,16 @@ cli_dispose :: proc(console: ^Cli_Console) {
 // 主线程里调用（注册表无锁）。
 cli_register :: proc(console: ^Cli_Console, name: string, description: string, handler: Cli_Handler, userdata: rawptr = nil) {
 	lower, _ := strings.to_lower(name, context.allocator)
-	if _, had := console.commands[lower]; had {
-		delete(lower, context.allocator) // 覆盖旧键（避免泄漏旧克隆）
-		lower, _ = strings.to_lower(name, context.allocator)
+	if previous, had := console.commands[lower]; had {
+		delete(previous.description, context.allocator)
+		// 复用注册表持有的键，覆盖时不遗留旧键或新克隆。
+		for key in console.commands {
+			if key == lower {
+				delete(lower, context.allocator)
+				lower = key
+				break
+			}
+		}
 	}
 	console.commands[lower] = Cli_Command{
 		description = clone_owned(description),
@@ -137,6 +164,11 @@ cli_start :: proc(console: ^Cli_Console) -> bool {
 	active_cli_console = console
 	console.running = true
 	console.thread = thread.create(cli_reader_loop)
+	if console.thread == nil {
+		console.running = false
+		active_cli_console = nil
+		return false
+	}
 	fmt.println("[cli] CLI 调试控制台已启动，输入 help 查看命令")
 	return true
 }
@@ -193,13 +225,13 @@ cli_reader_loop :: proc(t: ^thread.Thread) {
 			if buf[i] == '\n' {
 				line := clone_owned(string(pending[:]))
 				cli_dispatch_line(console, line)
+				clear(&pending)
 				continue
 			}
 			if buf[i] != '\r' {
 				append(&pending, buf[i])
 			}
 		}
-		clear(&pending)
 	}
 }
 
@@ -259,7 +291,15 @@ cli_builtin_help :: proc(args: string, ud: rawptr) {
 
 @(private)
 cli_builtin_quit :: proc(args: string, ud: rawptr) {
-	fmt.println("[cli] （默认 quit：请用 cli_register 覆盖注册真正的退出，例如 foster.Exit(&app)）")
+	fmt.println("[cli] （默认 quit：请用 cli_register_quit 接入 foster.App）")
+}
+
+@(private)
+cli_quit_app :: proc(args: string, ud: rawptr) {
+	app := (^foster.App)(ud)
+	if app != nil {
+		foster.Exit(app)
+	}
 }
 
 // ------------------------------------------------------------------------------

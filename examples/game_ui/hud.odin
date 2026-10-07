@@ -3,7 +3,6 @@ package main
 import "core:fmt"
 import "core:math"
 
-import app "olib:kit/app"
 import ui "olib:kit/ui"
 import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
@@ -279,7 +278,7 @@ declare_pause :: proc() {
 					settings = true
 				}
 				if menu_button("quit", "LEAVE THE RUINS") {
-					app.game_app_exit(&game)
+				foster.Exit(&game)
 				}
 			}
 		}

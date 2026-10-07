@@ -9,7 +9,7 @@ import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
 
 // 设置 + 滚动背包 + 模态确认；可运行，也可用 shot 参数自动输出验收图。
-game: app.Game_App
+game: foster.App
 ctx: ui.UI_Context
 theme: ui.UI_Theme
 batcher: foster.Batcher
@@ -40,9 +40,13 @@ main :: proc() {
 	if app.has_arg(os.args, "scaled") {
 		ui_scale = 1.25
 	}
-	app.game_app_init(&game, "olib game UI", 1100, 760)
-	defer app.game_app_dispose(&game)
-	app.game_app_run(&game, startup, update, render, shutdown)
+	foster.InitApp(&game, foster.DefaultAppConfig("olib game UI", 1100, 760))
+	defer foster.Dispose(&game)
+	game.StartupProc = startup
+	game.UpdateProc = update
+	game.RenderProc = render
+	game.ShutdownProc = shutdown
+	foster.Run(&game)
 }
 
 startup :: proc(g: ^foster.App) {

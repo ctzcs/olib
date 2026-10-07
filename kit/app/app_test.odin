@@ -72,94 +72,30 @@ cli_dispatch_and_update_roundtrip :: proc(t: ^testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Game_App —— 桥接与字段提升（不开窗口，直测 trampoline）
+// CLI 接入 foster.App 与零值生命周期
 // ---------------------------------------------------------------------------
 
-@(private)
-Bridge_State :: struct {
-	startups:                    int,
-	updates:                     int,
-	shutdowns:                   int,
-	console_running_on_shutdown: bool,
-}
+@(test)
+cli_quit_exits_foster_app :: proc(t: ^testing.T) {
+	console: Cli_Console
+	cli_init(&console)
+	defer cli_dispose(&console)
 
-@(private)
-bridge_startup :: proc(a: ^foster.App) {
-	s := (^Bridge_State)(a.UserData)
-	if s != nil {
-		s.startups += 1
-	}
-}
-
-@(private)
-bridge_update :: proc(a: ^foster.App) {
-	s := (^Bridge_State)(a.UserData)
-	if s != nil {
-		s.updates += 1
-	}
-}
-
-@(private)
-bridge_shutdown :: proc(a: ^foster.App) {
-	s := (^Bridge_State)(a.UserData)
-	if s != nil {
-		s.shutdowns += 1
-		s.console_running_on_shutdown = game_app_from(a).console.running
-	}
+	a: foster.App
+	a.Running = true
+	cli_register_quit(&console, &a)
+	cli_dispatch_line(&console, clone_owned("quit"))
+	testing.expect(t, !a.Exiting)
+	cli_update(&console)
+	testing.expect(t, a.Exiting)
 }
 
 @(test)
-game_app_trampoline_bridge :: proc(t: ^testing.T) {
-	g: Game_App
-	state: Bridge_State
-
-	g.StartupProc = bridge_startup
-	g.update = bridge_update
-
-	// 桥接：^foster.App 视图 -> ^Game_App（using 字段在首位，地址相同）
-	app_view := &g.App
-	back := game_app_from(app_view)
-	testing.expect(t, back == (&g))
-
-	// 未挂 UserData：用户回调安全空转
-	g.StartupProc(&g.App)
-	trampoline_update(&g.App)
-	testing.expect(t, state.startups == 0 && state.updates == 0)
-
-	// 挂上后回调可达
-	g.UserData = &state
-	g.StartupProc(&g.App)
-	trampoline_update(&g.App)
-	testing.expect(t, state.startups == 1 && state.updates == 1)
-
-	// 字段提升：Game_App 直接看到 App 的字段（Window/Time/GraphicsDevice）
-	_ = g.Window
-	_ = g.Time
-	_ = g.GraphicsDevice
-	testing.expect(t, g.has_console == false)
-
-	// 不启动 stdin 线程，验证 CLI 消费和 shutdown 后停止。
-	cli_init(&g.console)
-	defer cli_dispose(&g.console)
-	g.has_console = true
-	g.console.running = true
-	echo: Echo_State
-	defer delete(echo.got)
-	cli_register(&g.console, "echo", "回显参数", echo_handler, &echo)
-	cli_dispatch_line(&g.console, clone_owned("echo bridge"))
-	trampoline_update(&g.App)
-	testing.expect(t, echo.got == "bridge" && state.updates == 2)
-
-	g.shutdown = bridge_shutdown
-	trampoline_shutdown(&g.App)
-	testing.expect(t, state.shutdowns == 1 && state.console_running_on_shutdown)
-	testing.expect(t, !g.console.running)
-	testing.expect(t, g.UserData == rawptr(&state))
-
-	// nil 回调安全
-	g.update = nil
-	g.shutdown = nil
-	trampoline_update(&g.App)
-	trampoline_shutdown(&g.App)
-	testing.expect(t, state.updates == 2 && state.shutdowns == 1)
+cli_zero_value_lifecycle :: proc(t: ^testing.T) {
+	console: Cli_Console
+	cli_update(&console)
+	cli_dispose(&console)
+	cli_dispose(&console)
+	testing.expect(t, console.commands == nil && !console.running)
+	testing.expect(t, console.thread == nil && msg.queue_count(&console.queue) == 0)
 }

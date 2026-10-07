@@ -1,7 +1,7 @@
 // rendering3d:material3d —— Standard 材质数据与渲染状态推导（对位 DragonLib StandardMaterial3D / RenderState3D）。
 package rendering3d
 
-import dasset "olib:engine/dasset"
+import dasset "olib:core/dasset"
 
 // 分区：
 //   渲染状态 —— 队列 / 剔除 / 深度写入

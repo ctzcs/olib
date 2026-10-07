@@ -1,7 +1,7 @@
 // rendering3d:mesh3d —— dasset 顶点 -> Foster Mesh 上传（对位 DragonLib MeshUpload3D）。
 package rendering3d
 
-import dasset "olib:engine/dasset"
+import dasset "olib:core/dasset"
 import foster "olib:foster"
 
 // 分区：

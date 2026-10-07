@@ -4,7 +4,7 @@ package app
 
 import "core:testing"
 
-import msg "olib:engine/messaging"
+import msg "olib:core/messaging"
 import foster "olib:foster"
 
 @(test)

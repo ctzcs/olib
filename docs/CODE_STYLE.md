@@ -8,8 +8,8 @@
 
 ```
 olib/
-├── core/        基础库：无引擎依赖（handle / entities / encoding / tween / debug / profiler）
-├── engine/      引擎层：依赖 foster/（asset / world / messaging）
+├── core/        基础库：无引擎依赖（handle / entities / encoding / messaging / dasset / tween / debug / profiler）
+├── engine/      引擎层：依赖 foster/（asset / world / rendering / app 等）
 ├── foster/      Foster 移植，豁免本规范，见 foster/docs/CODE_STYLE.md
 ├── thirdparty/  外部绑定：clay-odin / odin-imgui / oflecs
 └── docs/        本文档
@@ -103,7 +103,7 @@ odin fmt engine
 ## 7. Odin 语言注意事项（踩过的坑）
 
 - proc 字面量**没有闭包**：需要状态的回调走 `proc(item, userdata: rawptr)` +
-  userdata 惯例（见 `engine/messaging` 的 `queue_drain`）。
+  userdata 惯例（见 `core/messaging` 的 `queue_drain`）。
 - 泛型参数上的隐式枚举选择子无法解析：调用处写显式成员名
   （`Screen.Title` 而非 `.Title`，见 `engine/world/scene_router.odin`）。
 - 切片 `transmute` 保留 len 数值而非按字节换算：跨类型字节拷贝一律

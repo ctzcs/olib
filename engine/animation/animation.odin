@@ -16,7 +16,7 @@ package animation
 
 import "core:math"
 
-import dasset "olib:engine/dasset"
+import dasset "olib:core/dasset"
 import world "olib:engine/world"
 
 // shader 侧 joint palette 的容量上限（skinned shader 的 MAX_JOINTS）。

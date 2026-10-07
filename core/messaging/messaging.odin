@@ -12,7 +12,7 @@
 // context.allocator），dispose 释放内部缓冲。
 //
 // 用法：
-//   import msg "olib:engine/messaging"
+//   import msg "olib:core/messaging"
 //
 //   Cmd :: union { Spawn, Play_Sound }
 //   queue:  msg.Command_Queue(Cmd)   defer msg.queue_dispose(&queue)

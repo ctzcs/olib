@@ -8,7 +8,7 @@ package rendering3d
 
 import "core:math"
 
-import dasset "olib:engine/dasset"
+import dasset "olib:core/dasset"
 import world "olib:engine/world"
 import foster "olib:foster"
 

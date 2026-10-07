@@ -1,8 +1,8 @@
 # olib ← DragonLib 移植路线图
 
 以 DragonLib（`Libs/Engine` 为主）为参照体的差距清单与排期。
-当前基线：`core/`（handle/entities/encoding/tween/debug/profiler）+
-`engine/`（asset/world/messaging）+ `thirdparty/`（clay-odin/odin-imgui/oflecs），
+当前基线：`core/`（handle/entities/encoding/messaging/dasset/tween/debug/profiler）+
+`engine/`（asset/world 等）+ `thirdparty/`（clay-odin/odin-imgui/oflecs），
 9 包 32 测试全绿。规范见 [CODE_STYLE.md](CODE_STYLE.md)。
 
 依赖关系总览：
@@ -39,7 +39,7 @@ P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
 
 | # | 项目 | DragonLib 来源 | 说明 |
 |---|------|----------------|------|
-| 8 | ~~Dasset 模型格式（数据层）~~ **已完成（2026-10，`engine/dasset`）** | 比特兼容 DragonLib v4 布局的读写（贴图/骨架/蒙皮顶点/PBR 材质/动画剪辑，v1~v4 读兼容，坏文件防御） |
+| 8 | ~~Dasset 模型格式（数据层）~~ **已完成（2026-10，`core/dasset`）** | 比特兼容 DragonLib v4 布局的读写（贴图/骨架/蒙皮顶点/PBR 材质/动画剪辑，v1~v4 读兼容，坏文件防御） |
 | 9 | ~~SkeletonAnimator~~ **已完成（2026-10，`engine/animation`）** | 采样（bind pose 填充+channel 覆盖，Step/Linear/CubicSpline、四元数最短弧）、palette 传播、advance_time、blend_poses、蒙皮包围盒 |
 | 10 | ~~3D 渲染栈~~ **已完成（2026-10，`engine/rendering3d`）** | Mesh 上传、材质状态、渲染排序 + **着色器管线**（dxil/spv 入库 #load、按驱动分发）+ Renderer3D 前向主 pass（方向光/点光/**聚光灯**/透明混合/蒙皮 palette）+ **DebugDraw3D**（Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton；foster/ 无线拓扑，走朝向相机的四边形展开复用 DebugLine3D 着色器）+ **LOD**（Lod_Selector 滞回阈值 + 泛型 Model_Lod）。**剩余增量**：.msl/.glsl 平台补编、阴影 pass + CSM（DepthOnly 已备）、Tonemap/后处理（DragonLib 已有 PostBloom/Fxaa/Sky3D HLSL 源可移植）、天空盒、IBL/环境烘焙 |
 
@@ -82,13 +82,13 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 - asset 管线 v1（.meta/Library/blob/manifest，打包零改动）→ `engine/asset`
 - Camera2D / SceneRouter → `engine/world`（Matrix3x2 构造/乘法用 foster/
   已提交的 API，e51ceb8）
-- CommandQueue / BroadcastChannel → `engine/messaging`
+- CommandQueue / BroadcastChannel → `core/messaging`
 - **P0-1** Sprite/SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器 → `engine/rendering`
 - **P0-2** GameStorage 路径策略 → `engine/storage`
 - **P0-3** JobScheduler 评估（不移植，见 P0 表）
 - **P1-4** Camera3D/Frustum3D/Ray3D + 自备 Matrix4（行向量 v*M、D3D 深度）→ `engine/world`
 - **P1-5** has_arg + CliConsole（messaging 队列转主线程）→ `engine/app`
-- **P2-6** Dasset 数据层 → `engine/dasset`
+- **P2-6** Dasset 数据层 → `core/dasset`
 - **P2-7** SkeletonAnimator → `engine/animation`
 - **P2-8** 3D 数据/队列层 → `engine/rendering3d`（着色器管线边界见表 10）
 - **音频** → `engine/audio`（vendor:sdl3）

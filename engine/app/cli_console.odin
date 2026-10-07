@@ -17,7 +17,7 @@ import "core:os"
 import "core:strings"
 import "core:thread"
 
-import msg "olib:engine/messaging"
+import msg "olib:core/messaging"
 
 // ------------------------------------------------------------------------------
 // CLI 参数 —— has_arg

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- OFoster Web 参考页: 复制到游戏构建目录, 改 FOSTER_WASM 为游戏 wasm 文件名 -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>OFoster</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #0a0c10; }
+	#foster { display: block; width: 100vw; height: 100vh; }
+	#foster-log {
+		display: none; /* 默认隐藏, ?debug=1 或出错时由 foster.js 弹出 */
+		position: fixed; left: 8px; top: 8px;
+		color: #8fd88f; font: 11px monospace; white-space: pre;
+		pointer-events: none; text-shadow: 0 0 2px #000;
+		z-index: 10; background: rgba(0, 0, 0, 0.4); padding: 4px 6px;
+	}
+</style>
+</head>
+<body>
+<canvas id="foster"></canvas>
+<div id="foster-log"></div>
+<script>window.FOSTER_WASM = "game.wasm";</script>
+<script src="odin.js"></script>
+<script src="foster.js?v=2"></script>
+</body>
+</html>

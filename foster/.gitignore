@@ -1,0 +1,8 @@
+build/
+/build
+tests/webtest/*.wasm
+tests/webtest/*.exe
+tests/webtest/odin.js
+
+# js 目标构建遗留的中间产物, 勿提交
+/*.wasm

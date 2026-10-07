@@ -36,7 +36,7 @@ update :: proc(app: ^foster.App) {
 
 	// game-side input, gated behind the UI:
 	if !imgui_ofoster.WantCaptureKeyboard() {
-		if foster.Pressed(&app.Input.State.Keyboard, .Escape) {
+		if foster.KeyboardPressed(&app.Input.State.Keyboard, .Escape) {
 			foster.Exit(app)
 		}
 	}

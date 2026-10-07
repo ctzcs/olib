@@ -183,12 +183,12 @@ NewFrame :: proc(owner: ^foster.App, dt: f32 = -1) {
 
 	// modifiers: ImGui wants them both as individual keys and aggregated
 	for entry in key_map {
-		imgui.IO_AddKeyEvent(io, entry.ik, foster.Down(kb, entry.key))
+		imgui.IO_AddKeyEvent(io, entry.ik, foster.KeyboardDown(kb, entry.key))
 	}
-	imgui.IO_AddKeyEvent(io, .ImGuiMod_Ctrl,   foster.Down(kb, .LeftControl) || foster.Down(kb, .RightControl))
-	imgui.IO_AddKeyEvent(io, .ImGuiMod_Shift,  foster.Down(kb, .LeftShift)   || foster.Down(kb, .RightShift))
-	imgui.IO_AddKeyEvent(io, .ImGuiMod_Alt,    foster.Down(kb, .LeftAlt)     || foster.Down(kb, .RightAlt))
-	imgui.IO_AddKeyEvent(io, .ImGuiMod_Super,  foster.Down(kb, .LeftOS)      || foster.Down(kb, .RightOS))
+	imgui.IO_AddKeyEvent(io, .ImGuiMod_Ctrl,   foster.KeyboardDown(kb, .LeftControl) || foster.KeyboardDown(kb, .RightControl))
+	imgui.IO_AddKeyEvent(io, .ImGuiMod_Shift,  foster.KeyboardDown(kb, .LeftShift)   || foster.KeyboardDown(kb, .RightShift))
+	imgui.IO_AddKeyEvent(io, .ImGuiMod_Alt,    foster.KeyboardDown(kb, .LeftAlt)     || foster.KeyboardDown(kb, .RightAlt))
+	imgui.IO_AddKeyEvent(io, .ImGuiMod_Super,  foster.KeyboardDown(kb, .LeftOS)      || foster.KeyboardDown(kb, .RightOS))
 
 	// text typed during this update
 	for r in kb.Text {

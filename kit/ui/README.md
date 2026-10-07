@@ -63,9 +63,8 @@ if ok {
 `font` 必须保持地址稳定、存活到 `ui_dispose` 之后。调用方用 `MsdfFontDispose`
 释放图集像素、字形和字距表，再用 `TextureDispose` 释放纹理；失败时不遗留资源。
 烘焙把 `FontMake` 移入 `LineGap` 的下降量还原，以保留旧示例的基线和行高。
-`Descent == 0 && LineGap > 0` 按这一归一化约定处理。默认 ASCII 保留旧示例的
-字距表语义（码点作为字形索引），以保证既有截图不变；自定义字符集用 `FontGetKerning`
-按码点查询字距。
+`Descent == 0 && LineGap > 0` 按这一归一化约定处理。所有字符集都用 `FontGetKerning`
+按 Unicode 码点查询字距；省略字符集与显式传入相同 ASCII 列表的结果一致。
 
 ## 控件和容器
 

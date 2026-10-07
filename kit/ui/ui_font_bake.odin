@@ -14,7 +14,7 @@ import foster "olib:foster"
 // 用 Foster 公开 Font API 烘焙预乘 alpha 位图字体；nil 字符集为 ASCII 32..126。
 // 返回的 msdf 拥有 Image.Pixels、Characters 和 Kerning，须用 MsdfFontDispose 释放；
 // texture 须由调用方 TextureDispose。源 Font 由调用方管理，可在烘焙后释放。
-// 默认 ASCII 保留旧示例字距表（码点作为字形索引）；自定义字符集按码点查询字距。
+// 默认和自定义字符集均按 Unicode 码点查询字距。
 ui_font_bake :: proc(
 	device: ^foster.GraphicsDevice,
 	font: ^foster.Font,
@@ -51,10 +51,9 @@ ui_font_bake_image :: proc(
 	if scale <= 0 || math.is_nan(scale) || math.is_inf(scale) {
 		return {}, false
 	}
-	legacy_ascii := codepoints == nil
 	points := codepoints
 	ascii: [95]int
-	if legacy_ascii {
+	if points == nil {
 		for &cp, i in ascii {
 			cp = 32 + i
 		}
@@ -103,12 +102,7 @@ ui_font_bake_image :: proc(
 		}
 		append(&msdf.Characters, entry)
 		for cp2 in points {
-			kerning: f32
-			if legacy_ascii {
-				kerning = foster.FontGetKerningBetweenGlyphs(font, cp, cp2, scale)
-			} else {
-				kerning = foster.FontGetKerning(font, cp, cp2, scale)
-			}
+			kerning := foster.FontGetKerning(font, cp, cp2, scale)
 			if kerning != 0 {
 				append(&msdf.Kerning, foster.MsdfKerning{First = cp, Second = cp2, Advance = kerning})
 			}

@@ -43,6 +43,39 @@ font_bake_ascii_atlas :: proc(t: ^testing.T) {
 }
 
 @(test)
+font_bake_default_and_explicit_ascii_have_codepoint_kerning :: proc(t: ^testing.T) {
+	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	source := foster.FontMake(data)
+	defer foster.FontDispose(&source)
+	points: [95]int
+	for &cp, i in points {
+		cp = 32 + i
+	}
+	default_font, default_ok := ui_font_bake_image(&source, 48)
+	defer foster.MsdfFontDispose(&default_font)
+	explicit_font, explicit_ok := ui_font_bake_image(&source, 48, points[:])
+	defer foster.MsdfFontDispose(&explicit_font)
+	if !testing.expect(t, default_ok && explicit_ok) {
+		return
+	}
+	testing.expect(t, len(default_font.Kerning) == len(explicit_font.Kerning))
+	scale := foster.FontGetScale(&source, 48)
+	nonzero_pairs := 0
+	for first in points {
+		for second in points {
+			expected := foster.FontGetKerning(&source, first, second, scale)
+			testing.expect(t, foster.MsdfFontGetKerning(&default_font, first, second) == expected)
+			testing.expect(t, foster.MsdfFontGetKerning(&explicit_font, first, second) == expected)
+			if expected != 0 {
+				nonzero_pairs += 1
+			}
+		}
+	}
+	testing.expect(t, nonzero_pairs > 0)
+	testing.expect(t, len(default_font.Kerning) == nonzero_pairs)
+}
+
+@(test)
 font_bake_custom_charset_grows_atlas :: proc(t: ^testing.T) {
 	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
 	source := foster.FontMake(data)

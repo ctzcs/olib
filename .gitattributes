@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep build scripts runnable after checkout on Windows and Unix.
+*.bat text eol=crlf
+*.sh text eol=lf

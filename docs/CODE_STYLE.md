@@ -9,9 +9,9 @@
 
 ```
 olib/
-├── core/        基础库：无引擎依赖（handle / entities / encoding / messaging / dasset / tween / debug / profiler）
-├── kit/      扩展层（kit）：依赖 foster/（asset / world / rendering / app 等）
-├── foster/      Foster 移植，豁免本规范，见 foster/docs/CODE_STYLE.md
+├── core/        纯 Odin：通用数据结构、数据格式，无运行时依赖
+├── foster/      唯一运行时：App / 窗口 / 输入 / 图形 / 基础类型，豁免本规范
+├── kit/         扩展层（kit）：UI / 资源管线 / 相机场景 / 3D / 动画 / 音频 / CLI
 ├── thirdparty/  外部绑定：clay-odin / odin-imgui / oflecs
 └── docs/        本文档
 ```
@@ -21,7 +21,20 @@ olib/
   单主题的小包（如 `meta.odin`）一个文件即可，多主题包按主题分文件
   （参考 `core/tween/`：manager / tween / interpolated / managed_*）。
 - 依赖方向单向：`kit → foster`、`kit → core → (Odin core/base)`；
-  core 不得 import foster；foster 不依赖 olib 其他任何包。
+  core 不得依赖 foster 或 kit；foster 不依赖 olib 其他任何包。
+
+## foster 与 kit 的边界
+
+1. **foster**：App 生命周期、窗口、输入、图形、基础类型（`Color`、`Vec2`、`Rect`……）一律直接用 foster。
+2. **kit**：只提供 foster 没有的能力，例如 UI、资源管线、相机/场景、3D 队列、动画、音频、CLI 控制台。
+3. **硬规则**：
+   - kit 的 API 直接接收、返回 foster 类型；**不给** foster 的类型或 proc 起别名，**不做**一对一封装；
+   - kit **不封装** foster 的 App 生命周期（`init_app` / `Run` / `Exit` / `dispose_app`）；
+   - `foster/` 以外的代码**不得** import `olib:foster/internal/...`。
+4. 依赖方向：`kit → foster`、`kit → core`；`core` 不得依赖 `foster` 或 `kit`；`foster` 不依赖 olib 其他任何包。
+
+主动修改 Foster 时须先登记 [LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)，
+保留 Foster API 与命名体系。
 
 ## 2. 分节注释（表达层级）
 

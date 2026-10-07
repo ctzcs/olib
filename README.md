@@ -18,7 +18,7 @@ core/        基础库（无引擎依赖）
 
 foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组织与 Git 历史）
 
-kit/      扩展层（kit）（依赖 foster/）
+kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── asset/       资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
 ├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
@@ -34,6 +34,9 @@ thirdparty/  外部绑定：clay-odin / odin-imgui（含 Foster 后端）/ oflec
 
 ## 使用
 
+基础能力（App、窗口、输入、图形、基础类型）直接用 `olib:foster`，
+扩展能力用 `olib:kit/*`，通用数据结构和格式用 `olib:core/*`。
+
 以 collection 方式引用（olib 根 = 仓库根）：
 
 ```sh
@@ -43,10 +46,50 @@ odin build <app> -collection:olib=<olib 路径>
 ```odin
 import ha    "olib:core/handle/array"
 import msg   "olib:core/messaging"
+import foster "olib:foster"
 import asset "olib:kit/asset"
 import world "olib:kit/world"
-import foster "olib:foster"
 ```
+
+最小启动示例直接注册 Foster 回调；传 `cli` 参数时可选开启控制台：
+
+```odin
+package main
+
+import "core:os"
+
+import foster "olib:foster"
+import app "olib:kit/app"
+
+game: foster.App
+console: app.Cli_Console
+
+startup :: proc(g: ^foster.App) {
+    if app.has_arg(os.args, "cli") {
+        _ = app.cli_open(&console, g)
+    }
+}
+
+update :: proc(g: ^foster.App) {
+    app.cli_update(&console)
+}
+
+shutdown :: proc(g: ^foster.App) {
+    app.cli_dispose(&console)
+}
+
+main :: proc() {
+    foster.InitApp(&game, foster.DefaultAppConfig("My Game", 1280, 720))
+    defer foster.Dispose(&game)
+    game.StartupProc = startup
+    game.UpdateProc = update
+    game.ShutdownProc = shutdown
+    foster.Run(&game)
+}
+```
+
+退出统一调用 `foster.Exit`。`cli_update` 和 `cli_dispose` 对零值控制台及开启失败后的
+控制台也安全；`examples/game_ui` 可用 `cli` 参数试用 `help`、`quit`。
 
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
 游戏 UI 示例见 `examples/game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；

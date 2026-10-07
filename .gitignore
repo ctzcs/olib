@@ -7,3 +7,11 @@
 
 # ImGui runtime window layout state
 imgui.ini
+
+# Build artifacts for the integrated Foster package and regression suites
+/build/
+foster/build/
+foster/*.wasm
+foster/tests/webtest/*.wasm
+foster/tests/webtest/*.exe
+foster/tests/webtest/odin.js

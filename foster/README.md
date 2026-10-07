@@ -38,10 +38,10 @@ maintained in the separate `OFoster_Sample` project.
 ## Use the framework
 
 Import the OFoster package from an Odin program. When building from the repository root,
-use `-collection:ofoster=src`:
+use `-collection:olib=.`:
 
 ```odin
-import foster "ofoster:."
+import foster "olib:foster"
 ```
 
 The package mirrors Foster's public concepts: `App`, `Window`, `GraphicsDevice`,
@@ -141,9 +141,9 @@ limits; the baseline above is not a claim of complete C# API equivalence.
 Run from the repository root on Windows:
 
 ```powershell
-odin check src -no-entry-point
-odin run tests/port_regression -collection:ofoster=src -out:build/port-regression.exe
-./tests/graphics_regression/run.ps1
+odin check foster -collection:olib=. -no-entry-point
+odin run foster/tests/port_regression -collection:olib=. -out:build/port-regression.exe
+./foster/tests/graphics_regression/run.ps1
 ```
 
 The graphics suites exercise D3D12 and Vulkan. The native compute regression
@@ -159,7 +159,7 @@ inside your game state, register lifecycle procedures, and attach the state with
 ```odin
 package main
 
-import foster "ofoster:."
+import foster "olib:foster"
 
 Game :: struct {
     App: foster.App,

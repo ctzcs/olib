@@ -2,8 +2,8 @@ package imgui_example_ofoster
 
 // Dear ImGui + ofoster bridge example.
 //
-// Build & run (Windows, adjust the ofoster path to your checkout):
-//   odin build . -collection:ofoster=<path>\ofoster -out:build\example.exe
+// Build & run (Windows, from this example directory):
+//   odin build . -collection:olib=..\..\..\.. -out:build\example.exe
 //
 // or just use run.bat next to this file.
 

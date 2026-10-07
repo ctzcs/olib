@@ -73,7 +73,7 @@ Compute、SSBO、离屏 MSAA、线框填充属于当前 WebGL2 后端限制。�
 
 ## 1. 目标
 
-vehicles 以 `odin build src -target:js_wasm32 -collection:ofoster=..\OFoster\src` 构建，产物 + `odin.js` + `foster.js` + `index.html` 在 Chrome/Edge/Firefox/Safari 直接可玩。
+vehicles 以 `odin build src -target:js_wasm32 -collection:olib=..\olib` 构建，产物 + `odin.js` + `foster.js` + `index.html` 在 Chrome/Edge/Firefox/Safari 直接可玩。
 
 **硬性约束：OFoster 公共 API（App/Window/Graphics/Input/Storage 对外的 proc 与 struct 签名）不变；vehicles 游戏代码零改动（仅 build 脚本层面的差异可接受）。**
 
@@ -204,7 +204,7 @@ vehicles 以 `odin build src -target:js_wasm32 -collection:ofoster=..\OFoster\sr
 ### 12.2 构建
 
 ```
-odin build src -collection:ofoster=<OFoster路径>/src -target:js_wasm32 -o:speed -out:build/web/<游戏名>.wasm
+odin build src -collection:olib=<olib路径> -target:js_wasm32 -o:speed -out:build/web/<游戏名>.wasm
 ```
 
 产物目录共 5 个文件（资产须全部 `#load` 内嵌进 wasm，不落盘）：
@@ -213,7 +213,7 @@ odin build src -collection:ofoster=<OFoster路径>/src -target:js_wasm32 -o:spee
 |---|---|
 | `<游戏名>.wasm` | 上面的构建命令 |
 | `odin.js` | `<odin安装>/core/sys/wasm/js/odin.js`（Odin 官方 wasm 运行时） |
-| `foster.js` | `OFoster/src/internal/web/foster.js`（OFoster 桥） |
+| `foster.js` | `olib/foster/internal/web/foster.js`（OFoster 桥） |
 | 游戏桥 `*.js`（可选） | 游戏自己的 JS（如音频桥），经 `FOSTER_EXTRA_IMPORTS` 挂载 |
 | `index.html` | 照抄 `vehicles/web/index.html`：`<canvas id="foster">`、`window.FOSTER_WASM = "<游戏名>.wasm"`、按序引游戏桥 → odin.js → foster.js |
 

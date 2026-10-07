@@ -83,4 +83,4 @@ It seems likely to me that SDL3, and maybe Android will exist in vendor in the f
 | JS             |     Yes      |     Yes     | Native Odin backend - Docking doesn't work for some reason           |
 | WebGPU         |     Yes      |     Yes     | Native Odin backend                                                  |
 | WebGL          |     Yes      |     Yes     | Native Odin backend - WebGL 2 only                                   |
-| ofoster        |     Yes     |     Yes     | Native Odin bridge: composes `sdlgpu3` with ofoster's polled input. Requires the `ofoster` package collection at build time. Single window, no viewports/gamepad. |
+| ofoster        |     Yes     |     Yes     | Native Odin bridge: composes `sdlgpu3` with ofoster's polled input. Requires `-collection:olib=<olib root>` and imports `olib:foster`. Single window, no viewports/gamepad. |

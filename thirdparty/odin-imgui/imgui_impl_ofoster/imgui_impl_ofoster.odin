@@ -33,8 +33,8 @@ package imgui_impl_ofoster
 //       imgui_ofoster.Render(app, build_ui) // build_ui :: proc(app: ^foster.App)
 //   }
 //
-// Requires the `ofoster` package collection at build time:
-//   odin build . -collection:olib=<path to olib> -collection:ofoster=<path to ofoster>
+// Requires the `olib` package collection at build time:
+//   odin build . -collection:olib=<path to olib>
 //
 // Notes / limitations:
 //   - single window, no multi-viewport support (ofoster owns the window)

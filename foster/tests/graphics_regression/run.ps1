@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $outputDirectory = Join-Path $repoRoot 'build/graphics-regression'
 New-Item -ItemType Directory -Force $outputDirectory | Out-Null
 
@@ -42,7 +42,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Compute DXIL compilation failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'Compute SPIR-V compilation failed.' }
 Copy-Item -LiteralPath (Join-Path $odinRoot 'vendor/sdl3/SDL3.dll') -Destination $outputDirectory
 $executable = Join-Path $outputDirectory 'graphics-regression.exe'
-& odin build $PSScriptRoot "-collection:ofoster=$repoRoot/src" "-out:$executable"
+& odin build $PSScriptRoot "-collection:olib=$repoRoot" "-out:$executable"
 if ($LASTEXITCODE -ne 0) { throw 'Graphics regression build failed.' }
 foreach ($driver in $Drivers) {
     & $executable $driver $outputDirectory

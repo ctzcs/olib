@@ -149,8 +149,8 @@ if show_dialog {
 ## 验证
 
 ```powershell
-odin test engine/ui -collection:olib=. -collection:ofoster=../OFoster/src
-odin build examples/game_ui -collection:olib=. -collection:ofoster=../OFoster/src -out:game_ui.exe
+odin test engine/ui -collection:olib=.
+odin build examples/game_ui -collection:olib=. -out:game_ui.exe
 ```
 
 运行时需 OFoster 的平台动态库（Windows 为 SDL3.dll）。Windows 自动尝试系统字体；
@@ -185,7 +185,7 @@ if clay.UI()(decl) {
 原来的距离场渲染探针在控件展台中：
 
 ```powershell
-odin build examples/ui_gallery -collection:olib=. -collection:ofoster=../OFoster/src -out:ui_gallery.exe
+odin build examples/ui_gallery -collection:olib=. -out:ui_gallery.exe
 ui_gallery.exe shot msdf
 ```
 

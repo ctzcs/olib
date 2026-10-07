@@ -4,7 +4,7 @@ Run from PowerShell on Windows with Odin, a SPIR-V-capable DXC on PATH,
 and a Windows SDK DXC with its matching DXIL validator, plus glslangValidator:
 
 ```powershell
-./tests/graphics_regression/run.ps1
+./foster/tests/graphics_regression/run.ps1
 ```
 
 Override `-SpirvDxc` / `-DxilDxc` for other compiler locations and

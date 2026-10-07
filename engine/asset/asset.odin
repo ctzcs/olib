@@ -36,7 +36,7 @@
 //   // render: foster.BatcherQuadTexture(&batcher, asset.assets_get_texture(&m, tex), ...)
 //
 // 构建（native；本包 v1 仅支持 native 目标，扫描/mtime 依赖 core:os）：
-//   odin build <app> -collection:olib=<olib 根> -collection:ofoster=<ofoster src 根>
+//   odin build <app> -collection:olib=<olib 根>
 // 分区：
 //   Guid —— 资产身份（生成/hex 往返/文件名）
 //   句柄 / 错误 / 种类 —— Asset_Kind / Asset_Handle / Asset_Error

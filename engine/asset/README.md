@@ -132,7 +132,7 @@ blob 头含 `importer_version` 与源的 `mtime/size`；新鲜度 = 三者全部
 ## 构建与测试
 
 ```bash
-odin test engine/asset -collection:olib=. -collection:ofoster=<ofoster src 根>
+odin test engine/asset -collection:olib=.
 ```
 
 v1 仅支持 native 目标（扫描/mtime 依赖 `core:os`）。web 路线：`storage_map` + `#load`

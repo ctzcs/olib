@@ -6,7 +6,7 @@ Run from the repository root on Windows with Odin and the matching SDL3 runtime:
 New-Item -ItemType Directory -Force build | Out-Null
 $odinRoot = (& odin root).Trim()
 Copy-Item -LiteralPath (Join-Path $odinRoot 'vendor/sdl3/SDL3.dll') -Destination build
-odin run tests/port_regression -collection:ofoster=src -out:build/port-regression.exe
+odin run foster/tests/port_regression -collection:olib=. -out:build/port-regression.exe
 ```
 
 The native executable tests D3D12 and Vulkan without opening a window. Checks
@@ -25,12 +25,12 @@ depth writing/comparison and repeated Batcher disposal.
 For WebGL2, build the same checks and copy Odin's browser runtime:
 
 ```powershell
-odin build tests/port_regression -collection:ofoster=src -target:js_wasm32 -out:build/port-regression.wasm
-Copy-Item -LiteralPath (Join-Path $odinRoot 'core/sys/wasm/js/odin.js') -Destination tests/webtest/odin.js
+odin build foster/tests/port_regression -collection:olib=. -target:js_wasm32 -out:build/port-regression.wasm
+Copy-Item -LiteralPath (Join-Path $odinRoot 'core/sys/wasm/js/odin.js') -Destination foster/tests/webtest/odin.js
 python -m http.server 8139 --bind 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8139/tests/port_regression/?debug=1` in a browser.
+Open `http://127.0.0.1:8139/foster/tests/port_regression/?debug=1` in a browser.
 Every group prints `PASS`; an assertion or browser exception is a failure.
 The Web run also tests empty directories, persisted binary-safe storage,
 directory enumeration and recursive removal under `/ofoster-port-regression`.
@@ -46,7 +46,7 @@ UTF-8 text accumulation and independent state-buffer storage, scaled text
 kerning, sine offsets and wrapped line spacing. `zip64.zip` exercises ZIP64
 end records and central-directory extra fields, CRC failures, truncated prefixes,
 reinitialization and an end-record signature inside the comment. Regenerate it
-with `python tests/port_regression/make_zip64.py`.
+with `python foster/tests/port_regression/make_zip64.py`.
 
 The real font fixture [Abel-Regular.ttf](fonts/Abel-Regular.ttf) comes from
 [Google Fonts](https://github.com/google/fonts/tree/main/ofl/abel), under the
@@ -62,7 +62,7 @@ textures and that pixel-perfect additions contain only binary alpha values.
 
 ## Browser input and file fixtures
 
-Use `http://127.0.0.1:8139/tests/port_regression/?debug=1&input-tests=1` to enable
+Use `http://127.0.0.1:8139/foster/tests/port_regression/?debug=1&input-tests=1` to enable
 additional simulated browser tests. They exercise standard gamepad mapping,
 button/axis transitions, rumble requests, DOM UTF-8/emoji/IME commits, text-input
 toggling, cursor visibility/release, asynchronous clipboard success/denial,

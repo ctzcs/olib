@@ -3,6 +3,7 @@
 // 分层（自底向上）：
 //   ui.odin          UI_Context：clay 初始化/帧流程（指针/滚动/输入边沿）、字体表
 //   ui_text.odin     msdf 字体测量（clay 回调）与字形四边形生成
+//   ui_font_bake.odin Foster Font -> 位图图集、字形表与纹理
 //   ui_backend.odin  clay RenderCommand -> UI_Op 翻译（CPU 可测）+ Batcher 发射
 //   ui_input.odin    鼠标捕获 / 导航焦点 / 禁用态 / 模态 / 输入消费
 //   ui_widgets.odin  主题、基础控件、图像、滑条、进度和容器

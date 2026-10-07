@@ -45,6 +45,28 @@ foster.BatcherRender(&batcher, target)
 的结果由调用者 `delete`。`ui_translate_into` 可以复用自有缓冲。
 不要在 `ui_end` 之后再调用 `ui_draw`，它会重复结束布局。
 
+## 位图字体烘焙
+
+`ui_font_bake` 使用 Foster 的公开 Font API，把字体烘焙为 UI 可注册的位图图集。
+默认字符集是 ASCII 32..126；可传 `[]int` 指定字符集。48px ASCII 图集为 1024x512，
+更大的字号或字符集按 shelf 布局扩容，字形间留 2px，像素采用预乘 alpha。
+
+```odin
+source := foster.FontLoadFile("path/to/font.ttf")
+font, texture, ok := ui.ui_font_bake(&game.GraphicsDevice, &source, 48)
+foster.FontDispose(&source)
+if ok {
+    ui.ui_register_font(&ctx, &font, texture, .Bitmap)
+}
+```
+
+`font` 必须保持地址稳定、存活到 `ui_dispose` 之后。调用方用 `MsdfFontDispose`
+释放图集像素、字形和字距表，再用 `TextureDispose` 释放纹理；失败时不遗留资源。
+烘焙把 `FontMake` 移入 `LineGap` 的下降量还原，以保留旧示例的基线和行高。
+`Descent == 0 && LineGap > 0` 按这一归一化约定处理。默认 ASCII 保留旧示例的
+字距表语义（码点作为字形索引），以保证既有截图不变；自定义字符集用 `FontGetKerning`
+按码点查询字距。
+
 ## 控件和容器
 
 | 接口 | 用途 |

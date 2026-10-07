@@ -13,6 +13,73 @@ import clay "olib:thirdparty/clay-odin"
 clay_test_mutex: sync.Mutex
 
 // ---------------------------------------------------------------------------
+// 真实字体：CPU 烘焙与资源所有权（无 GPU）
+// ---------------------------------------------------------------------------
+
+@(test)
+font_bake_ascii_atlas :: proc(t: ^testing.T) {
+	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	source := foster.FontMake(data)
+	defer foster.FontDispose(&source)
+	font, ok := ui_font_bake_image(&source, 48)
+	if !testing.expect(t, ok) {
+		return
+	}
+	defer foster.MsdfFontDispose(&font)
+	testing.expect(t, len(font.Characters) == 95)
+	testing.expect(t, font.Image.Width == 1024 && font.Image.Height == 512)
+	testing.expect(t, font.OwnsImage && len(font.Image.Pixels) == 1024 * 512)
+	a, found_a := foster.MsdfFontFindCharacter(&font, 'A')
+	testing.expect(t, found_a && a.SourceRect.Width > 0 && a.SourceRect.Height > 0)
+	space, found_space := foster.MsdfFontFindCharacter(&font, ' ')
+	testing.expect(t, found_space && space.SourceRect == (foster.Rect{}) && space.Advance > 0)
+	testing.expect(t, font.Descent < 0 && font.LineHeight == font.Ascent - font.Descent)
+	visible := false
+	for pixel in font.Image.Pixels {
+		testing.expect(t, pixel.R == pixel.A && pixel.G == pixel.A && pixel.B == pixel.A)
+		visible = visible || pixel.A > 0
+	}
+	testing.expect(t, visible)
+}
+
+@(test)
+font_bake_custom_charset_grows_atlas :: proc(t: ^testing.T) {
+	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	source := foster.FontMake(data)
+	defer foster.FontDispose(&source)
+	points: [95]int
+	for &cp, i in points {
+		cp = 32 + i
+	}
+	font, ok := ui_font_bake_image(&source, 192, points[:])
+	if !testing.expect(t, ok) {
+		return
+	}
+	defer foster.MsdfFontDispose(&font)
+	testing.expect(t, len(font.Characters) == len(points))
+	testing.expect(t, font.Image.Height > 512)
+	for ch in font.Characters {
+		r := ch.SourceRect
+		testing.expect(t, r.X >= 0 && r.Y >= 0)
+		testing.expect(t, r.X + r.Width <= f32(font.Image.Width))
+		testing.expect(t, r.Y + r.Height <= f32(font.Image.Height))
+	}
+}
+
+@(test)
+font_bake_rejects_unusable_inputs :: proc(t: ^testing.T) {
+	_, ok := ui_font_bake_image(nil, 48)
+	testing.expect(t, !ok)
+	empty: foster.Font
+	_, ok = ui_font_bake_image(&empty, 48)
+	testing.expect(t, !ok)
+	_, ok = ui_font_bake_image(&empty, 0)
+	testing.expect(t, !ok)
+	_, _, ok = ui_font_bake(nil, &empty, 48)
+	testing.expect(t, !ok)
+}
+
+// ---------------------------------------------------------------------------
 // 测试字体：手工构造 msdf 元数据（2 字符 + 1 对字距）
 // ---------------------------------------------------------------------------
 

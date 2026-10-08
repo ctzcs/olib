@@ -2,6 +2,7 @@
 #+test
 package ui
 
+import "core:math"
 import "core:sync"
 import "core:testing"
 
@@ -110,6 +111,135 @@ font_bake_rejects_unusable_inputs :: proc(t: ^testing.T) {
 	testing.expect(t, !ok)
 	_, _, ok = ui_font_bake(nil, &empty, 48)
 	testing.expect(t, !ok)
+}
+
+// ---------------------------------------------------------------------------
+// SDF 字体：距离编码、度量与扩容（无 GPU）
+// ---------------------------------------------------------------------------
+
+@(test)
+font_bake_sdf_ascii_encoding_and_baseline :: proc(t: ^testing.T) {
+	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	source := foster.FontMake(data)
+	defer foster.FontDispose(&source)
+	font, ok := ui_font_bake_sdf_image(&source)
+	if !testing.expect(t, ok) {
+		return
+	}
+	defer foster.MsdfFontDispose(&font)
+	testing.expect(t, len(font.Characters) == 95 && font.DistanceRange == 8)
+	testing.expect(t, font.Image.Width == 1024 && font.Image.Height == 512)
+	testing.expect(t, font.OwnsImage)
+	a, found := foster.MsdfFontFindCharacter(&font, 'A')
+	testing.expect(t, found && a.SourceRect.Width > 0 && a.SourceRect.Height > 0)
+	space, has_space := foster.MsdfFontFindCharacter(&font, ' ')
+	testing.expect(t, has_space && space.SourceRect == (foster.Rect{}) && space.Advance > 0)
+	grayscale := true
+	for pixel in font.Image.Pixels {
+		grayscale = grayscale && pixel.R == pixel.G && pixel.R == pixel.B && pixel.A == 255
+	}
+	testing.expect(t, grayscale)
+	testing.expect(t, font.Image.Pixels[0].R == 0)
+	interior := false
+	for y in int(a.SourceRect.Height / 4)..<int(a.SourceRect.Height * 3 / 4) {
+		for x in int(a.SourceRect.Width / 4)..<int(a.SourceRect.Width * 3 / 4) {
+			pixel := font.Image.Pixels[(int(a.SourceRect.Y) + y) * font.Image.Width + int(a.SourceRect.X) + x]
+			interior = interior || pixel.R > 128
+		}
+	}
+	testing.expect(t, interior, "inside a glyph must encode above the edge threshold")
+	bitmap, bitmap_ok := ui_font_bake_image(&source, 48)
+	defer foster.MsdfFontDispose(&bitmap)
+	if !testing.expect(t, bitmap_ok) {
+		return
+	}
+	testing.expect(t, font.Size == bitmap.Size && font.Ascent == bitmap.Ascent &&
+		font.Descent == bitmap.Descent && font.LineHeight == bitmap.LineHeight)
+	for ch, i in font.Characters {
+		original := bitmap.Characters[i]
+		testing.expect(t, ch.Advance == original.Advance)
+		if ch.SourceRect.Width > 0 {
+			testing.expect(t, math.abs(ch.Offset[0] + 5 - original.Offset[0]) <= 1)
+			testing.expect(t, math.abs(ch.Offset[1] + 5 - original.Offset[1]) <= 1)
+			testing.expect(t, ch.SourceRect.Width == original.SourceRect.Width + 10)
+			testing.expect(t, ch.SourceRect.Height == original.SourceRect.Height + 10)
+		}
+	}
+}
+
+@(test)
+font_bake_sdf_explicit_ascii_kerning :: proc(t: ^testing.T) {
+	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	source := foster.FontMake(data)
+	defer foster.FontDispose(&source)
+	points: [95]int
+	for &cp, i in points {
+		cp = 32 + i
+	}
+	default_font, default_ok := ui_font_bake_sdf_image(&source)
+	defer foster.MsdfFontDispose(&default_font)
+	explicit_font, explicit_ok := ui_font_bake_sdf_image(&source, 48, points[:])
+	defer foster.MsdfFontDispose(&explicit_font)
+	if !testing.expect(t, default_ok && explicit_ok) {
+		return
+	}
+	if !testing.expect(t, len(default_font.Kerning) == len(explicit_font.Kerning)) {
+		return
+	}
+	testing.expect(t, len(default_font.Kerning) > 0)
+	for pair, i in default_font.Kerning {
+		testing.expect(t, pair == explicit_font.Kerning[i])
+		testing.expect(t, pair.Advance == foster.FontGetKerning(&source, pair.First, pair.Second,
+			foster.FontGetScale(&source, 48)))
+	}
+}
+
+@(test)
+font_bake_sdf_large_charset_and_range :: proc(t: ^testing.T) {
+	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	source := foster.FontMake(data)
+	defer foster.FontDispose(&source)
+	points: [95]int
+	for &cp, i in points {
+		cp = 32 + i
+	}
+	font, ok := ui_font_bake_sdf_image(&source, 192, points[:], 12)
+	if !testing.expect(t, ok) {
+		return
+	}
+	defer foster.MsdfFontDispose(&font)
+	testing.expect(t, font.Image.Height > 512 && font.DistanceRange == 12)
+	for ch in font.Characters {
+		r := ch.SourceRect
+		testing.expect(t, r.X >= 0 && r.Y >= 0 && r.X + r.Width <= f32(font.Image.Width) &&
+			r.Y + r.Height <= f32(font.Image.Height))
+	}
+}
+
+@(test)
+font_bake_sdf_rejects_invalid_inputs :: proc(t: ^testing.T) {
+	_, ok := ui_font_bake_sdf_image(nil)
+	testing.expect(t, !ok)
+	empty: foster.Font
+	_, ok = ui_font_bake_sdf_image(&empty)
+	testing.expect(t, !ok)
+	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	source := foster.FontMake(data)
+	defer foster.FontDispose(&source)
+	for size in ([]f32{0, -1, math.QNAN_F32, math.INF_F32}) {
+		_, ok = ui_font_bake_sdf_image(&source, size)
+		testing.expect(t, !ok)
+	}
+	for distance_range in ([]f32{0, -1, math.QNAN_F32, math.INF_F32}) {
+		_, ok = ui_font_bake_sdf_image(&source, 48, distance_range = distance_range)
+		testing.expect(t, !ok)
+	}
+	_, _, ok = ui_font_bake_sdf(nil, &source)
+	testing.expect(t, !ok)
+	source.Disposed = true
+	_, ok = ui_font_bake_sdf_image(&source)
+	testing.expect(t, !ok)
+	source.Disposed = false
 }
 
 // ---------------------------------------------------------------------------

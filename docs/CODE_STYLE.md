@@ -13,6 +13,7 @@ olib/
 ├── foster/      唯一运行时：App / 窗口 / 输入 / 图形 / 基础类型，豁免本规范
 ├── kit/         扩展层（kit）：UI / 资源管线 / 相机场景 / 3D / 动画 / 音频 / CLI
 ├── thirdparty/  外部绑定：clay-odin / odin-imgui
+├── prompts/     给 AI 的提示词与开发约定（new-project / dod-guidelines）
 └── docs/        本文档
 ```
 

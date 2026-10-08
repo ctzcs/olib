@@ -2026,6 +2026,9 @@ tick_app :: proc(app: ^App) {
 	} else if app.RenderProc != nil {
 		app.RenderProc(app)
 	}
+	// [olib L-001] 每帧末尾清空临时分配器：Update/Render 中的临时分配到下一帧失效。
+	// Startup 中的临时分配在第一帧结束时失效；清理在 RenderProc 和 end_frame 之后执行。
+	free_all(context.temp_allocator)
 }
 
 // ==============================================================================

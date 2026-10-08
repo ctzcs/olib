@@ -63,6 +63,9 @@ DirectoryStorage :: struct {
 RelativeStorage :: struct {
 	Container: StorageContainer,
 	Prefix:    string,
+	// [olib L-001] 返回的容器借用此路径，直到路径改变或 RelativeStorageDispose。
+	owned_root:     string,
+	root_allocator: runtime.Allocator,
 }
 
 ContentStorage :: struct {
@@ -459,9 +462,25 @@ relative_storage_as_container :: proc(storage: ^RelativeStorage) -> StorageConta
 		return {}
 	}
 	root := storage_join_path(&storage.Container, storage.Prefix)
+	// [olib L-001] 拼接路径必须跨帧有效；临时路径只用于比较与克隆。
+	if storage.owned_root != root {
+		owned, _ := strings.clone(root)
+		delete(storage.owned_root, storage.root_allocator)
+		storage.owned_root = owned
+		storage.root_allocator = context.allocator
+	}
 	result := storage.Container
-	result.Root = root
+	result.Root = storage.owned_root
 	return result
+}
+
+// [olib L-001] 释放 RelativeStorage 持有的拼接路径；不释放借用的 base/prefix。
+relative_storage_dispose :: proc(storage: ^RelativeStorage) {
+	if storage == nil {
+		return
+	}
+	delete(storage.owned_root, storage.root_allocator)
+	storage^ = {}
 }
 
 // ==============================================================================
@@ -822,9 +841,7 @@ file_system_open_title_storage :: proc(fs: ^FileSystem) -> StorageContainer {
 	if base_path != nil {
 		root = string(base_path)
 	}
-	if root == "" {
-		root = storage_os_working_directory(context.temp_allocator)
-	}
+	// [olib L-001] SDL.GetBasePath 失败时保留空 Root，即相对当前工作目录（与 web 一致）。
 	return StorageContainer{Root = root, Writable = false}
 }
 
@@ -977,6 +994,8 @@ DisposeStorage :: storage_dispose
 DirectoryStorageInit :: directory_storage_init
 DirectoryStorageContainer :: directory_storage_as_container
 RelativeStorageInit :: relative_storage_init
+// [olib L-001] RelativeStorage 持有的拼接路径释放入口。
+RelativeStorageDispose :: relative_storage_dispose
 RelativeStorageContainer :: relative_storage_as_container
 ContentStorageInit :: content_storage_init
 ContentStorageContainer :: content_storage_as_container

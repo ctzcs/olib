@@ -5,8 +5,8 @@
 package debug
 
 import "base:runtime"
-import "core:fmt"
-import "core:mem"
+@(require) import "core:fmt"
+@(require) import "core:mem"
 
 // ------------------------------------------------------------------------------
 // Tracking Allocator —— 泄漏/非法释放追踪

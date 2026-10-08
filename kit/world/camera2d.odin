@@ -1,7 +1,6 @@
 // world —— 相机与屏幕路由（对位 DragonLib Engine.World 的 2D 部分）。
 package world
 
-import "core:math"
 
 import foster "olib:foster"
 

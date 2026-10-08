@@ -68,7 +68,7 @@ package virtual
 //   迭代 —— begin / next / skip
 
 import "base:builtin"
-import "base:runtime"
+@(require) import "base:runtime"
 import vmem "core:mem/virtual"
 
 // ------------------------------------------------------------------------------

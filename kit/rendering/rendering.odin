@@ -12,7 +12,6 @@ package rendering
 
 import "core:strings"
 
-import foster "olib:foster"
 
 // ------------------------------------------------------------------------------
 // 包内共享辅助 —— 字符串克隆 / 路径拼接（context.allocator，调用方持有）

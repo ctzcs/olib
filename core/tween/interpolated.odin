@@ -2,7 +2,6 @@
 // Tween / Managed_Tween 都以它为基础；不含循环模式（那在 tween.odin）。
 package tween
 
-import math "core:math"
 
 // 分区：
 //   类型 —— Transition / Interpolated

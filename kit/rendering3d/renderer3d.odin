@@ -6,7 +6,6 @@
 // 阴影/CSM 与 Tonemap 后处理是后续增量（DepthOnly 着色器已备好）。
 package rendering3d
 
-import "core:mem"
 
 import world "olib:kit/world"
 import foster "olib:foster"

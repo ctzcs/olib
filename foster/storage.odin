@@ -602,7 +602,8 @@ zip_storage_decode :: proc(data: []u8, entries: ^map[string][dynamic]u8) -> ZipS
 	}
 	central := int(central_start)
 	central_end := central + int(central_size)
-	for entry in 0 ..< count {
+	// [olib L-002] 条目计数循环不使用索引，避免 unused vet 报错。
+	for _ in 0 ..< count {
 		if central_end - central < 46 || read32(data, central) != 0x02014b50 {
 			return .InvalidArchive
 		}

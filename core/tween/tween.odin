@@ -3,7 +3,6 @@
 // 节点见 manager.odin，托管包装见 managed_tween.odin。
 package tween
 
-import math "core:math"
 
 // 分区：
 //   类型 —— Repeat_Mode / Tween / Tween_Config

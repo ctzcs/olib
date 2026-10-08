@@ -11,7 +11,7 @@ Adapted from https://github.com/jakubtomsu/ravn/tree/main/entities
 package entities
 
 import "base:intrinsics"
-import "base:runtime"
+@(require) import "base:runtime"
 
 // 分区：
 //   类型 —— Handle / Base / Entity_Ptr / Entities / Buffer

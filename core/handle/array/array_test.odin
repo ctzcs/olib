@@ -21,7 +21,7 @@ clear_preserves_generations_and_reuses_all_slots :: proc(t: ^testing.T) {
 	capacity := cap(values)
 	slot_count := builtin.len(values.slots)
 
-	for cycle in 0..<3 {
+	for _ in 0..<3 {
 		clear(&values)
 		clear(&values)
 		testing.expect(t, len(values) == 0)

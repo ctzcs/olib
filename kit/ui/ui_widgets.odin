@@ -380,15 +380,15 @@ ui_progress_bar :: proc(
 	width: f32 = 200,
 	height: f32 = 12,
 ) {
-	value := math.clamp(value, 0, 1)
+	clamped_value := math.clamp(value, 0, 1)
 	if clay.UI()(clay.ElementDeclaration{
 		layout = {sizing = {width = clay.SizingFixed(max(width, 0)), height = clay.SizingFixed(max(height, 0))}},
 		backgroundColor = ui_clay_color(theme.button),
 		cornerRadius = clay.CornerRadiusAll(height * 0.5),
 	}) {
-		if value > 0 {
+		if clamped_value > 0 {
 			if clay.UI()(clay.ElementDeclaration{
-				layout = {sizing = {width = clay.SizingFixed(max(width, 0) * value), height = clay.SizingFixed(max(height, 0))}},
+				layout = {sizing = {width = clay.SizingFixed(max(width, 0) * clamped_value), height = clay.SizingFixed(max(height, 0))}},
 				backgroundColor = ui_clay_color(theme.accent),
 				cornerRadius = clay.CornerRadiusAll(height * 0.5),
 			}) {}
@@ -411,7 +411,7 @@ ui_slider :: proc(
 	state := ui_interact(ctx, id, options)
 	before := value^
 	span := maximum - minimum
-	width := max(width, 24)
+	min_width := max(width, 24)
 	if !state.disabled && span > 0 {
 		box := clay.GetElementData(clay.ID(id))
 		if box.found && (state.active || state.released) {
@@ -427,8 +427,8 @@ ui_slider :: proc(
 	if clay.UI()(clay.ElementDeclaration{
 		id = clay.ID(id),
 		layout = {
-			sizing = {width = clay.SizingFixed(width), height = clay.SizingFixed(24)},
-			padding = {left = u16(t * (width - 16)), top = 4},
+			sizing = {width = clay.SizingFixed(min_width), height = clay.SizingFixed(24)},
+			padding = {left = u16(t * (min_width - 16)), top = 4},
 		},
 		backgroundColor = ui_clay_color(state.disabled ? theme.panel : theme.button),
 		cornerRadius = clay.CornerRadiusAll(12),

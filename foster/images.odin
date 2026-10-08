@@ -786,39 +786,40 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 	}
 	a.SourceData = make([]u8, len(data))
 	copy(a.SourceData, data)
-	data := a.SourceData
-	frame_count := int(ase_u16(data, &at))
-	a.Width = int(ase_u16(data, &at))
-	a.Height = int(ase_u16(data, &at))
-	a.Format = AsepriteFormat(ase_u16(data, &at))
-	_ = ase_u32(data, &at)
-	_ = ase_u16(data, &at)
+	// [olib L-002] 解码使用拥有的输入副本，避免遮蔽 data 参数。
+	source_data := a.SourceData
+	frame_count := int(ase_u16(source_data, &at))
+	a.Width = int(ase_u16(source_data, &at))
+	a.Height = int(ase_u16(source_data, &at))
+	a.Format = AsepriteFormat(ase_u16(source_data, &at))
+	_ = ase_u32(source_data, &at)
+	_ = ase_u16(source_data, &at)
 	at += 8
 	at += 1
 	at += 3
-	_ = ase_u16(data, &at)
+	_ = ase_u16(source_data, &at)
 	at += 2
-	_ = ase_u16(data, &at)
-	_ = ase_u16(data, &at)
-	_ = ase_u16(data, &at)
-	_ = ase_u16(data, &at)
+	_ = ase_u16(source_data, &at)
+	_ = ase_u16(source_data, &at)
+	_ = ase_u16(source_data, &at)
+	_ = ase_u16(source_data, &at)
 	at += 84
 	for fi in 0 ..< frame_count {
-		if at + 16 > len(data) {
+		if at + 16 > len(source_data) {
 			break
 		}
 		start := at
-		frame_size := int(ase_u32(data, &at))
-		_ = ase_u16(data, &at)
-		old_count := int(ase_u16(data, &at))
-		duration := ase_u16(data, &at)
+		frame_size := int(ase_u32(source_data, &at))
+		_ = ase_u16(source_data, &at)
+		old_count := int(ase_u16(source_data, &at))
+		duration := ase_u16(source_data, &at)
 		at += 2
-		new_count := int(ase_u32(data, &at))
+		new_count := int(ase_u32(source_data, &at))
 		chunk_count := new_count
 		if chunk_count == 0 {
 			chunk_count = old_count
 		}
-		end := min(start + frame_size, len(data))
+		end := min(start + frame_size, len(source_data))
 		frame := AsepriteFrame {
 			Duration = f32(duration),
 		}
@@ -828,15 +829,15 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 				break
 			}
 			chunk_start := at
-			size := int(ase_u32(data, &at))
-			typ := ase_u16(data, &at)
+			size := int(ase_u32(source_data, &at))
+			typ := ase_u16(source_data, &at)
 			chunk_end := min(chunk_start + size, end)
 			switch typ {
 			case 0x2019:
 				if at + 20 <= chunk_end {
-					total := int(ase_u32(data, &at))
-					first := int(ase_u32(data, &at))
-					last := int(ase_u32(data, &at))
+					total := int(ase_u32(source_data, &at))
+					first := int(ase_u32(source_data, &at))
+					last := int(ase_u32(source_data, &at))
 					at += 8
 					if total > 0 && last >= first {
 						needed := last + 1
@@ -847,49 +848,49 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 							if at + 6 > chunk_end {
 								break
 							}
-							flags := ase_u16(data, &at)
-							r, g, b, alpha := data[at], data[at + 1], data[at + 2], data[at + 3]
+							flags := ase_u16(source_data, &at)
+							r, g, b, alpha := source_data[at], source_data[at + 1], source_data[at + 2], source_data[at + 3]
 							at += 4
 							a.Palette[pi] = Color{r, g, b, alpha}
 							if flags & 1 != 0 && at + 2 <= chunk_end {
-								_ = ase_string(data, &at)
+								_ = ase_string(source_data, &at)
 							}
 						}
 					}
 				}
 			case 0x0004, 0x0011:
 				if len(a.Palette) == 0 && at + 2 <= chunk_end {
-					count := int(ase_u16(data, &at))
+					count := int(ase_u16(source_data, &at))
 					if count <= 0 {
 						count = 256
 					}
 					base := 0
 					if typ == 0x0011 && at + 2 <= chunk_end {
-						base = int(ase_u16(data, &at))
-						_ = ase_u16(data, &at)
+						base = int(ase_u16(source_data, &at))
+						_ = ase_u16(source_data, &at)
 					}
 					if len(a.Palette) < base + count {
 						resize(&a.Palette, base + count)
 					}
 					for pi := 0; pi < count && at + 3 <= chunk_end; pi += 1 {
-						a.Palette[base + pi] = Color{data[at], data[at + 1], data[at + 2], 255}
+						a.Palette[base + pi] = Color{source_data[at], source_data[at + 1], source_data[at + 2], 255}
 						at += 3
 					}
 				}
 			case 0x2004:
 				if at + 16 <= chunk_end {
-					flags := ase_u16(data, &at)
-					layer_type := ase_u16(data, &at)
-					child := ase_u16(data, &at)
-					dw := ase_u16(data, &at)
-					dh := ase_u16(data, &at)
-					blend := ase_u16(data, &at)
-					opacity := data[at]
+					flags := ase_u16(source_data, &at)
+					layer_type := ase_u16(source_data, &at)
+					child := ase_u16(source_data, &at)
+					dw := ase_u16(source_data, &at)
+					dh := ase_u16(source_data, &at)
+					blend := ase_u16(source_data, &at)
+					opacity := source_data[at]
 					at += 4
-					name := ase_string(data, &at)
+					name := ase_string(source_data, &at)
 					tileset_index := -1
 					if layer_type == 2 && at + 4 <= chunk_end {
-						tileset_index = int(ase_u32(data, &at))
+						tileset_index = int(ase_u32(source_data, &at))
 					}
 					lf: AsepriteLayerFlags = {}
 					for flag in AsepriteLayerFlag {
@@ -912,16 +913,16 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 				}
 			case 0x2005:
 				if at + 16 <= chunk_end {
-					layer := int(ase_u16(data, &at))
-					x := int(ase_s16(data, &at))
-					y := int(ase_s16(data, &at))
-					opacity := data[at]
+					layer := int(ase_u16(source_data, &at))
+					x := int(ase_s16(source_data, &at))
+					y := int(ase_s16(source_data, &at))
+					opacity := source_data[at]
 					at += 1
-					cel_type := AsepriteCelType(ase_u16(data, &at))
-					z := int(ase_s16(data, &at))
+					cel_type := AsepriteCelType(ase_u16(source_data, &at))
+					z := int(ase_s16(source_data, &at))
 					at += 5
 					if cel_type == .LinkedCel {
-						linked := int(ase_u16(data, &at))
+						linked := int(ase_u16(source_data, &at))
 						append(&frame.Cels, AsepriteCel {
 							Frame       = fi,
 							Layer       = layer,
@@ -933,9 +934,9 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 							LinkedLayer = layer,
 						})
 					} else if cel_type != .CompressedTilemap && at + 4 <= chunk_end {
-						w := int(ase_u16(data, &at))
-						h := int(ase_u16(data, &at))
-						payload := data[at:chunk_end]
+						w := int(ase_u16(source_data, &at))
+						h := int(ase_u16(source_data, &at))
+						payload := source_data[at:chunk_end]
 						raw := payload
 						buf: bytes.Buffer
 						if cel_type == .CompressedImage {
@@ -961,17 +962,17 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 				}
 			case 0x2018:
 				if at + 10 <= chunk_end {
-					count := int(ase_u16(data, &at))
+					count := int(ase_u16(source_data, &at))
 					at += 8
 					for _ in 0 ..< count {
-						from := int(ase_u16(data, &at))
-						to := int(ase_u16(data, &at))
-						dir := AsepriteLoopDir(data[at])
+						from := int(ase_u16(source_data, &at))
+						to := int(ase_u16(source_data, &at))
+						dir := AsepriteLoopDir(source_data[at])
 						at += 1
-						repeat := int(ase_u16(data, &at))
+						repeat := int(ase_u16(source_data, &at))
 						at += 10
 						append(&a.Tags, AsepriteTag {
-							Name      = ase_string(data, &at),
+							Name      = ase_string(source_data, &at),
 							From      = from,
 							To        = to,
 							Direction = dir,
@@ -983,33 +984,33 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 				}
 			case 0x2022:
 				if at + 12 <= chunk_end {
-					count := int(ase_u32(data, &at))
-					flags := ase_u32(data, &at)
+					count := int(ase_u32(source_data, &at))
+					flags := ase_u32(source_data, &at)
 					at += 4
 					slice := AsepriteSlice {
-						Name = ase_string(data, &at),
+						Name = ase_string(source_data, &at),
 					}
 					for _ in 0 ..< count {
-						start_frame := int(ase_u32(data, &at))
-						x := int(ase_s32(data, &at))
-						y := int(ase_s32(data, &at))
-						w := int(ase_u32(data, &at))
-						h := int(ase_u32(data, &at))
+						start_frame := int(ase_u32(source_data, &at))
+						x := int(ase_s32(source_data, &at))
+						y := int(ase_s32(source_data, &at))
+						w := int(ase_u32(source_data, &at))
+						h := int(ase_u32(source_data, &at))
 						key := AsepriteSliceKey {
 							FrameStart = start_frame,
 							Bounds     = RectInt{x, y, w, h},
 						}
 						if flags & 1 != 0 && at + 16 <= chunk_end {
 							key.NinSliceCenter = RectInt {
-								int(ase_s32(data, &at)),
-								int(ase_s32(data, &at)),
-								int(ase_u32(data, &at)),
-								int(ase_u32(data, &at)),
+								int(ase_s32(source_data, &at)),
+								int(ase_s32(source_data, &at)),
+								int(ase_u32(source_data, &at)),
+								int(ase_u32(source_data, &at)),
 							}
 							key.HasNineSlice = true
 						}
 						if flags & 2 != 0 && at + 8 <= chunk_end {
-							key.Pivot = Point2{int(ase_s32(data, &at)), int(ase_s32(data, &at))}
+							key.Pivot = Point2{int(ase_s32(source_data, &at)), int(ase_s32(source_data, &at))}
 							key.HasPivot = true
 						}
 						append(&slice.Keys, key)
@@ -1019,19 +1020,19 @@ AsepriteLoad :: proc(data: []u8) -> Aseprite {
 					last_userdata_index = len(a.Slices) - 1
 				}
 			case 0x2020:
-				// User data is attached to the preceding chunk. Preserve the payload on
+				// User source_data is attached to the preceding chunk. Preserve the payload on
 				// the current frame and document-level object when no finer owner exists.
 				if at + 4 <= chunk_end {
-					flags := ase_u32(data, &at)
+					flags := ase_u32(source_data, &at)
 					text := ""
 					if flags & 1 != 0 && at + 2 <= chunk_end {
-						text = ase_string(data, &at)
+						text = ase_string(source_data, &at)
 					}
 					value := AsepriteUserDataValues {
 						Text = text,
 					}
 					if flags & 2 != 0 && at + 4 <= chunk_end {
-						value.Color = Color{data[at], data[at + 1], data[at + 2], data[at + 3]}
+						value.Color = Color{source_data[at], source_data[at + 1], source_data[at + 2], source_data[at + 3]}
 						at += 4
 					}
 					switch last_userdata_kind {

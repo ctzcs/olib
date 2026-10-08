@@ -6,7 +6,6 @@
 package rendering3d
 
 import "core:math"
-import "core:mem"
 
 import world "olib:kit/world"
 

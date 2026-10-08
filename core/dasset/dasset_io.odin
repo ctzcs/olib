@@ -143,7 +143,7 @@ dasset_read :: proc(data: []u8) -> (Dasset_Model, Dasset_Error) {
 	// 贴图表
 	tex_count, ok3 := r_count(data, &cur, 8)
 	if !ok3 do return model, .Truncated
-	for i in 0..<tex_count {
+	for _ in 0..<tex_count {
 		name, okn := r_string(data, &cur)
 		if !okn do return dispose_partial(&model), .Truncated
 		codec_v, okc := r_i32(data, &cur)
@@ -160,12 +160,12 @@ dasset_read :: proc(data: []u8) -> (Dasset_Model, Dasset_Error) {
 	if version >= 2 {
 		skel_count, oks := r_count(data, &cur, 4)
 		if !oks do return dispose_partial(&model), .Truncated
-		for i in 0..<skel_count {
+		for _ in 0..<skel_count {
 			joint_count, okj := r_count(data, &cur, 4)
 			if !okj do return dispose_partial(&model), .Truncated
 			append(&model.skeletons, Dasset_Skeleton{}) // 先挂进 model：中途失败也由 dispose 兜底
 			skel := &model.skeletons[len(model.skeletons) - 1]
-			for j in 0..<joint_count {
+			for _ in 0..<joint_count {
 				joint: Dasset_Joint
 				j, ojn := r_string(data, &cur)
 				if !ojn do return dispose_partial(&model), .Truncated
@@ -185,7 +185,7 @@ dasset_read :: proc(data: []u8) -> (Dasset_Model, Dasset_Error) {
 	// primitives
 	prim_count, okp := r_count(data, &cur, 8)
 	if !okp do return dispose_partial(&model), .Truncated
-	for i in 0..<prim_count {
+	for _ in 0..<prim_count {
 		append(&model.primitives, Dasset_Primitive{skin_index = -1, material = DASSET_MATERIAL_DEFAULT})
 		p := &model.primitives[len(model.primitives) - 1]
 		layout := i32(0)
@@ -258,7 +258,7 @@ dasset_read :: proc(data: []u8) -> (Dasset_Model, Dasset_Error) {
 	if version >= 2 {
 		clip_count, okc := r_count(data, &cur, 8)
 		if !okc do return dispose_partial(&model), .Truncated
-		for i in 0..<clip_count {
+		for _ in 0..<clip_count {
 			append(&model.clips, Dasset_Animation_Clip{}) // 先挂进 model：中途失败也由 dispose 兜底
 			clip := &model.clips[len(model.clips) - 1]
 			n, okn := r_string(data, &cur)
@@ -268,7 +268,7 @@ dasset_read :: proc(data: []u8) -> (Dasset_Model, Dasset_Error) {
 			clip.duration = r_f32(data, &cur)
 			channel_count, okch := r_count(data, &cur, 8)
 			if !okch do return dispose_partial(&model), .Truncated
-			for c in 0..<channel_count {
+			for _ in 0..<channel_count {
 				ch: Dasset_Animation_Channel
 				ch.joint_index, _ = r_i32(data, &cur)
 				path_v, okpv := r_i32(data, &cur)
@@ -358,7 +358,7 @@ w_u32 :: proc(out: ^[dynamic]u8, v: u32) {
 
 @(private)
 w_i32 :: proc(out: ^[dynamic]u8, v: i32) {
-	w_u32(out, transmute(u32)v)
+	w_u32(out, cast(u32)v)
 }
 
 @(private)
@@ -439,7 +439,7 @@ r_u32 :: proc(data: []u8, cur: ^int) -> (u32, bool) {
 @(private)
 r_i32 :: proc(data: []u8, cur: ^int) -> (i32, bool) {
 	v, ok := r_u32(data, cur)
-	return transmute(i32)v, ok
+	return cast(i32)v, ok
 }
 
 @(private)

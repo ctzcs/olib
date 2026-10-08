@@ -5,7 +5,7 @@
 // 具体有哪些屏幕由游戏自己定义 enum 传入。
 package world
 
-import "core:math"
+@(require) import "core:math"
 
 // Scene_Router(Screen) —— Screen 用 enum（或任何可 == 比较的小值类型）。
 // 注意：Screen 是泛型参数，调用处不能写隐式枚举选择子（.Title），

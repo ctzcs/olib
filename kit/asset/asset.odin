@@ -283,8 +283,8 @@ assets_load :: proc(m: ^Asset_Manager, guid: Guid) -> (Asset_Handle, Asset_Error
 
 	switch rec.kind {
 	case .Texture:
-		w, h, _, pixels, ok := blob_texture_parse(payload)
-		if !ok do return ASSET_HANDLE_NONE, .Parse_Error
+		w, h, _, pixels, tex_ok := blob_texture_parse(payload)
+		if !tex_ok do return ASSET_HANDLE_NONE, .Parse_Error
 
 		pixel_buf, aerr := make([dynamic]foster.Color, len(pixels) / 4, m.allocator)
 		if aerr != .None do return ASSET_HANDLE_NONE, .Import_Failed

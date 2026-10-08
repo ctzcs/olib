@@ -46,7 +46,7 @@ queue_count :: proc(q: ^Command_Queue($T)) -> int {
 // 注意 Odin 的 proc 字面量无闭包：需要状态的 handler 用 userdata 传入。
 queue_drain :: proc(q: ^Command_Queue($T), handler: proc(item: T, userdata: rawptr), userdata: rawptr = nil) -> int {
 	n := len(q.items) - q.head
-	for i in 0..<n {
+	for _ in 0..<n {
 		handler(q.items[q.head], userdata)
 		q.head += 1
 	}

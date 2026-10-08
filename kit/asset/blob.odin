@@ -9,7 +9,6 @@
 // 数值一律小端（v1 与宿主一致，x86/ARM 原生目标均为 LE）。
 package asset
 
-import "core:mem"
 
 BLOB_MAGIC :: [8]u8{ 'O', 'L', 'A', 'S', 'B', 'L', 'O', 'B' }
 

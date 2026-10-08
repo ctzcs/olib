@@ -46,7 +46,38 @@ foster.BatcherRender(&batcher, target)
 的结果由调用者 `delete`。`ui_translate_into` 可以复用自有缓冲。
 不要在 `ui_end` 之后再调用 `ui_draw`，它会重复结束布局。
 
+## 距离场字体（推荐）
+
+普通游戏 UI 默认用 `ui_font_bake_sdf`，以 `.MSDF` 注册，在不同显示字号和窗口缩放下
+保持笔画边缘清晰。它用 stb_truetype 在运行时生成单通道 SDF，将同一个距离值写入 RGB，
+复用现有 MSDF 着色器；极大字号的尖角会略圆，需要尖角质量时可使用离线 MSDF 图集。
+
+```odin
+source := foster.FontLoadFile("path/to/font.ttf") // 内嵌 TTF 可用 FontMake
+font, texture, ok := ui.ui_font_bake_sdf(&game.GraphicsDevice, &source, 48)
+foster.FontDispose(&source)
+if ok {
+    ui.ui_register_font(&ctx, &font, texture, .MSDF)
+}
+```
+
+- `size` 默认 48，是图集的烘焙尺寸，与控件的显示字号独立；显示时按 `字号 / Size` 缩放。
+- `codepoints` 默认 ASCII 32..126。中文等字符必须传入本地化文本中用到的全部码点，
+  源字体也必须包含对应字形。
+- `distance_range` 默认 8，是烘焙尺寸下编码的距离范围，写入 `MsdfFont.DistanceRange`。
+  字形外留 `ceil(distance_range / 2) + 1` 像素，RGB 为距离值、alpha 恒为 255，不做预乘。
+- `label` 默认 `"ui sdf font"`，作为 GPU 纹理名字。
+
+`font` 拥有 `Image.Pixels`、`Characters` 和 `Kerning`，必须保持地址稳定并存活到
+`ui_dispose` 之后；调用方随后用 `MsdfFontDispose` 和 `TextureDispose` 分别释放字体与纹理。
+源 `Font` 仍由调用方管理，可以在烘焙后释放；烘焙失败不遗留资源。
+
+示例：`run.bat ui_gallery shot sdf`、`run.bat ui_gallery shot sdf scaled`。
+
 ## 位图字体烘焙
+
+像素风或固定缩放场景仍可用位图；烘焙尺寸应等于“显示字号 × 缩放”的实际像素尺寸。
+UI 使用线性采样且图集没有 mipmap，将较大的位图缩小显示会让笔画边缘发灰发虚。
 
 `ui_font_bake` 使用 Foster 的公开 Font API，把字体烘焙为 UI 可注册的位图图集。
 默认字符集是 ASCII 32..126；可传 `[]int` 指定字符集。48px ASCII 图集为 1024x512，

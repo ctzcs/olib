@@ -74,7 +74,7 @@ Odin 一个目录一个包，编译器禁止循环导入；层界由包结构和
 ### 8. 文本与显示
 
 - 玩家可见文字一律经本地化表读取，例如 `loc_get("hud.restart")`、`loc_format("build.need_gold", cost)`，用占位符写整句，不拼接句子片段。内容名称按目录 ID 翻译（如 `building.catapult.name`），缺少翻译时回退为配置里的原名。
-- 本地化文本中出现的全部字符要传给 `ui.ui_font_bake` 的 `codepoints`，否则不在默认 ASCII 集里的字形不会显示。
+- 本地化文本中出现的全部字符要传给 `ui.ui_font_bake_sdf` 的 `codepoints`，否则不在默认 ASCII 集里的字形不会显示。
 - logic 可以返回拒绝原因枚举，由 view 翻译成文字；文本不参与模拟判断。
 
 ### 9. 验证

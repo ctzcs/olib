@@ -26,7 +26,7 @@
 | 骨骼动画 | SkeletonAnimator | `kit/animation` | Step/Linear/CubicSpline 采样、palette 传播、blend、蒙皮包围盒 |
 | 3D 渲染栈 | Rendering3D | `kit/rendering3d` | Mesh/材质/排序、着色器管线（dxil/spv `#load`）、前向主 pass（方向/点/聚光、透明、蒙皮）、DebugDraw3D、LOD |
 | 音频 | Audio | `kit/audio` | 直接绑 `vendor:sdl3`（Foster 本身不含音频）：设备流、WAV 装载、音量 |
-| 游戏 UI | Paper UI（替代） | `kit/ui` | clay 布局 + foster 后端：圆角/裁剪/九宫格、位图/MSDF 字体与 `ui_font_bake`、控件/焦点/模态/缩放 |
+| 游戏 UI | Paper UI（替代） | `kit/ui` | clay 布局 + foster 后端：圆角/裁剪/九宫格、位图/MSDF 字体、运行时 SDF 字体（`ui_font_bake_sdf`）与位图烘焙（`ui_font_bake`）、控件/焦点/模态/缩放 |
 | JobScheduler | Threading/* | 不移植 | `core:thread.Pool` + `core:sync.Wait_Group` 已覆盖“常驻池 + 完成等待”，见下文并行一节 |
 
 ## 后续（按需启动，无固定排期）
@@ -60,7 +60,7 @@ DragonLib JobScheduler 的主要价值（区间分批 `ScheduleParallel`、每�
 
 ### 工具链（构建期，随 3D 需求一起看）
 
-ShaderCompiler（HLSL → 四后端 + 哈希清单）、FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
+ShaderCompiler（HLSL → 四后端 + 哈希清单）、FbxToGltf、QoaEncode、msdf-atlas-gen（需要尖角质量时再做）、DataConfig。
 目前 `kit/rendering3d/shaders/build_shaders.ps1` 只覆盖 dxil/spv。
 
 ## 明确不做

@@ -216,7 +216,7 @@ kit/ui 目前**没有**文本输入/IME、Dropdown、富文本、拖放和列表
 
 帧流程（在 `RenderProc` 中）：设置 viewport 与指针 → `ui_set_navigation` → `ui_begin` → 声明 UI → 绘制世界 → `ui_draw` 叠加 UI → `ui_input_capture` 决定本帧鼠标/键盘是否还交给世界。读取 capture 之后再处理世界点击，避免穿透。
 
-- 字体：`foster.FontLoadFile` 或 `FontMake` 读取 TTF，`ui.ui_font_bake` 烘焙成位图图集，再 `ui_register_font`。**默认只烘焙 ASCII 32..126**；中文必须把实际用到的字符（本地化文本中的全部字符）作为 `codepoints` 传入，否则中文不显示。
+- 字体：`foster.FontLoadFile` 或 `FontMake` 读取 TTF，**默认用 `ui.ui_font_bake_sdf` 烘焙（建议 size 48），再以 `.MSDF` 注册到 `ui_register_font`**，使文字在不同字号和窗口缩放下保持锐利。`ui_font_bake` 位图只用于像素风或固定缩放，烘焙尺寸要等于“显示字号 × 缩放”的实际像素尺寸；线性采样且无 mipmap，缩小显示会发虚。**默认只烘焙 ASCII 32..126**；中文必须把本地化文本用到的全部字符作为 `codepoints` 传入，否则中文不显示。
 - 控件 ID 全局唯一且跨帧稳定；动态列表用内容 ID，不用会随排序变化的位置。
 - 主题集中在 `view` 的 theme 文件中，从 `ui.UI_THEME_DARK` 复制后调整；不要在每个控件里分别写颜色和尺寸。
 - 缩放：`ui_set_viewport(&ctx, rect, scale)` 的矩形与指针都是渲染目标像素，布局尺寸是逻辑像素。绘制、点击判定、相机预留区域和测试点击位置使用同一套布局结果。
@@ -243,6 +243,7 @@ kit/ui 目前**没有**文本输入/IME、Dropdown、富文本、拖放和列表
 5. 字体是游戏资源，放在 `assets/fonts` 并保留许可，不假定 olib 提供游戏字体。中文字体必须包含所需字形。
 6. 玩家可见文字从 `assets/locale/zh.json` 和 `en.json` 按键读取，使用完整句子和格式占位符；不要在代码中拼接翻译片段。
 7. 检查默认窗口、窄窗口、缩放、中英文长文本、悬停和禁用状态。英文变长时应换行、适配或调整布局，不能仅验证中文截图。
+8. 文字必须锐利；在默认窗口、窄窗口和缩放下截图，放大检查笔画边缘，发虚即不合格。
 
 ### Odin 编码风格
 
@@ -400,7 +401,7 @@ shutdown :: proc(app: ^foster.App) {
 - `logic` 可无窗口测试，覆盖正常路径及关键拒绝条件；涉及缓存或句柄时验证失效和复用。
 - 层间依赖检查覆盖上表的禁止导入（尤其 `logic` 不得 import foster/kit/view），以及任何代码不得 import `olib:foster/internal`。
 - 游戏用 `-vet` 编译通过，检查游戏及其可达依赖；olib 的 `check.ps1` 已对所有第一方包启用 vet。
-- UI 的文字、按钮和输入命中正确，点击不会穿透；窗口缩放和语言切换不会导致明显溢出。
+- UI 的文字、按钮和输入命中正确，点击不会穿透；文字在各缩放下锐利，窗口缩放和语言切换不会导致明显溢出。
 - 配置出错能定位原因；涉及保存时，写入和重新读取的内容一致。
 - 开发构建用 Tracking_Allocator 运行一局并退出，没有未释放的分配。
 - 桌面发布包可从发布目录启动，SDL3.dll 和资源齐全；Web 包无 SDL 导入并可通过本地 HTTP 打开完成基本交互。环境缺失的发布模式如实标为未验证。

@@ -193,7 +193,7 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 Odin 没有 GC，所有权必须显式：
 
 - 每种资源配一对 `xxx_init` / `xxx_destroy`（或 `_dispose`），在注释里写明谁分配、谁释放、生命周期多长。foster 资源（Texture、Batcher、Font、Target……）同样由明确的所有者在 `ShutdownProc` 中释放。
-- 长期数据用 `context.allocator`；一帧内用完的字符串、临时数组用 `context.temp_allocator`。**foster 的主循环不会清理临时分配器**，游戏在每帧末尾调用一次 `free_all(context.temp_allocator)`（例如在 `RenderProc` 开头 `defer`）。
+- 长期数据用 `context.allocator`；一帧内用完的字符串、临时数组用 `context.temp_allocator`。foster 在每帧末尾（`tick_app` 结束时，`RenderProc` 与 `end_frame` 之后）清空临时分配器；临时分配只在本帧有效，不要跨帧持有。`StartupProc` 中的临时分配在第一帧结束时失效。
 - 返回切片或字符串的 proc 在签名或注释中说明由谁 `delete`；接收 `allocator := context.allocator` 参数的 proc 按调用方传入的分配器分配。
 - 指针稳定性：`core/handle/array` 的 `get` 返回的指针在 `add` / `remove` 后可能失效，不要跨越结构变更持有；需要稳定地址时选 `core/handle/growing` 或 `virtual`（见 `core/handle/README.md`）。`kit/ui` 的 `UI_Context` 必须地址稳定、不可按值复制。
 - 开发构建用 `core:mem` 的 `Tracking_Allocator` 检查泄漏（olib `core/debug` 有现成包装），退出时打印未释放的分配。
@@ -357,8 +357,6 @@ update :: proc(app: ^foster.App) {
 }
 
 render :: proc(app: ^foster.App) {
-	// foster 不清理临时分配器：每帧末尾统一 free_all。
-	defer free_all(context.temp_allocator)
 
 	target := foster.DrawableTargetFromWindow(&app.Window)
 	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, foster.Color{24, 28, 36, 255})
@@ -401,7 +399,7 @@ shutdown :: proc(app: ^foster.App) {
 - 构建成功，游戏能够启动，默认场景可以操作并重开。
 - `logic` 可无窗口测试，覆盖正常路径及关键拒绝条件；涉及缓存或句柄时验证失效和复用。
 - 层间依赖检查覆盖上表的禁止导入（尤其 `logic` 不得 import foster/kit/view），以及任何代码不得 import `olib:foster/internal`。
-- 游戏自己的包能通过 `-vet`：olib 内部包目前未全部通过 vet，用 `-vet -vet-packages:<游戏包名列表>` 只检查游戏代码。
+- 游戏用 `-vet` 编译通过，检查游戏及其可达依赖；olib 的 `check.ps1` 已对所有第一方包启用 vet。
 - UI 的文字、按钮和输入命中正确，点击不会穿透；窗口缩放和语言切换不会导致明显溢出。
 - 配置出错能定位原因；涉及保存时，写入和重新读取的内容一致。
 - 开发构建用 Tracking_Allocator 运行一局并退出，没有未释放的分配。

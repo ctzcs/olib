@@ -57,6 +57,18 @@ files to these files, plus intentional API differences, is documented in
 `internal/third_party` (vendored C bindings) and `internal/web` (JS side of
 the web bridge).
 
+`tick_app` clears `context.temp_allocator` at the end of every frame, after
+`RenderProc` and `end_frame`, on both native and Web targets. Temporary allocations
+from Update/Render expire at that point; Startup allocations expire at the end of
+the first frame. Keep data needed across frames in a persistent allocator.
+
+`RelativeStorageContainer` returns a container borrowing the relative storage's
+owned path. That path survives frame cleanup, but expires when the resolved path
+changes or `RelativeStorageDispose` is called. Dispose the relative storage when
+finished; its base container and prefix are borrowed. Do not copy an owning
+relative storage and dispose both copies. If title storage cannot get SDL's base
+path, an empty `Root` resolves paths relative to the current working directory.
+
 ## Directory layout (relative to `foster/`)
 
 - `./`: the library package itself — `framework.odin` (app lifecycle, window,

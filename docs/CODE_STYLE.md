@@ -127,6 +127,7 @@ odin fmt kit
 
 ## 8. 测试约定
 
+- 提交前运行 `check.ps1`：对 `core/`、`kit/` 全部包及 foster 运行 `-vet` 检查，并对所有带测试的包启用 `-vet`。
 - 每包一个 `*_test.odin`，文件头 `#+test` + `package <包名>`，
   用例 `@(test)` + `testing.expect/expectf`。
 - 涉及文件系统的测试在 `%TEMP%/olib_<包名>_test` 下自建自清；

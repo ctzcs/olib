@@ -155,7 +155,8 @@ if show_dialog {
 - 同一线程可逐帧切换多个 context，但不可交错 begin/end 或并发操作 Clay。
 - `error_count / last_error` 记录 Clay 错误；`pool_overflow` 报告本帧文本/图像池超限。
   默认每帧各 1024 个，溢出元素不显示。运行时字符串要存活到渲染结束，
-  帧临时分配器可用于 `fmt.aprintf`。
+  帧临时分配器可用于 `fmt.aprintf`；foster 在 `RenderProc` 和 `end_frame` 之后
+  自动清空 `context.temp_allocator`，这些字符串只在本帧有效，不要跨帧持有。
 
 ## 兼容性与边界
 

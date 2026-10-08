@@ -68,7 +68,7 @@ Odin 一个目录一个包，编译器禁止循环导入；层界由包结构和
 ### 7. 内存与所有权
 
 - 每个持有堆数据的结构配 `xxx_init` / `xxx_destroy`，并在注释写明所有权。列、池、目录在一局的 init 中分配、在重开或退出时整体释放；不要在热点循环里逐实体分配。
-- 一帧内的临时数据用 `context.temp_allocator`，每帧末尾 `free_all(context.temp_allocator)`（foster 主循环不会替你做）。返回临时分配结果的 proc 在注释中写明“本帧有效”。
+- 一帧内的临时数据用 `context.temp_allocator`，foster 在每帧末尾（`RenderProc` 与 `end_frame` 之后）自动清空；不要跨帧持有，`StartupProc` 的临时分配也在第一帧结束时失效。返回临时分配结果的 proc 在注释中写明“本帧有效”。工作线程仍自行清理各自的临时分配器。
 - 测试与开发构建用 `mem.Tracking_Allocator` 检查泄漏；重开一局后内存不应增长。
 
 ### 8. 文本与显示
@@ -261,7 +261,7 @@ world_load_tuning :: proc(validated: Tuning) {
 | 测试里写 `testing.expect(t, enemies == 8)` | 用配置公式计算期望值 |
 | 工作线程直接 `ha.remove(&units.pool, h)` | 工作线程写结果区间，主线程按槽位顺序提交 |
 | 遍历 `map[Unit_Handle]Target` 决定结算顺序 | 按槽位顺序遍历列；`map` 只做查找 |
-| 每帧 `make([dynamic]T)` 收集候选再 `delete` | 复用持久缓冲（`clear` 后重填）或用 `context.temp_allocator` 并每帧 `free_all` |
+| 每帧 `make([dynamic]T)` 收集候选再 `delete` | 复用持久缓冲（`clear` 后重填）或用 `context.temp_allocator`；foster 每帧末尾清空，不要跨帧持有 |
 
 ## 参考入口
 

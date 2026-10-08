@@ -17,11 +17,10 @@
 
 ## 默认用法
 
-从仓库根目录导入 `"handle/array"`；使用 Odin collection 时导入
-`"olib:handle/array"`，并传入 `-collection:olib=<仓库路径>`。
+以 collection 方式导入 `"olib:core/handle/array"`，并传入 `-collection:olib=<olib 路径>`。
 
 ```odin
-import ha "olib:handle/array"
+import ha "olib:core/handle/array"
 
 Value_Handle :: distinct ha.Handle
 
@@ -89,10 +88,9 @@ if err != nil {
 在仓库根目录运行，每个子包单独测试：
 
 ```text
-odin test handle/array
-odin test handle/fixed
-odin test handle/growing
-odin test handle/virtual
-odin test tween -collection:olib=.
-odin run .
+odin test core/handle/array -collection:olib=.
+odin test core/handle/fixed -collection:olib=.
+odin test core/handle/growing -collection:olib=.
+odin test core/handle/virtual -collection:olib=.
+odin test core/tween -collection:olib=.
 ```

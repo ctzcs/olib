@@ -1,95 +1,75 @@
-# olib ← DragonLib 移植路线图
+# olib 路线图
 
-以 DragonLib（`Libs/Engine` 为主）为参照体的差距清单与排期。
-当前基线：`core/`（handle/entities/encoding/messaging/dasset/tween/debug/profiler）+
-`kit/`（asset/world 等）+ `thirdparty/`（clay-odin/odin-imgui/oflecs），
-9 包 32 测试全绿。规范见 [CODE_STYLE.md](CODE_STYLE.md)。
+以 DragonLib（C#/Foster，`Libs/Engine` 为主）为参照体：已移植了什么、还剩什么、哪些明确不做。
+规范见 [CODE_STYLE.md](CODE_STYLE.md)；验证统一用根目录 `check.ps1`。
 
-依赖关系总览：
+## 现状（2026-10）
 
-```
-原则：foster/ 保持 Foster API 对齐；扩展能力优先在 kit/ 拼装。
-3D 数学直接用 core:math/linalg（Matrix4 全套现成：inverse/determinant/
-translate/from_trs/from_quaternion/look_at），投影矩阵等少数缺口在
-kit/world 内做薄助手。
-P2 SkeletonAnimator ──→ Dasset 数据层（可先行）──→ 3D 渲染栈
-P2 3D 渲染栈 ──→ Camera3D（依赖 core:math/linalg）
-其余各项相互独立，可按需插队
-```
+- 三层：`core/`（纯 Odin）→ `foster/`（Foster 移植，唯一运行时）→ `kit/`（扩展能力），外加 `thirdparty/`（clay-odin / odin-imgui）。
+- 17 个包带单元测试，共 93 个测试；示例在同级仓库 OFoster_Sample（9 个，含 kit/ui 的截图验收）。
+- 原则：foster/ 保持 Foster API 对齐，本地修改登记到 [LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)；
+  扩展能力在 kit/ 拼装，kit 不封装、不别名 foster（见 CODE_STYLE「foster 与 kit 的边界」）。
+- 3D 数学直接用 `core:math/linalg`；投影矩阵等少数缺口在 `kit/world` 做薄助手。
 
-## P0 —— 2D 游戏支撑（近期）
+## 已完成
 
-目标：用 olib（含内置 foster/）能把一个 2D 游戏做起来。
+| 能力 | DragonLib 来源 | 落点 | 备注 |
+|------|----------------|------|------|
+| 句柄池 | SlotMap 系 / GrowArray | `core/handle` | array / fixed / growing / virtual 四种存储，比 SlotMap 更全 |
+| 消息 | CommandQueue / BroadcastChannel | `core/messaging` | 单消费者队列 / 延迟一帧广播 |
+| 模型格式数据层 | Dasset | `core/dasset` | 比特兼容 DragonLib v4，v1~v4 读兼容，坏文件防御 |
+| 资源管线 v1 | Asset 管线 | `kit/asset` | .meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动 |
+| Sprite / 图集 | Rendering/Sprite + Atlas/* | `kit/rendering` | Grid / Kenney XML 图集源 + Aseprite 构建器 |
+| 存储路径策略 | GameStorage + LocalStorage | `kit/storage` | 资源根 / 用户存档路径 |
+| 2D/3D 相机与场景 | World/* | `kit/world` | Camera2D/3D、Frustum3D、Ray3D、自备 Matrix4（行向量 v*M、D3D 深度）、SceneRouter |
+| CLI | CliConsole | `kit/app` | `has_arg` + 后台 stdin 控制台（`cli_open`）；不提供启动模板，直接用 `foster.App` |
+| 骨骼动画 | SkeletonAnimator | `kit/animation` | Step/Linear/CubicSpline 采样、palette 传播、blend、蒙皮包围盒 |
+| 3D 渲染栈 | Rendering3D | `kit/rendering3d` | Mesh/材质/排序、着色器管线（dxil/spv `#load`）、前向主 pass（方向/点/聚光、透明、蒙皮）、DebugDraw3D、LOD |
+| 音频 | Audio | `kit/audio` | 直接绑 `vendor:sdl3`（Foster 本身不含音频）：设备流、WAV 装载、音量 |
+| 游戏 UI | Paper UI（替代） | `kit/ui` | clay 布局 + foster 后端：圆角/裁剪/九宫格、位图/MSDF 字体与 `ui_font_bake`、控件/焦点/模态/缩放 |
+| JobScheduler | Threading/* | 不移植 | `core:thread.Pool` + `core:sync.Wait_Group` 已覆盖“常驻池 + 完成等待”，见下文并行一节 |
 
-| # | 项目 | DragonLib 来源 | 落点 | 规模 | 验收 |
-|---|------|----------------|------|------|------|
-| 1 | Sprite / SpriteAtlas | Rendering/Sprite.cs + Atlas/*（~380 行） | 新包 `kit/rendering`（sprite.odin + atlas.odin） | 中 | 图集加载/切图/Batcher 绘制单测 + 像素校验 |
-| 2 | 图集源 | Atlas/AsepriteAtlasBuilder + KenneyXmlAtlasSource | 同上（atlas_aseprite.odin / atlas_kenney.odin） | 小 | 两种格式的解析单测 |
-| 3 | GameStorage | Core/Storage/GameStorage + LocalStorage（~150 行） | 新包 `kit/storage`（resources + user data 路径策略） | 小 | `%APPDATA%` 路径解析、桌面读写单测 |
-| 4 | ~~JobScheduler 评估~~ **已评估（2026-10，不移植）** | Threading/* | 结论：`core:thread.Pool` + `core:sync.Wait_Group` 覆盖"常驻池 + 完成等待"；相比 DragonLib 仅缺三点——等待时调用线程参与执行（工作窃取）、`ScheduleParallel` 区间分批、每任务 handle。等真实帧级并行需求出现时在 `core/thread` 做薄封装（Wait_Group 计数 + 调用线程参与即可复刻主要价值，ring buffer/异常聚合不需要） | — | — |
+## 后续（按需启动，无固定排期）
 
-## P1 —— 扩展能力补全
+### 3D 渲染增量（`kit/rendering3d`）
 
-| # | 项目 | DragonLib 来源 | 落点 | 前置 |
-|---|------|----------------|------|------|
-| 5 | Camera3D / Frustum3D / Ray3D | World/（~370 行） | `kit/world`（camera3d.odin 等） | 无——3D 数学用 `core:math/linalg` 的 Matrix4；透视/正交投影做薄助手随包携带 |
-| 6 | CliConsole 与 CLI 参数 | CliConsole.cs | 不再提供启动模板，直接使用 `foster.App`；保留 `kit/app` 的 CLI 参数与可选控制台（`cli_open`） | 无 |
+- `.msl` / `.glsl` 平台补编：目前只有 dxil/spv，Metal 与 WebGL 目标的着色器分发返回 false。
+- 阴影 pass + CSM：`DepthOnly` / `DepthOnlySkinned` 着色器已编译入库。
+- 后处理与天空：`Tonemap` / `PostBloom` / `PostFxaa` / `PostDepth` / `Sky3D` 的 HLSL 源已拷入
+  `kit/rendering3d/shaders/`，尚未编译、未接入 Renderer3D。
+- IBL / 环境烘焙。
 
-## P2 —— 3D 大件（单独立项，游戏侧需要时启动）
+### UI 增量（`kit/ui`）
 
-| # | 项目 | DragonLib 来源 | 说明 |
-|---|------|----------------|------|
-| 8 | ~~Dasset 模型格式（数据层）~~ **已完成（2026-10，`core/dasset`）** | 比特兼容 DragonLib v4 布局的读写（贴图/骨架/蒙皮顶点/PBR 材质/动画剪辑，v1~v4 读兼容，坏文件防御） |
-| 9 | ~~SkeletonAnimator~~ **已完成（2026-10，`kit/animation`）** | 采样（bind pose 填充+channel 覆盖，Step/Linear/CubicSpline、四元数最短弧）、palette 传播、advance_time、blend_poses、蒙皮包围盒 |
-| 10 | ~~3D 渲染栈~~ **已完成（2026-10，`kit/rendering3d`）** | Mesh 上传、材质状态、渲染排序 + **着色器管线**（dxil/spv 入库 #load、按驱动分发）+ Renderer3D 前向主 pass（方向光/点光/**聚光灯**/透明混合/蒙皮 palette）+ **DebugDraw3D**（Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton；foster/ 无线拓扑，走朝向相机的四边形展开复用 DebugLine3D 着色器）+ **LOD**（Lod_Selector 滞回阈值 + 泛型 Model_Lod）。**剩余增量**：.msl/.glsl 平台补编、阴影 pass + CSM（DepthOnly 已备）、Tonemap/后处理（DragonLib 已有 PostBloom/Fxaa/Sky3D HLSL 源可移植）、天空盒、IBL/环境烘焙 |
+文本输入 / IME、Dropdown、富文本与字体 fallback、空间方向导航与焦点自动滚动、拖放、列表虚拟化、
+过渡动画、圆角遮罩及完整圆角描边。用法和兼容变更见 [UI README](../kit/ui/README.md)。
 
-## 平台与 foster/ 后续演进
+### 平台
 
-- ~~**音频**~~ **已完成（2026-10，`kit/audio`）**：直接绑 `vendor:sdl3`
-  （默认回放设备流 f32/队列模式、WAV 装载转换、音量缩放入队、样本级裁剪）。
-- （可选）web 目标：asset v1 native-only；web 路线 = `storage_map` + `#load`
-  预烘焙 blob，前置 `core/encoding` 的 js 兼容。
-- Foster 移植自身的演进（如补齐 Foster C# API 面）在 `foster/` 内进行，
-  扩展能力优先在 `kit/` 拼装（Matrix3x2 构造/乘法已在原仓库 e51ceb8 收编）。
+- Web 目标：foster 已支持 `js_wasm32`（见 foster/tests/webtest）；kit 侧 asset v1 仍是 native-only，
+  路线为 `storage_map` + `#load` 预烘焙 blob，前置 `core/encoding` 的 js 兼容。
 
-## 工具链（Tools/，不排期，随需启动）
+### 并行
 
-ShaderCompiler（HLSL→四后端+哈希清单，配 EmbeddedShaderMaterial 思路）、
-FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
-均属构建期工具，与 P2 一起看。
+真实帧级并行需求出现时，在 `core/` 做薄封装：Wait_Group 计数 + 等待时调用线程参与执行即可复刻
+DragonLib JobScheduler 的主要价值（区间分批 `ScheduleParallel`、每任务 handle 按需加）；ring buffer、异常聚合不需要。
 
-## UI 路线（2026-10 追加）
+### foster/ 演进
 
-- **已完成**：clay v0.14 布局与 foster/ 后端；统一圆角、矩形嵌套裁剪、位图/MSDF 材质、完整贴图/裁切图集 UV、图片背景容器与对称九宫格、Unicode 字距、预乘透明色。
-- **控件与输入**：Theme、Button/Label/Toggle、Image/ImageButton、ProgressBar/Slider、行/列/面板/滚动区/模态遮罩；松开确认、指针捕获、禁用态、顺序焦点导航、输入消费、模态作用域、viewport 缩放。
-- **验证**：CPU 回归覆盖布局/翻译/合批与交互，示例仓库 OFoster_Sample 的 `game_ui` 提供遗迹场景、HUD、技能栏、格子背包、暂停菜单及自动交互验收；原设置页和距离场着色器探针在同仓库的 `ui_gallery`。用法和兼容变更见 [UI README](../kit/ui/README.md)。
-- **后续增量**：文本输入/IME、Dropdown、富文本与字体 fallback、空间方向导航与焦点自动滚动、拖放、列表虚拟化、过渡动画、圆角遮罩及完整圆角描边。
+补齐 Foster C# API 面、同步上游新版本，在 `foster/` 内进行，流程见 [PORTING_MAP.md](../foster/docs/PORTING_MAP.md)。
+
+### 工具链（构建期，随 3D 需求一起看）
+
+ShaderCompiler（HLSL → 四后端 + 哈希清单）、FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
+目前 `kit/rendering3d/shaders/build_shaders.ps1` 只覆盖 dxil/spv。
 
 ## 明确不做
 
 | 项 | 理由 |
 |----|------|
-| **ECS 全线**（DragonECS / Engine.ECS / 预制体序列化） | 2026-10 决定不采用 ECS 路线；`thirdparty/oflecs` 已移除（2026-10，git 历史可找回），`core/entities` 保留但无排期 |
+| ECS 全线（DragonECS / Engine.ECS / 预制体序列化） | 2026-10 决定不采用 ECS 路线；`thirdparty/oflecs` 已移除（git 历史可找回），`core/entities` 保留但无排期 |
 | Mathf（861 行） | `foster/utility.odin` 已覆盖 |
-| Paper UI | clay-odin / odin-imgui 替代 |
-| SlotMap 系 / GrowArray | `core/handle` 更全 |
+| Paper UI | 由 `kit/ui`（clay）与 odin-imgui 替代 |
 | Vector2Int | `core:math` 已有 |
 | Roslyn Analyzers | C# 编译器机制，Odin 无对应 |
-| 根 main.odin / 示例 | 库仓库保持纯净（2026-10 决定）；环境知识在 git 历史 `1b3dc69` |
-
-## 已完成
-
-- asset 管线 v1（.meta/Library/blob/manifest，打包零改动）→ `kit/asset`
-- Camera2D / SceneRouter → `kit/world`（Matrix3x2 构造/乘法用 foster/
-  已提交的 API，e51ceb8）
-- CommandQueue / BroadcastChannel → `core/messaging`
-- **P0-1** Sprite/SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器 → `kit/rendering`
-- **P0-2** GameStorage 路径策略 → `kit/storage`
-- **P0-3** JobScheduler 评估（不移植，见 P0 表）
-- **P1-4** Camera3D/Frustum3D/Ray3D + 自备 Matrix4（行向量 v*M、D3D 深度）→ `kit/world`
-- **P1-5** has_arg + CliConsole（messaging 队列转主线程）→ `kit/app`
-- **P2-6** Dasset 数据层 → `core/dasset`
-- **P2-7** SkeletonAnimator → `kit/animation`
-- **P2-8** 3D 数据/队列层 → `kit/rendering3d`（着色器管线边界见表 10）
-- **音频** → `kit/audio`（vendor:sdl3）
-- 目录三层化（core/kit/thirdparty）+ 编码规范（CODE_STYLE.md）
+| 库内示例 / 启动模板 | 库仓库只放库代码与测试；示例在同级仓库 OFoster_Sample，启动直接用 `foster.App`；早期根 main.odin 的环境知识见 git 历史 `1b3dc69` |

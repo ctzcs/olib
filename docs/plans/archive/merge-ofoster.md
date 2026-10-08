@@ -1,5 +1,8 @@
 # Plan：把 OFoster 并入 olib
 
+> **状态：已完成（2026-10-08）** · 提交 `3d54171`..`2e209ea`（subtree 引入 → 文档与 LICENSE）
+> 偏离：另加 `c0e28b9` 固定批处理与 shell 换行符。
+
 ## 背景与目标
 
 olib（`D:\MySpace\Github\olib`）目前通过 `-collection:ofoster=<OFoster/src>` 依赖独立仓库

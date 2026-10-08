@@ -1,5 +1,8 @@
 # Plan：foster 每帧清理临时分配器 + 全库通过 -vet
 
+> **状态：已完成（2026-10-08）** · 提交 `923c647`..`0a7b902`
+> 偏离：foster 实际包名为 `foster_framework`（计划中的 `-vet-packages:foster` 有误）；审计另发现 `RelativeStorage` 跨帧悬空，改为自持路径并新增 `RelativeStorageDispose`（登记在 L-001）；标题存储回退改为空 Root（相对 cwd）。
+
 ## 背景
 
 编写 `prompts/` 时发现两个库层面的问题：

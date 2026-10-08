@@ -670,7 +670,8 @@ target_dispose :: proc(target: ^Target) {
 					)
 				}
 			}
-			target.Attachments[i].Disposed = true
+			// [olib L-003] GPU 释放后清理附件拥有的 CPU 数据与名字。
+			target_attachment_dispose_cpu(&target.Attachments[i])
 		}
 		delete(target.Attachments)
 		target.Disposed = true
@@ -696,10 +697,24 @@ target_dispose :: proc(target: ^Target) {
 			)
 			target.Attachments[i].ResolveResource = nil
 		}
-		target.Attachments[i].Disposed = true
+		// [olib L-003] 桌面路径与 Web 相同，GPU 仍只在上面的分支释放。
+		target_attachment_dispose_cpu(&target.Attachments[i])
 	}
 	delete(target.Attachments)
 	target.Disposed = true
+}
+
+// [olib L-003] 仅释放 CPU 所有权，不触碰已由 Target 释放的 GPU 资源。
+@(private)
+target_attachment_dispose_cpu :: proc(texture: ^Texture) {
+	delete(texture.Pixels)
+	texture.Pixels = nil
+	delete(texture.Name, texture.NameAllocator)
+	texture.Name = ""
+	texture.NameAllocator = {}
+	texture.Resource = nil
+	texture.ResolveResource = nil
+	texture.Disposed = true
 }
 
 target_attachment :: proc(target: ^Target, index: int = 0) -> ^Texture {

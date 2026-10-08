@@ -154,6 +154,7 @@ verify_zip :: proc(storage: ^foster.StorageContainer) {
 	assert(foster.DirectoryExists(container, "nested") && !foster.FileExists(container, "nested"))
 	relative: foster.RelativeStorage
 	foster.RelativeStorageInit(&relative, container^, "nested")
+	defer foster.RelativeStorageDispose(&relative)
 	nested := foster.RelativeStorageContainer(&relative)
 	message := foster.ReadAllText(&nested, "message.txt")
 	defer delete(message)

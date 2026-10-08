@@ -69,7 +69,7 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 
 | 项 | 理由 |
 |----|------|
-| **ECS 全线**（DragonECS / Engine.ECS / 预制体序列化） | 2026-10 决定不采用 ECS 路线；`thirdparty/oflecs` 与 `core/entities` 保留但无排期 |
+| **ECS 全线**（DragonECS / Engine.ECS / 预制体序列化） | 2026-10 决定不采用 ECS 路线；`thirdparty/oflecs` 已移除（2026-10，git 历史可找回），`core/entities` 保留但无排期 |
 | Mathf（861 行） | `foster/utility.odin` 已覆盖 |
 | Paper UI | clay-odin / odin-imgui 替代 |
 | SlotMap 系 / GrowArray | `core/handle` 更全 |

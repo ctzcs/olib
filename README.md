@@ -29,7 +29,7 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
 └── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
 
-thirdparty/  外部绑定：clay-odin / odin-imgui（含 Foster 后端）/ oflecs
+thirdparty/  外部绑定：clay-odin / odin-imgui（含 Foster 后端）
 ```
 
 可运行示例在独立仓库 [OFoster_Sample](https://github.com/ctzcs/OFoster_Sample)（与 olib 同级检出，`run.bat <示例名>`）。

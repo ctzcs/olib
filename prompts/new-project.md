@@ -392,7 +392,7 @@ shutdown :: proc(app: ^foster.App) {
 6. 实现 `publish.bat`（和需要时的 `publish_web.bat`），验证实际产物；不能以开发构建能启动代替发布包可运行。
 7. 为每个 `logic` 包写 `*_test.odin`（`#+test` + `@(test)`），用 `odin test` 无窗口运行；画面与输入用游戏 exe 的 `shot` / `smoke` 参数验证（参考 OFoster_Sample 的 game_ui：注入点击、渲染一帧、写 PNG 后退出）。
 8. 编写 `check.ps1`：自动发现并运行所有含 `@(test)` 的包、运行 `tools/check_layers.ps1`、编译游戏；任何一项失败返回非零退出码（可参考 olib 根目录的 `check.ps1`）。
-9. 完成 README、`src/` 分层说明和简短 AGENTS.md。README 写明脚本用法、输出目录及依赖；新文档加入 `docs/README.md`，说明真实实现与尚未实现的内容。
+9. 完成 README、`src/` 分层说明和简短 AGENTS.md。README 写明脚本用法、输出目录及依赖；新文档加入 `docs/README.md`，说明真实实现与尚未实现的内容。AGENTS.md 写入计划归档规则：多步改动计划放 `docs/plans/`，完成并验收后由执行者 `git mv` 到 `docs/plans/archive/`、在标题下写完成日期、commit 范围与偏离，单独提交（规则原文见 olib 的 `docs/plans/README.md`）。
 
 至少验证以下内容：
 

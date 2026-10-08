@@ -99,11 +99,20 @@ main :: proc() {
 
 ## 测试
 
+提交前在仓库根目录运行一键验证（任何一项失败即以非零退出码结束）：
+
+```powershell
+powershell -File check.ps1             # 全部检查
+powershell -File check.ps1 -NoSamples  # 跳过同级 OFoster_Sample 示例编译
+```
+
+它会自动发现并运行 `core/`、`kit/` 下所有含 `@(test)` 的包，检查 `foster` 包、编译 foster 自带回归程序与
+odin-imgui 的 foster 后端示例、校验 foster 本地修改清单；同级存在 OFoster_Sample 时再编译全部示例。
+
+单独测一个包：
+
 ```sh
-odin test core/handle/array -collection:olib=.
-odin test core/messaging
-odin test core/dasset
-# 其余包同理：core/entities core/tween kit/asset kit/world ...
+odin test kit/ui -collection:olib=.
 ```
 
 编码规范：[docs/CODE_STYLE.md](docs/CODE_STYLE.md)

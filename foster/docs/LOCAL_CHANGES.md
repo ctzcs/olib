@@ -29,3 +29,4 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | L-001 | 2026-10-08 | 行为变更 | framework.odin / tick_app；storage.odin / file_system_open_title_storage、RelativeStorage 路径所有权 | App.cs / 主循环（C# 有 GC，无对应） | 每帧 Render/end_frame 后清空临时分配器；Startup 临时数据在第一帧末失效。标题存储回退为空 Root（相对 cwd）；RelativeStorage 持有长期拼接路径，返回的容器借用直到路径改变或 RelativeStorageDispose，由调用方释放 | 保留 |
 | L-002 | 2026-10-08 | 修复 | storage.odin / zip_storage_decode；images.odin / AsepriteLoad | 无（Odin 写法） | 未使用循环索引改为 _；拷贝后的 Aseprite 数据改名 source_data，避免遮蔽输入参数；只改写法，不改行为 | 保留 |
+| L-003 | 2026-10-08 | 修复 | graphics.odin / GraphicsBuffer、Texture 名字所有权；Mesh、Target 派生名字；target_dispose 附件释放 | GraphicsBuffer.cs / Texture.cs / Target.Dispose（C# 有 GC，无对应） | 缓冲区和纹理克隆名字并用原分配器释放；派生名字临时分配；Target 释放附件 CPU 像素与名字，GPU 释放顺序和次数保持不变 | 保留 |

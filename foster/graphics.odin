@@ -4,6 +4,9 @@ import SDL "vendor:sdl3"
 import "core:fmt"
 import "core:mem"
 import "core:math"
+// [olib L-003] 资源名字所有权与克隆所需。
+import "base:runtime"
+import "core:strings"
 
 // 文件内导航（按 Foster 目录 / 类型分级）
 //   Graphics / Enums & Structs — 图形类型与状态
@@ -571,6 +574,7 @@ default_target_attachment_specs :: [1]TargetAttachmentSpec{{Format = .Color, Sam
 
 Target :: struct {
 	GraphicsDevice: ^GraphicsDevice,
+	// [olib L-003] 名字借用，调用方保证在资源存活期间有效。
 	Name:           string,
 	Width:          int,
 	Height:         int,
@@ -611,7 +615,8 @@ target_init_with_attachments :: proc(
 
 		attachment_name := name
 		if attachment_name != "" {
-			attachment_name = fmt.aprintf("%s-Attachment%d", name, index)
+			// [olib L-003] 附件纹理克隆名字，派生名称只需临时分配。
+			attachment_name = fmt.tprintf("%s-Attachment%d", name, index)
 		}
 
 		tex: Texture
@@ -906,6 +911,7 @@ MaterialDispose :: proc(material: ^Material) {
 
 Mesh :: struct {
 	GraphicsDevice:    ^GraphicsDevice,
+	// [olib L-003] 名字借用，调用方保证在资源存活期间有效。
 	Name:              string,
 	VertexData:        VertexBuffer,
 	IndexData:         IndexBuffer,
@@ -925,8 +931,9 @@ mesh_init_with_format :: proc(
 	vertex_name := ""
 	index_name := ""
 	if name != "" {
-		vertex_name = fmt.aprintf("%s-Vertices", name)
-		index_name = fmt.aprintf("%s-Indices", name)
+		// [olib L-003] 缓冲区克隆名字，派生名称只需临时分配。
+		vertex_name = fmt.tprintf("%s-Vertices", name)
+		index_name = fmt.tprintf("%s-Indices", name)
 	}
 	vertex_buffer_init_with_format(&mesh.VertexData, graphics_device, vertex_format, vertex_name)
 	index_buffer_init(&mesh.IndexData, graphics_device, index_format, index_name)
@@ -959,7 +966,8 @@ mesh_init_instanced_with_format :: proc(
 	mesh_init_with_format(mesh, graphics_device, vertex_format, index_format, name)
 	instance_name := ""
 	if name != "" {
-		instance_name = fmt.aprintf("%s-Instances", name)
+		// [olib L-003] 实例缓冲区克隆名字。
+		instance_name = fmt.tprintf("%s-Instances", name)
 	}
 	vertex_buffer_init_with_format(
 		&mesh.InstanceData,
@@ -3027,7 +3035,9 @@ GraphicsDeviceUploadToBuffer :: graphics_device_upload_to_buffer
 
 Texture :: struct {
 	GraphicsDevice:     ^GraphicsDevice,
+	// [olib L-003] 拥有名字副本，以初始化时的分配器释放。
 	Name:               string,
+	NameAllocator:      runtime.Allocator,
 	Width:              int,
 	Height:             int,
 	Format:             TextureFormat,
@@ -3075,7 +3085,8 @@ texture_init_ex :: proc(
 			panic("foster_web: create_texture failed")
 		}
 		tex.GraphicsDevice = graphics_device
-		tex.Name = name
+		// [olib L-003] 克隆新名字后释放旧副本，支持名字别名与重新初始化。
+		resource_replace_name(&tex.Name, &tex.NameAllocator, name)
 		tex.Width = width
 		tex.Height = height
 		tex.Format = format
@@ -3130,7 +3141,8 @@ texture_init_ex :: proc(
 	}
 
 	tex.GraphicsDevice = graphics_device
-	tex.Name = name
+	// [olib L-003] 桌面路径同样持有名字副本。
+	resource_replace_name(&tex.Name, &tex.NameAllocator, name)
 	tex.Width = width
 	tex.Height = height
 	tex.Format = format
@@ -3211,6 +3223,10 @@ texture_dispose :: proc(tex: ^Texture) {
 	tex.ResolveResource = nil
 	delete(tex.Pixels)
 	tex.Pixels = nil
+	// [olib L-003] 释放名字时使用保存的分配器，不依赖当前 context。
+	delete(tex.Name, tex.NameAllocator)
+	tex.Name = ""
+	tex.NameAllocator = {}
 	tex.Disposed = true
 }
 
@@ -3672,6 +3688,7 @@ TextureBlit :: texture_blit
 Shader :: struct {
 	GraphicsDevice:  ^GraphicsDevice,
 	Stage:           ShaderStage,
+	// [olib L-003] 名字借用，调用方保证在资源存活期间有效。
 	Name:            string,
 	CreateInfo:      ShaderCreateInfo,
 	Resource:        ^SDL.GPUShader,
@@ -3877,7 +3894,9 @@ BufferType :: enum {
 
 GraphicsBuffer :: struct {
 	GraphicsDevice:     ^GraphicsDevice,
+	// [olib L-003] 拥有名字副本，以初始化时的分配器释放。
 	Name:               string,
+	NameAllocator:      runtime.Allocator,
 	ElementSizeInBytes: int,
 	Count:              int,
 	ByteSize:           int,
@@ -3885,6 +3904,18 @@ GraphicsBuffer :: struct {
 	IndexFormat:        IndexFormat,
 	Resource:           ^SDL.GPUBuffer,
 	Disposed:           bool,
+}
+
+// [olib L-003] 先克隆以支持 name 借用旧副本；空串不分配。
+@(private)
+resource_replace_name :: proc(owned: ^string, allocator: ^runtime.Allocator, name: string) {
+	copy, err := strings.clone(name)
+	if err != .None {
+		panic("Cannot allocate resource name")
+	}
+	delete(owned^, allocator^)
+	owned^ = copy
+	allocator^ = context.allocator
 }
 
 graphics_buffer_init :: proc(
@@ -3922,7 +3953,8 @@ graphics_buffer_init :: proc(
 			panic("foster_web: create_buffer failed")
 		}
 		buf.GraphicsDevice = graphics_device
-		buf.Name = name
+		// [olib L-003] Web 缓冲区同样持有名字副本。
+		resource_replace_name(&buf.Name, &buf.NameAllocator, name)
 		buf.ElementSizeInBytes = element_size_in_bytes
 		buf.Count = 0
 		buf.ByteSize = initial_size
@@ -3957,7 +3989,8 @@ graphics_buffer_init :: proc(
 	}
 
 	buf.GraphicsDevice = graphics_device
-	buf.Name = name
+	// [olib L-003] 克隆新名字后释放旧副本。
+	resource_replace_name(&buf.Name, &buf.NameAllocator, name)
 	buf.ElementSizeInBytes = element_size_in_bytes
 	buf.Count = 0
 	buf.ByteSize = initial_size
@@ -4092,6 +4125,10 @@ graphics_buffer_dispose :: proc(buf: ^GraphicsBuffer) {
 		}
 	}
 	buf.Resource = nil
+	// [olib L-003] 释放名字时使用初始化时保存的分配器。
+	delete(buf.Name, buf.NameAllocator)
+	buf.Name = ""
+	buf.NameAllocator = {}
 	buf.Disposed = true
 }
 

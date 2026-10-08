@@ -33,20 +33,33 @@ function Invoke-Step([string]$name, [scriptblock]$action) {
 	}
 }
 
+# ---- 包检查：自动发现 core/ 与 kit/ 下所有包，包括没有测试的包 ----
+$packageFiles = Get-ChildItem -Path core, kit -Recurse -Filter '*.odin'
+$packageDirs = $packageFiles |
+	ForEach-Object { $_.DirectoryName } |
+	Sort-Object -Unique
+foreach ($dir in $packageDirs) {
+	$pkgPath = (Resolve-Path -Relative $dir).TrimStart('.', '\', '/') -replace '\\', '/'
+	$pkgName = Split-Path -Leaf $dir
+	Invoke-Step "check  $pkgPath" { odin check $pkgPath -collection:olib=. -no-entry-point -vet "-vet-packages:$pkgName" }
+}
+
 # ---- 单元测试：自动发现 core/ 与 kit/ 下含 @(test) 的包 ----
-$testDirs = Get-ChildItem -Path core, kit -Recurse -Filter '*.odin' |
+$testDirs = $packageFiles |
 	Where-Object { Select-String -Path $_.FullName -Pattern '@\(test\)' -Quiet } |
 	ForEach-Object { $_.DirectoryName } |
 	Sort-Object -Unique
 foreach ($dir in $testDirs) {
 	# 脚本块按调用时作用域取变量：循环变量不能与 Invoke-Step 的参数同名
 	$pkgPath = (Resolve-Path -Relative $dir).TrimStart('.', '\', '/') -replace '\\', '/'
+	$pkgName = Split-Path -Leaf $dir
 	$exeName = $pkgPath -replace '/', '_'
-	Invoke-Step "test   $pkgPath" { odin test $pkgPath -collection:olib=. "-out:$out/test_$exeName.exe" }
+	Invoke-Step "test   $pkgPath" { odin test $pkgPath -collection:olib=. -vet "-vet-packages:$pkgName" "-out:$out/test_$exeName.exe" }
 }
 
 # ---- foster：包检查 + 自带回归程序编译 ----
-Invoke-Step 'check  foster' { odin check foster -collection:olib=. -no-entry-point }
+# foster/ 的实际 package 声明为 foster_framework，vet 必须按包名选择。
+Invoke-Step 'check  foster' { odin check foster -collection:olib=. -no-entry-point -vet -vet-packages:foster_framework }
 foreach ($t in 'port_regression', 'graphics_regression', 'webtest') {
 	Invoke-Step "build  foster/tests/$t" { odin build "foster/tests/$t" -collection:olib=. "-out:$out/$t.exe" }
 }

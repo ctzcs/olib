@@ -35,8 +35,8 @@ convex hull and rectangle difference helpers, and virtual-input
 activation/manual-update helpers. The SDL3 bindings supplied with Odin are
 used directly.
 
-The library package is `foster/` in the olib repository. Runnable examples are
-maintained in the separate `OFoster_Sample` project.
+The library package is `foster/` in the olib repository. Runnable examples (Foster basics and
+kit/ui demos) are maintained in the separate `OFoster_Sample` project, checked out next to olib.
 
 ## Use the framework
 

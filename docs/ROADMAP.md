@@ -62,7 +62,7 @@ FbxToGltf、QoaEncode、msdf-atlas-gen、DataConfig。
 
 - **已完成**：clay v0.14 布局与 foster/ 后端；统一圆角、矩形嵌套裁剪、位图/MSDF 材质、完整贴图/裁切图集 UV、图片背景容器与对称九宫格、Unicode 字距、预乘透明色。
 - **控件与输入**：Theme、Button/Label/Toggle、Image/ImageButton、ProgressBar/Slider、行/列/面板/滚动区/模态遮罩；松开确认、指针捕获、禁用态、顺序焦点导航、输入消费、模态作用域、viewport 缩放。
-- **验证**：CPU 回归覆盖布局/翻译/合批与交互，`examples/game_ui` 提供遗迹场景、HUD、技能栏、格子背包、暂停菜单及自动交互验收；原设置页和距离场着色器探针保留在 `examples/ui_gallery`。用法和兼容变更见 [UI README](../kit/ui/README.md)。
+- **验证**：CPU 回归覆盖布局/翻译/合批与交互，示例仓库 OFoster_Sample 的 `game_ui` 提供遗迹场景、HUD、技能栏、格子背包、暂停菜单及自动交互验收；原设置页和距离场着色器探针在同仓库的 `ui_gallery`。用法和兼容变更见 [UI README](../kit/ui/README.md)。
 - **后续增量**：文本输入/IME、Dropdown、富文本与字体 fallback、空间方向导航与焦点自动滚动、拖放、列表虚拟化、过渡动画、圆角遮罩及完整圆角描边。
 
 ## 明确不做

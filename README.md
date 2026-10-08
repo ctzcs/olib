@@ -32,6 +32,8 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 thirdparty/  外部绑定：clay-odin / odin-imgui（含 Foster 后端）/ oflecs
 ```
 
+可运行示例在独立仓库 [OFoster_Sample](https://github.com/ctzcs/OFoster_Sample)（与 olib 同级检出，`run.bat <示例名>`）。
+
 ## 使用
 
 基础能力（App、窗口、输入、图形、基础类型）直接用 `olib:foster`，
@@ -89,11 +91,11 @@ main :: proc() {
 ```
 
 退出统一调用 `foster.Exit`。`cli_update` 和 `cli_dispose` 对零值控制台及开启失败后的
-控制台也安全；`examples/game_ui` 可用 `cli` 参数试用 `help`、`quit`。
+控制台也安全；示例仓库中 `run.bat game_ui cli` 可试用 `help`、`quit`。
 
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
-游戏 UI 示例见 `examples/game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
-基础控件验收页见 `examples/ui_gallery`。
+游戏 UI 示例见 [OFoster_Sample](https://github.com/ctzcs/OFoster_Sample) 的 `game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
+基础控件验收页见同仓库的 `ui_gallery`。
 
 ## 测试
 

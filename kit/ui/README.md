@@ -1,9 +1,10 @@
 # 游戏 UI
 
 Clay 负责布局，`kit/ui` 提供控件、交互与 Foster Batcher 后端。
-可运行游戏界面位于 [`examples/game_ui`](../../examples/game_ui)：遗迹场景上的生命/能量 HUD、
+可运行游戏界面位于示例仓库 [OFoster_Sample](https://github.com/ctzcs/OFoster_Sample) 的 `src/game_ui`：遗迹场景上的生命/能量 HUD、
 带冷却遮罩的技能栏、格子背包和暂停菜单。它使用同一套布局与交互，游戏皮肤在示例中定义。
-原来的设置页和控件验收示例保留在 [`examples/ui_gallery`](../../examples/ui_gallery)。
+原来的设置页和控件验收示例在同仓库的 `src/ui_gallery`。
+示例仓库需与 olib 同级检出，以下 `run.bat` 命令均在示例仓库根目录执行。
 
 ## 最小帧流程
 
@@ -170,22 +171,25 @@ if show_dialog {
 ## 验证
 
 ```powershell
+# olib 根目录
 odin test kit/ui -collection:olib=.
-odin build examples/game_ui -collection:olib=. -out:game_ui.exe
+
+# 示例仓库根目录（示例名之后的参数透传给程序）
+.\run.bat game_ui
 ```
 
 运行时需 Foster 的平台动态库（Windows 为 SDL3.dll）。Windows 自动尝试系统字体；
 其他平台或自定义字体可传 `font <ttf路径>`。示例使用 ASCII 位图字体，测试中另有中文测量用例。
 
-`game_ui.exe` 的交互：点击地面移动角色；点击技能或按 1–6 施放；B 切换背包；
+`game_ui` 的交互：点击地面移动角色；点击技能或按 1–6 施放；B 切换背包；
 点击格子选择道具；Esc 暂停/继续，暂停菜单中可调音量、切换音乐状态或退出。
 这是游戏 UI 演示，角色移动、生命/能量和技能效果用于交互反馈；没有战斗系统或真实音频播放。
 
-`game_ui.exe shot` 自动渲染并保存 PNG 后退出，可加 `scaled`、`modal`、`scroll` 或 `hud`
-（收起背包）。`game_ui.exe smoke` 会通过真实布局自动依次点击技能、选择道具、暂停、
+`run.bat game_ui shot` 自动渲染并保存 PNG 到示例仓库根目录后退出，可加 `scaled`、`modal`、`scroll` 或 `hud`
+（收起背包）。`run.bat game_ui smoke` 会通过真实布局自动依次点击技能、选择道具、暂停、
 调滑条、切换开关并返回游戏，使用断言验证状态变化。可与 `scaled` 一起运行。
 场景、角色和图标用代码生成；按钮、技能格和背包格使用
-`examples/game_ui/assets/button-skin.png` 图片皮肤，编译时嵌入，无运行目录依赖。
+示例中的 `src/game_ui/assets/button-skin.png` 图片皮肤，编译时嵌入，无运行目录依赖。
 
 图片按钮可在 `ui_interact` 后按状态选择贴图或 tint，再把文字作为背景容器的子元素：
 
@@ -206,8 +210,7 @@ if clay.UI()(decl) {
 原来的距离场渲染探针在控件展台中：
 
 ```powershell
-odin build examples/ui_gallery -collection:olib=. -out:ui_gallery.exe
-ui_gallery.exe shot msdf
+.\run.bat ui_gallery shot msdf
 ```
 
 它使用解析环形距离场编码到 RGB，验证 18/36/72px 下的解码与材质切换，

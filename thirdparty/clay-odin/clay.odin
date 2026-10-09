@@ -3,7 +3,7 @@ package clay
 import "core:c"
 
 when ODIN_OS == .Windows {
-	foreign import Clay "windows/clay.lib"
+	foreign import Clay "windows/clay.obj"
 } else when ODIN_OS == .Linux {
 	foreign import Clay "linux/clay.a"
 } else when ODIN_OS == .Darwin {

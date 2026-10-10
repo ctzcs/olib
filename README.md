@@ -3,7 +3,7 @@
 Odin 游戏库集合，内置 `foster/`（Foster 框架的 Odin 移植，原 OFoster 仓库）。
 结构对位 [DragonLib](https://github.com/ctzcs/DragonLib)（C#/Foster）。
 
-让 AI 创建新游戏时，使用 [新项目创建提示词](prompts/new-project.md)：包含工程目录与包划分、依赖方向、kit/ui 界面、Odin 编码风格与中文注释、桌面/Web 发布和验证约定。新游戏默认放在 olib 的同级独立目录。日常开发中的数据布局、内容目录、全局状态、缓存失效与验证方式见 [面向数据开发约定](prompts/dod-guidelines.md)。
+让 AI 创建新游戏时，使用 [新项目创建提示词](prompts/new-project.md)：包含 def/data/logic/view/game 五层目录与依赖方向、kit/ui 界面、Odin 编码风格与中文注释、桌面/Web 发布和验证约定。新游戏默认放在 olib 的同级独立目录。日常开发中的数据布局、内容目录、模拟实例所有权、缓存失效与验证方式见 [面向数据开发约定](prompts/dod-guidelines.md)。
 
 ## 布局
 

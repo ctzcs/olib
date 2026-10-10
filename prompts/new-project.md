@@ -31,7 +31,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 ### 技术栈和依赖
 
 1. 使用 Odin 与 olib。olib 当前以 `dev-2026-07-nightly` 验证；创建前运行 `odin version` 核对本地编译器，版本差异导致编译失败时如实报告，不要改 olib 迁就。
-2. olib 以 collection 方式引用：`-collection:olib=<olib 路径>`。游戏自己的源码也作为 collection：`-collection:game=src`，包之间用 `"game:state"` 这类路径导入，不用 `../` 相对路径。
+2. olib 以 collection 方式引用：`-collection:olib=<olib 路径>`。游戏自己的源码也作为 collection：`-collection:game=src`，包之间用 `"game:data"` 这类路径导入，不用 `../` 相对路径。
 3. olib 分三层，按层选用：
    - `olib:foster` —— **唯一运行时**：App 生命周期、窗口、输入、图形、基础类型（`Color`、`Vec2`、`Rect`……）、存储。直接调用，不要再包一层“引擎类”。
    - `olib:kit/*` —— foster 没有的扩展能力：`kit/ui`（clay 布局的游戏 UI）、`kit/asset`（资源管线）、`kit/world`（相机/场景）、`kit/rendering`（Sprite/图集）、`kit/rendering3d`、`kit/animation`、`kit/audio`、`kit/storage`（资源根与存档路径）、`kit/app`（`has_arg` 与调试控制台）。
@@ -57,7 +57,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 └─ <ProjectName>/                新建的独立游戏项目
 ```
 
-Odin 一个目录就是一个包，包名与目录名一致。采用以下结构；`tools/`、`shaders/`、`publish_web.bat` 和各层子包按功能需要创建，不预先堆放空包或占位实现。
+项目源码固定按 `def / data / logic / view / game` 五层组织，各层内按实际功能拆文件；需要独立依赖边界或复用时再拆子包。Odin 一个目录就是一个包，包名与目录名一致（入口为 `package main`）。`tools/`、`shaders/`、`publish_web.bat` 和子包按需要创建，不预先堆放空包或占位实现。
 
 ```text
 <ProjectName>/
@@ -70,12 +70,10 @@ Odin 一个目录就是一个包，包名与目录名一致。采用以下结构
 ├─ publish.bat                   Windows Release 发布入口
 ├─ publish_web.bat               可选，Web 发布入口，支持 serve
 ├─ src/                          collection `game`
-│  ├─ authoring/                 package authoring：配置类型、默认值、校验、JSON 读写、版本迁移
-│  ├─ defs/                      package defs：枚举、固定映射（enumerated array）、共享 distinct 类型、操作请求类型
-│  ├─ state/                     package state：本局权威数据——句柄池、SoA 列、对局状态、版本号
-│  ├─ logic/
-│  │  ├─ <feature>/              每个玩法模块一个包，按实际玩法拆分
-│  │  └─ queries/                可重建的查询索引与算法缓存
+│  ├─ def/                       package def：枚举、句柄类型、配置结构与默认值、命令和事件类型
+│  ├─ data/                      package data：本局数据、句柄池、SoA 列、模拟缓存存储及生命周期
+│  ├─ logic/                     package logic：玩法规则、状态转换、计算、查询与模拟缓存更新
+│  │  └─ <feature>/              可选，复杂功能需要独立边界时再拆子包
 │  ├─ view/                      package view：UI、世界绘制、音频播放、显示缓存（可按需拆 view/ui 等子包）
 │  └─ game/                      package main：App 回调、输入映射、固定步调度、系统执行顺序、诊断命令
 ├─ assets/
@@ -100,7 +98,9 @@ Odin 一个目录就是一个包，包名与目录名一致。采用以下结构
       └─ web/                    Web 可分发目录
 ```
 
-`<feature>` 等名称是模板，需要替换成准确的职责名称；玩法子包按新项目的实际需求建立，不预设塔防、经营、战斗或关卡编辑等特定玩法。
+`<feature>` 等名称是模板，需要替换成准确的职责名称；不预设塔防、经营、战斗或关卡编辑等特定玩法。同一功能的定义、数据、规则、表现分别放入对应层，例如 `def/units.odin`、`data/units.odin`、`logic/units.odin`、`view/units.odin`；只建立确实需要的文件。
+
+文件装载按需独立为 `src/content/` 或工具入口，负责 JSON 解码、格式检查、版本迁移与资源读取。它依赖 `def` 的配置类型；`game` 调用 `logic` 完成模拟语义校验后安装配置。五层不要求额外创建 `authoring` 包，`def / data / logic` 不依赖装载器。
 
 `ols.json` 至少声明两个 collection，让编辑器能解析导入：
 
@@ -157,35 +157,38 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 
 ### 分层和依赖方向
 
-先按职责确定代码所在的包，再在层内按玩法拆子包。Odin 的 import 是显式字符串，且编译器禁止循环导入，所以层界可以直接由包结构和 import 行保证：
+先按五层职责确定代码所在的包，再在层内按功能拆文件或子包。Odin 编译器禁止循环导入；以下依赖约束由包结构与层间检查执行，谁可以修改数据还需通过 proc 职责、调用位置和测试验证。
 
 | 包 | 负责什么 | 可以 import |
 | --- | --- | --- |
-| `authoring` | 配置类型、默认值、校验、JSON 读写、版本迁移、场景生成 | `core:*`、`olib:core/*`；不 import 游戏其他包、foster、kit |
-| `defs` | 共享枚举、固定映射、distinct 类型、UI 发给规则的操作请求类型 | `authoring` |
-| `state` | 本局权威数据、句柄池、SoA 列、扩容、版本号 | `defs`、`authoring`、`olib:core/*` |
-| `logic/*` | 状态转换、玩法规则、导航、可重建查询缓存 | `state`、`defs`、`authoring`、`olib:core/*`、`core:math/linalg` 等；**不 import foster、kit、vendor、view、game** |
-| `view` | UI、绘制、动画、音频、显示缓存 | `state`、`defs`、`olib:foster`、`olib:kit/*`；可调用 `logic` 的只读查询，不调用改状态的 proc |
-| `game`（package main） | 读取输入和时间、生命周期、系统组装与执行顺序 | 全部；不实现伤害、收入等玩法公式 |
+| `def` | 枚举、固定映射、句柄类型、配置结构与默认值、命令和事件类型 | `core:*`、`olib:core/*`；不 import 其他游戏层、foster、kit |
+| `data` | 本局权威数据、句柄池、SoA 列、模拟缓存结构、分配/扩容/释放、版本号 | `def`、`core:*`、`olib:core/*`；不 import logic、view、game、装载器、foster、kit |
+| `logic` 及其子包 | 状态转换、玩法规则、计算、查询、配置语义校验、模拟缓存重建与更新 | `data`、`def`、`core:*`、`olib:core/*`；不 import view、game、装载器、foster、kit、vendor |
+| `view` | UI、绘制、动画、音频、表现状态与 GPU 缓存 | `data`、`def`、`core:*`、`olib:core/*`、`olib:foster`、`olib:kit/*`；不 import logic、game、装载器 |
+| `game`（package main） | 输入转换、命令传递、实例创建与释放、系统组装与执行顺序 | 全部；不实现伤害、收入等玩法公式 |
 
 - `logic` 不依赖 foster，才能在 `odin test` 里无窗口运行；向量用 `[2]f32` 或 `core:math/linalg`，需要和 foster 类型互转的地方放在 `game` 或 `view`。
-- `view` 不修改 `state`：点击形成 `defs` 里的操作请求，交给 `game` 在下一次更新时调用 `logic` 处理。
+- `view` 不修改 `data`：点击形成 `def` 里的操作请求，交给 `game` 在下一次更新时调用 `logic` 处理。
+- `view` 需要模拟查询结果时，由 `game` 调用 `logic` 查询后传给 `view`；表现层只做显示所需的格式化，不复制规则公式。
+- 配置结构、默认值与格式约束归 `def`，依赖模拟含义的校验归 `logic`，文件读取与版本迁移归装载入口；`def` 不依赖 JSON 装载器。
+- `game` 持有 `data.World` 和表现实例，并显式传给各层。每个模拟实例只有一份权威数据，可以同时存在多个实例；不要求 `data` 包提供全局单例。
 - 用 `tools/check_layers.ps1` 解析每个包的 `import` 行，按上表验证；Odin 的 import 只能写在文件顶部且必须是字符串字面量，按行解析是可靠的。把它接进 `check.ps1`。
 - 不为每个功能增加“接口”或回调注册表来规避依赖方向；没有实际复用需求时，显式传参即可。
 
 ### 状态和规则如何写
 
-以下为要点；内容目录与能力字段、唯一全局状态与派生缓存、变化事件、按配置计算期望值等完整约定见 olib 的 `prompts/dod-guidelines.md`，开始写玩法前一并阅读。
+以下为要点；内容目录与能力字段、模拟实例所有权与派生缓存、变化事件、按配置计算期望值等完整约定见 olib 的 `prompts/dod-guidelines.md`，开始写玩法前一并阅读。
 
-- `state` 保存真正的对局进度，例如生命、资源、冷却、任务和已探索区域。允许维护存储一致性，不负责决定攻击目标、收入或放置是否合法。
-- `logic` 的 proc 显式接收状态指针、操作参数和 `dt`，例如 `step(world: ^state.World, dt: f32)`；不读取全局输入、foster 时钟或 App。
+- `data` 保存真正的对局进度，例如生命、资源、冷却、任务和已探索区域。允许维护存储一致性，不负责决定攻击目标、收入或放置是否合法。
+- `logic` 根据规则直接修改传入的数据；需要维护列、句柄或缓存版本一致性时调用 `data` 的存储操作，不要求为每个字段新增 setter。
+- `logic` 的 proc 显式接收状态指针、操作参数和 `dt`，例如 `step(world: ^data.World, dt: f32)`；不读取全局输入、foster 时钟或 App。
 - foster 的 `DefaultAppConfig` 默认固定 60 Hz 调用 `UpdateProc`，`app.Time.Delta` 即模拟步长。暂停和倍速由 `game` 决定本次调用几次 `logic`。UI 动画时间与模拟时间按用途区分；固定步长不自动保证确定性，需要重放时还要控制随机种子与迭代顺序。
 - kit/ui 每帧在 `RenderProc` 中声明（与 OFoster_Sample 的 game_ui 一致）。控件返回的确认事件写入操作请求队列（可用 `core/messaging` 的 `Command_Queue`），由下一次 `UpdateProc` 交给 `logic`；固定步长下两次渲染之间可能有零次或多次更新，验证一次点击只执行一次。合法性、费用扣除和结果修改集中在 `logic`；禁用按钮只是反馈，不能替代规则校验。
 - 大量同类实体用 `core/handle/array` 的 `Pool` + `distinct ha.Handle`，专有属性按槽位下标存成 SoA 列；跨帧引用只存句柄，使用前 `ha.valid` 或判断 `ha.get` 是否为 nil。不要为每个单位创建带 update 回调的结构体。
 - 新增实体字段时同步检查分配、初始化、扩容、移除、槽位复用和重开，避免旧数据留给新实体。
 - 配置中的静态类型信息与实例状态分开保存。价格、攻击方式等由目录定义；实例只保存 1 字节类型编号和自身变化的数据。根据能力编写规则，不在多处按具体内容 ID 堆分支。
 - 数值从已校验的配置快照读取，不在每帧解析 JSON。默认值、全局配置和关卡覆盖的优先级应明确，UI 和规则使用同一份生效数值。
-- 空间索引、路径和统计缓存放在 `logic/queries`；渲染、图标和地图显示缓存放在 `view`。每个缓存注明输入、失效条件、重建时机和释放责任，不以缓存替代权威状态。
+- 空间索引、路径和统计缓存的结构与存储放在 `data`，按模拟实例持有，重建、更新与查询算法放在 `logic`；渲染、图标和地图显示缓存放在 `view`。每个缓存注明输入、失效条件、重建时机和释放责任，不以缓存替代权威状态，存档不必保存可重建的缓存。
 - 先保证正确性，再依据测量优化热点。热循环避免重复全表扫描、每帧临时集合和堆分配；并行仅在规模需要时引入（`core:thread.Pool` + `core:sync.Wait_Group`），工作线程只写各自结果区间，由主线程有序提交。
 
 ### 内存与资源所有权
@@ -271,14 +274,18 @@ kit/ui 目前**没有**文本输入/IME、Dropdown、富文本、拖放和列表
 下面是注释与分层的简化示例，用来说明写法，不要求新项目一定包含周期收入玩法。
 
 ```odin
-// 文件：src/state/income.odin
-package state
+// 文件：src/data/income.odin
+package data
 
 // 周期收入的余额与累计进度；计时推进与结算规则在 logic/economy。
 Income :: struct {
 	coins:           int,
 	// 距上次结算累计的模拟秒数；暂停不增加，重开时清零。
 	elapsed_seconds: f32,
+}
+
+World :: struct {
+	income: Income,
 }
 ```
 
@@ -287,11 +294,11 @@ Income :: struct {
 // economy —— 按显式传入的模拟时间结算收入，不读取窗口或 UI 状态。
 package economy
 
-import "game:state"
+import "game:data"
 
 // 推进计时并结算完整周期，剩余时间留待下次调用。
 // dt：模拟秒数，调用方保证有限且非负；interval_seconds 来自已校验配置，必须大于零。
-income_step :: proc(income: ^state.Income, dt: f32, interval_seconds: f32, coins_per_cycle: int) {
+income_step :: proc(income: ^data.Income, dt: f32, interval_seconds: f32, coins_per_cycle: int) {
 	income.elapsed_seconds += dt
 
 	// 一次推进可能跨过多个周期；逐次扣除保留余量，避免漏结算或计时漂移。
@@ -309,14 +316,48 @@ package economy
 
 import "core:testing"
 
-import "game:state"
+import "game:data"
 
 @(test)
 income_step_settles_multiple_cycles :: proc(t: ^testing.T) {
-	income: state.Income
+	income: data.Income
 	income_step(&income, 5, 2, 3)
 	testing.expect_value(t, income.coins, 2 * 3)
 	testing.expect_value(t, income.elapsed_seconds, 1)
+}
+```
+
+表现资源骨架（`src/view/view.odin`）。实际绘制时由 `game` 传入所需模拟数据或查询结果，以下只演示资源生命周期：
+
+```odin
+// 文件：src/view/view.odin
+package view
+
+import foster "olib:foster"
+import ui "olib:kit/ui"
+
+View :: struct {
+	batcher: foster.Batcher,
+	ui_ctx:  ui.UI_Context, // 地址必须稳定，初始化后不可按值复制 View。
+}
+
+view_init :: proc(v: ^View, app: ^foster.App) {
+	foster.BatcherInit(&v.batcher, &app.GraphicsDevice, "game")
+	ui.ui_init(&v.ui_ctx, 1280, 720)
+}
+
+view_draw :: proc(v: ^View, app: ^foster.App) {
+	target := foster.DrawableTargetFromWindow(&app.Window)
+	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, foster.Color{24, 28, 36, 255})
+	foster.BatcherClear(&v.batcher)
+	// 绘制世界，再按 kit/ui README 的最小帧流程声明 UI 并 ui_draw 叠加。
+	foster.BatcherRender(&v.batcher, target)
+}
+
+view_destroy :: proc(v: ^View) {
+	// 先释放 UI，再释放字体、贴图和 Batcher。
+	ui.ui_dispose(&v.ui_ctx)
+	foster.BatcherDispose(&v.batcher)
 }
 ```
 
@@ -326,16 +367,15 @@ App 骨架（`src/game/main.odin`）：
 package main
 
 import foster "olib:foster"
-import ui "olib:kit/ui"
 
+import "game:data"
 import "game:logic/economy"
-import "game:state"
+import "game:view"
 
-// App 与游戏状态放在包级：Web 目标上 main 返回后栈会被复用。
-game:    foster.App
-batcher: foster.Batcher
-ui_ctx:  ui.UI_Context
-income:  state.Income
+// game 持有这些实例；包级存储保证 Web 上 main 返回后仍然有效。
+game:         foster.App
+world:        data.World
+presentation: view.View
 
 main :: proc() {
 	foster.InitApp(&game, foster.DefaultAppConfig("MyGame", 1280, 720))
@@ -348,28 +388,20 @@ main :: proc() {
 }
 
 startup :: proc(app: ^foster.App) {
-	foster.BatcherInit(&batcher, &app.GraphicsDevice, "game")
-	ui.ui_init(&ui_ctx, 1280, 720)
+	view.view_init(&presentation, app)
 }
 
 // 默认固定 60 Hz；Delta 即模拟步长。
 update :: proc(app: ^foster.App) {
-	economy.income_step(&income, app.Time.Delta, 2, 3)
+	economy.income_step(&world.income, app.Time.Delta, 2, 3)
 }
 
 render :: proc(app: ^foster.App) {
-
-	target := foster.DrawableTargetFromWindow(&app.Window)
-	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, foster.Color{24, 28, 36, 255})
-	foster.BatcherClear(&batcher)
-	// 绘制世界，再按 kit/ui README 的最小帧流程声明 UI 并 ui_draw 叠加。
-	foster.BatcherRender(&batcher, target)
+	view.view_draw(&presentation, app)
 }
 
-// 先释放 UI，再释放字体、贴图和 Batcher。
 shutdown :: proc(app: ^foster.App) {
-	ui.ui_dispose(&ui_ctx)
-	foster.BatcherDispose(&batcher)
+	view.view_destroy(&presentation)
 }
 ```
 
@@ -391,7 +423,7 @@ shutdown :: proc(app: ^foster.App) {
 4. 需要调试/编辑工具时，作为 `src/` 下另一个 package main（如 `src/tools/editor`）或游戏内的调试面板（odin-imgui），不进入发布构建的可达代码。
 5. 目标平台包含 Web 时，按“桌面与 Web 发布入口”的约束拆出平台文件，核对资源内嵌、用户存储和 HTTP 预览，不直接复制桌面文件系统假设。
 6. 实现 `publish.bat`（和需要时的 `publish_web.bat`），验证实际产物；不能以开发构建能启动代替发布包可运行。
-7. 为每个 `logic` 包写 `*_test.odin`（`#+test` + `@(test)`），用 `odin test` 无窗口运行；画面与输入用游戏 exe 的 `shot` / `smoke` 参数验证（参考 OFoster_Sample 的 game_ui：注入点击、渲染一帧、写 PNG 后退出）。
+7. 为 `logic` 及实际创建的子包写 `*_test.odin`（`#+test` + `@(test)`），用 `odin test` 无窗口运行；画面与输入用游戏 exe 的 `shot` / `smoke` 参数验证（参考 OFoster_Sample 的 game_ui：注入点击、渲染一帧、写 PNG 后退出）。
 8. 编写 `check.ps1`：自动发现并运行所有含 `@(test)` 的包、运行 `tools/check_layers.ps1`、编译游戏；任何一项失败返回非零退出码（可参考 olib 根目录的 `check.ps1`）。
 9. 完成 README、`src/` 分层说明和简短 AGENTS.md。README 写明脚本用法、输出目录及依赖；新文档加入 `docs/README.md`，说明真实实现与尚未实现的内容。AGENTS.md 写入计划归档规则：多步改动计划放 `docs/plans/`，完成并验收后由执行者 `git mv` 到 `docs/plans/archive/`、在标题下写完成日期、commit 范围与偏离，单独提交（规则原文见 olib 的 `docs/plans/README.md`）。
 
@@ -413,7 +445,7 @@ shutdown :: proc(app: ^foster.App) {
 ```powershell
 .\play.bat
 .\check.ps1
-odin test src/logic/<feature> -collection:olib=..\olib -collection:game=src
+odin test src/logic -collection:olib=..\olib -collection:game=src
 .\play.bat shot
 ```
 

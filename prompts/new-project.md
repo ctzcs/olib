@@ -39,7 +39,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 4. 先读 olib 根目录的 `README.md`、`docs/CODE_STYLE.md`，以及要用到的包源码和 README（`kit/ui/README.md`、`core/handle/README.md`、`kit/asset/README.md`），按真实签名写调用代码；不要凭印象编造 API。可运行示例在与 olib 同级的 OFoster_Sample 仓库（`src/game_ui` 是完整的 kit/ui 用法），只作参考，不是新游戏的依赖。
 5. 新游戏默认建在 olib 的同级独立目录。不要因为当前工作目录在 olib 就把游戏业务写进库，也不要复制 olib 源码进游戏。
 6. **不得 import `olib:foster/internal/...`**，这是 olib 的硬规则，对游戏同样适用。需要的能力在 foster 公开 API 或 kit 中找；确实缺失时说明缺口，不要绕道内部包。
-7. 默认不用 ECS：大量同类实体用 `core/handle` 句柄池 + 游戏自己的 SoA 属性列（见 `prompts/dod-guidelines.md`）。`core/entities` 存在但不是默认方案。
+7. 默认不用 ECS：按数据形状选容器（见 `prompts/dod-guidelines.md` 第 1 节）。网格用扁平数组，没人跨帧引用的批量数据用 `#soa[dynamic]`，只有会被跨帧引用的实体才用 `core/handle` 句柄池 + SoA 行。`core/entities` 存在但不是默认方案。
 8. 调试界面需要时可用 `thirdparty/odin-imgui`（含 foster 后端），只用于桌面调试工具，不用于玩家 UI。
 9. 物理、音频、多线程、自定义 Shader 等按实际需求添加，不因库中存在某个模块就全部接入。
 10. 如果依赖缺失，说明缺少的具体路径和受影响的步骤，继续完成不依赖它的工作；不要创建同名空壳冒充真实库，也不要声称已构建成功。
@@ -71,11 +71,12 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 ├─ publish_web.bat               可选，Web 发布入口，支持 serve
 ├─ src/                          collection `game`
 │  ├─ def/                       package def：枚举、句柄类型、配置结构与默认值、命令和事件类型
-│  ├─ data/                      package data：本局数据、句柄池、SoA 列、模拟缓存存储及生命周期
+│  ├─ data/                      package data：模拟实例数据（标量、网格、批量数组、实体句柄与 SoA 行）、模拟缓存存储及生命周期
 │  ├─ logic/                     package logic：玩法规则、状态转换、计算、查询与模拟缓存更新
 │  │  └─ <feature>/              可选，复杂功能需要独立边界时再拆子包
 │  ├─ view/                      package view：UI、世界绘制、音频播放、显示缓存（可按需拆 view/ui 等子包）
-│  └─ game/                      package main：App 回调、输入映射、固定步调度、系统执行顺序、诊断命令
+│  ├─ game/                      package main：App 回调、输入映射、固定步调度、系统执行顺序、诊断命令
+│  └─ ids/                       可选，package ids：内容 ID 常量，只给测试、工具、装载器和诊断命令
 ├─ assets/
 │  ├─ balance/                   数值与内容目录 JSON
 │  ├─ worlds/                    场景或关卡文件
@@ -157,22 +158,10 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 
 ### 分层和依赖方向
 
-先按五层职责确定代码所在的包，再在层内按功能拆文件或子包。Odin 编译器禁止循环导入；以下依赖约束由包结构与层间检查执行，谁可以修改数据还需通过 proc 职责、调用位置和测试验证。
-
-| 包 | 负责什么 | 可以 import |
-| --- | --- | --- |
-| `def` | 枚举、固定映射、句柄类型、配置结构与默认值、命令和事件类型 | `core:*`、`olib:core/*`；不 import 其他游戏层、foster、kit |
-| `data` | 本局权威数据、句柄池、SoA 列、模拟缓存结构、分配/扩容/释放、版本号 | `def`、`core:*`、`olib:core/*`；不 import logic、view、game、装载器、foster、kit |
-| `logic` 及其子包 | 状态转换、玩法规则、计算、查询、配置语义校验、模拟缓存重建与更新 | `data`、`def`、`core:*`、`olib:core/*`；不 import view、game、装载器、foster、kit、vendor |
-| `view` | UI、绘制、动画、音频、表现状态与 GPU 缓存 | `data`、`def`、`core:*`、`olib:core/*`、`olib:foster`、`olib:kit/*`；不 import logic、game、装载器 |
-| `game`（package main） | 输入转换、命令传递、实例创建与释放、系统组装与执行顺序 | 全部；不实现伤害、收入等玩法公式 |
+先按五层职责确定代码所在的包，再在层内按功能拆文件或子包。五层的职责与 import 规则只在 olib 的 `prompts/dod-guidelines.md` 第 2 节维护（包括 `view` 如何拿到查询结果、可选的 `ids` 包），创建项目前先读该节，按其中的表建立包结构和层间检查。以下只列创建项目时额外要做的事：
 
 - `logic` 不依赖 foster，才能在 `odin test` 里无窗口运行；向量用 `[2]f32` 或 `core:math/linalg`，需要和 foster 类型互转的地方放在 `game` 或 `view`。
-- `view` 不修改 `data`：点击形成 `def` 里的操作请求，交给 `game` 在下一次更新时调用 `logic` 处理。
-- `view` 需要模拟查询结果时，由 `game` 调用 `logic` 查询后传给 `view`；表现层只做显示所需的格式化，不复制规则公式。
-- 配置结构、默认值与格式约束归 `def`，依赖模拟含义的校验归 `logic`，文件读取与版本迁移归装载入口；`def` 不依赖 JSON 装载器。
-- `game` 持有 `data.World` 和表现实例，并显式传给各层。每个模拟实例只有一份权威数据，可以同时存在多个实例；不要求 `data` 包提供全局单例。
-- 用 `tools/check_layers.ps1` 解析每个包的 `import` 行，按上表验证；Odin 的 import 只能写在文件顶部且必须是字符串字面量，按行解析是可靠的。把它接进 `check.ps1`。
+- 写 `tools/check_layers.ps1`：解析每个包的 `import` 行，按 dod-guidelines 的表验证，`*_test.odin` 按测试规则单独检查；Odin 的 import 只能写在文件顶部且必须是字符串字面量，按行解析是可靠的。把它接进 `check.ps1`。
 - 不为每个功能增加“接口”或回调注册表来规避依赖方向；没有实际复用需求时，显式传参即可。
 
 ### 状态和规则如何写
@@ -184,9 +173,9 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 - `logic` 的 proc 显式接收状态指针、操作参数和 `dt`，例如 `step(world: ^data.World, dt: f32)`；不读取全局输入、foster 时钟或 App。
 - foster 的 `DefaultAppConfig` 默认固定 60 Hz 调用 `UpdateProc`，`app.Time.Delta` 即模拟步长。暂停和倍速由 `game` 决定本次调用几次 `logic`。UI 动画时间与模拟时间按用途区分；固定步长不自动保证确定性，需要重放时还要控制随机种子与迭代顺序。
 - kit/ui 每帧在 `RenderProc` 中声明（与 OFoster_Sample 的 game_ui 一致）。控件返回的确认事件写入操作请求队列（可用 `core/messaging` 的 `Command_Queue`），由下一次 `UpdateProc` 交给 `logic`；固定步长下两次渲染之间可能有零次或多次更新，验证一次点击只执行一次。合法性、费用扣除和结果修改集中在 `logic`；禁用按钮只是反馈，不能替代规则校验。
-- 大量同类实体用 `core/handle/array` 的 `Pool` + `distinct ha.Handle`，专有属性按槽位下标存成 SoA 列；跨帧引用只存句柄，使用前 `ha.valid` 或判断 `ha.get` 是否为 nil。不要为每个单位创建带 update 回调的结构体。
-- 新增实体字段时同步检查分配、初始化、扩容、移除、槽位复用和重开，避免旧数据留给新实体。
-- 配置中的静态类型信息与实例状态分开保存。价格、攻击方式等由目录定义；实例只保存 1 字节类型编号和自身变化的数据。根据能力编写规则，不在多处按具体内容 ID 堆分支。
+- 先按数据形状选容器：单个值放普通字段，网格用一维数组（下标 `y*w + x`），没人跨帧引用的弹道、粒子、事件用 `#soa[dynamic]` + 交换删除。只有会被跨帧引用的实体才用 `core/handle/array` 的 `Pool` + `distinct ha.Handle`，属性存成 `#soa` 行（槽位对齐起步，热点时换紧凑布局）；跨帧引用只存句柄，使用前检查有效。不要为每个单位创建带 update 回调的结构体。
+- 新增实体属性就是在 `#soa` 行结构中加字段，所有列随追加、删除、扩容一起变化；生成时整行赋值，避免旧数据留给复用槽位的新实体，重开时检查释放。
+- 配置中的静态类型信息与实例状态分开保存。价格、攻击方式等由目录定义；实例只保存 1 字节类型编号和自身变化的数据。根据能力编写规则，不在多处按具体内容 ID 堆分支；ID 常量放在可选的 `ids` 包，`def / data / logic / view` 的非测试文件不 import 它。
 - 数值从已校验的配置快照读取，不在每帧解析 JSON。默认值、全局配置和关卡覆盖的优先级应明确，UI 和规则使用同一份生效数值。
 - 空间索引、路径和统计缓存的结构与存储放在 `data`，按模拟实例持有，重建、更新与查询算法放在 `logic`；渲染、图标和地图显示缓存放在 `view`。每个缓存注明输入、失效条件、重建时机和释放责任，不以缓存替代权威状态，存档不必保存可重建的缓存。
 - 先保证正确性，再依据测量优化热点。热循环避免重复全表扫描、每帧临时集合和堆分配；并行仅在规模需要时引入（`core:thread.Pool` + `core:sync.Wait_Group`），工作线程只写各自结果区间，由主线程有序提交。
@@ -431,7 +420,7 @@ shutdown :: proc(app: ^foster.App) {
 
 - 构建成功，游戏能够启动，默认场景可以操作并重开。
 - `logic` 可无窗口测试，覆盖正常路径及关键拒绝条件；涉及缓存或句柄时验证失效和复用。
-- 层间依赖检查覆盖上表的禁止导入（尤其 `logic` 不得 import foster/kit/view），以及任何代码不得 import `olib:foster/internal`。
+- 层间依赖检查覆盖 dod-guidelines 第 2 节表中的禁止导入（尤其 `logic` 不得 import foster/kit/view，模拟各层的非测试文件不得 import `ids`），以及任何代码不得 import `olib:foster/internal`。
 - 游戏用 `-vet` 编译通过，检查游戏及其可达依赖；olib 的 `check.ps1` 已对所有第一方包启用 vet。
 - UI 的文字、按钮和输入命中正确，点击不会穿透；文字在各缩放下锐利，窗口缩放和语言切换不会导致明显溢出。
 - 配置出错能定位原因；涉及保存时，写入和重新读取的内容一致。

@@ -1,6 +1,7 @@
 # olib 编码规范
 
 适用范围：`core/` 与 `kit/` 的第一方源码（含测试）。
+**使用 olib 的游戏项目**同样遵循第 2～5 节（分节注释、顶部导航、排版、注释质量），imports 在 `olib:` 之后再加 `game:` 一组；第 1 节、“foster 与 kit 的边界”和第 6 节是 olib 仓库自身的规定，游戏不适用。游戏的分层与数据约定见 [prompts/dod-guidelines.md](../prompts/dod-guidelines.md)。
 `thirdparty/` 是外部绑定的 vendored 代码，保持与上游一致，**不适用**本规范。
 `foster/` 是 Foster 移植，**豁免**本规范，沿用 [foster/docs/CODE_STYLE.md](../foster/docs/CODE_STYLE.md)；
 对它的主动修改须登记到 [foster/docs/LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)。

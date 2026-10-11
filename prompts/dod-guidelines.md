@@ -8,7 +8,7 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 
 ## 提示词开始
 
-你在一个以面向数据设计为核心的 Odin 游戏项目中工作，库为 olib（`olib:foster` 运行时、`olib:kit/*` 扩展、`olib:core/*` 数据结构）。目标是：模拟可确定、可在无窗口时用 `odin test` 测试；热点循环不分配；内容由数据驱动；各包边界清楚。写代码前先判断它属于哪个包、读写哪些数据列；规则不确定时先读项目的 `src/README.md` 和相关源码。
+你在一个以面向数据设计为核心的 Odin 游戏项目中工作，库为 olib（`olib:foster` 运行时、`olib:kit/*` 扩展、`olib:core/*` 数据结构）。目标是：模拟可确定、可在无窗口时用 `odin test` 测试；热点循环不分配；内容由数据驱动；各包边界清楚。写代码前先判断它属于哪个包、读写哪些数据列；规则不确定时先读项目的 `src/README.md` 和相关源码。代码风格与注释块（文件头、分区导航、线框）遵循 olib 的 `docs/CODE_STYLE.md` 第 2～5 节。
 
 ### 1. 按数据形状选容器
 
@@ -94,6 +94,8 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 - 每个持有堆数据的结构配 `xxx_init` / `xxx_destroy`，并在注释写明所有权。列、池、目录在一局的 init 中分配、在重开或退出时整体释放；不要在热点循环里逐实体分配。
 - 一帧内的临时数据用 `context.temp_allocator`，foster 在每帧末尾（`RenderProc` 与 `end_frame` 之后）自动清空；不要跨帧持有，`StartupProc` 的临时分配也在第一帧结束时失效。返回临时分配结果的 proc 在注释中写明“本帧有效”。工作线程仍自行清理各自的临时分配器。
 - 测试与开发构建用 `mem.Tracking_Allocator` 检查泄漏；重开一局后内存不应增长。
+- `data` 文件的文件头写明：布局（槽位对齐、紧凑、网格下标）、不变式（如“`0..<len` 全部存活”）、所有权，以及不负责什么。
+- 批量规则 proc 在声明上方写明读哪些列、写哪些列，以及对执行顺序的要求；并行化和调整调用顺序时以此为依据。
 
 ### 8. 文本与显示
 
@@ -289,38 +291,47 @@ units_regen :: proc(units: ^data.Units, regen_per_second: f32, dt: f32) {
 // 文件：src/data/units.odin（紧凑版，替换槽位对齐版）
 package data
 
+// 单位存储（紧凑布局）：所有单位行连续存放，句柄经 index 映射到行号。
+// 不变式：rows 的 0..<len 全部存活；对每一行 i，index 中 rows[i].owner 的值等于 i。
+// 所有权：由 World 持有，units_destroy 释放 index 与 rows。
+// 不负责：生命值变化、索敌等规则（见 logic/units.odin）。
+//
+// 分区：
+//   类型 —— Unit / Units
+//   生命周期 —— unit_spawn / unit_remove / units_destroy
+//   查询 —— unit_row
+
 import ha "olib:core/handle/array"
 
 import "game:def"
 
+// ------------------------------------------------------------------------------
+// 单位 / 类型 — 行结构与句柄映射
+// ------------------------------------------------------------------------------
+
+// 一个单位的全部属性；#soa 按字段拆成列。
 Unit :: struct {
 	owner:  def.Unit_Handle, // 本行属于哪个句柄，交换删除时用来修正映射
 	kind:   u8,
 	pos:    [2]f32,
 	hp:     f32,
-	target: def.Unit_Handle,
+	target: def.Unit_Handle, // 无目标时为零值句柄（永远无效）
 }
 
-// 紧凑：rows 的 0..<len 全部存活，没有空洞。
 // index 只做“句柄 → 行号”的映射；行号在任何删除后都可能变化，不跨帧保存。
-// 所有权：units_destroy 释放 index 与 rows。
 Units :: struct {
 	index: ha.Pool(u32, def.Unit_Handle),
 	rows:  #soa[dynamic]Unit,
 }
 
+// ------------------------------------------------------------------------------
+// 单位 / 生命周期 — 生成、交换删除、释放
+// ------------------------------------------------------------------------------
+
 unit_spawn :: proc(units: ^Units, kind: u8, pos: [2]f32, max_hp: f32) -> def.Unit_Handle {
 	h := ha.add(&units.index, u32(len(units.rows)))
 	append_soa(&units.rows, Unit{owner = h, kind = kind, pos = pos, hp = max_hp})
 	return h
-}
-
-unit_row :: proc(units: ^Units, h: def.Unit_Handle) -> (row: int, ok: bool) {
-	r := ha.get(units.index, h)
-	if r == nil {
-		return -1, false
-	}
-	return int(r^), true
 }
 
 // 交换删除：末行搬到被删位置，并修正被搬行的映射；旧句柄失效。
@@ -342,6 +353,19 @@ units_destroy :: proc(units: ^Units) {
 	delete_soa(units.rows)
 	units^ = {}
 }
+
+// ------------------------------------------------------------------------------
+// 单位 / 查询 — 句柄到行号
+// ------------------------------------------------------------------------------
+
+// 返回句柄对应的行号；句柄无效时 ok 为 false。行号只在当前操作内有效。
+unit_row :: proc(units: ^Units, h: def.Unit_Handle) -> (row: int, ok: bool) {
+	r := ha.get(units.index, h)
+	if r == nil {
+		return -1, false
+	}
+	return int(r^), true
+}
 ```
 
 ```odin
@@ -351,6 +375,7 @@ package logic
 import "game:data"
 
 // 批量规则：对紧凑列做普通循环。
+// 读：hp；写：hp。各行独立，顺序无关，可以分段并行。
 units_regen :: proc(units: ^data.Units, regen_per_second: f32, dt: f32) {
 	for &hp in units.rows.hp[:len(units.rows)] {
 		hp += regen_per_second * dt
@@ -358,6 +383,7 @@ units_regen :: proc(units: ^data.Units, regen_per_second: f32, dt: f32) {
 }
 
 // 跨实体引用：经句柄取目标所在行；目标已删除时清掉引用。
+// 读：target、hp；写：target、hp（目标行）。按行顺序结算，多个攻击者的伤害叠加到同一目标，不能直接并行。
 units_attack :: proc(units: ^data.Units, dps: f32, dt: f32) {
 	n := len(units.rows)
 	target := units.rows.target[:n]
@@ -373,6 +399,7 @@ units_attack :: proc(units: ^data.Units, dps: f32, dt: f32) {
 }
 
 // 倒序删除阵亡单位：被搬来的末行已检查过，不会跳过。
+// 读：hp、owner；结构性修改 rows 与 index：只在主线程调用，不在其他遍历 rows 的循环中途调用。
 units_remove_dead :: proc(units: ^data.Units) {
 	for i := len(units.rows) - 1; i >= 0; i -= 1 {
 		if units.rows[i].hp <= 0 {

@@ -217,7 +217,7 @@ import ha "olib:core/handle/array"
 import "game:def"
 
 // 一个单位的全部属性；#soa 按字段拆成列。
-Unit_Row :: struct {
+Unit :: struct {
 	kind:   u8,
 	pos:    [2]f32,
 	hp:     f32,
@@ -231,7 +231,7 @@ Unit_Slot :: struct {}
 // 所有权：units_destroy 释放 pool 与 rows。
 Units :: struct {
 	pool: ha.Pool(Unit_Slot, def.Unit_Handle),
-	rows: #soa[dynamic]Unit_Row,
+	rows: #soa[dynamic]Unit,
 }
 
 // 整行赋值，复用槽位不会留下上一位占用者的值。
@@ -241,7 +241,7 @@ unit_spawn :: proc(units: ^Units, kind: u8, pos: [2]f32, max_hp: f32) -> def.Uni
 	if slot >= len(units.rows) {
 		resize_soa(&units.rows, slot + 1)
 	}
-	units.rows[slot] = Unit_Row{kind = kind, pos = pos, hp = max_hp}
+	units.rows[slot] = Unit{kind = kind, pos = pos, hp = max_hp}
 	return h
 }
 
@@ -293,7 +293,7 @@ import ha "olib:core/handle/array"
 
 import "game:def"
 
-Unit_Row :: struct {
+Unit :: struct {
 	owner:  def.Unit_Handle, // 本行属于哪个句柄，交换删除时用来修正映射
 	kind:   u8,
 	pos:    [2]f32,
@@ -306,12 +306,12 @@ Unit_Row :: struct {
 // 所有权：units_destroy 释放 index 与 rows。
 Units :: struct {
 	index: ha.Pool(u32, def.Unit_Handle),
-	rows:  #soa[dynamic]Unit_Row,
+	rows:  #soa[dynamic]Unit,
 }
 
 unit_spawn :: proc(units: ^Units, kind: u8, pos: [2]f32, max_hp: f32) -> def.Unit_Handle {
 	h := ha.add(&units.index, u32(len(units.rows)))
-	append_soa(&units.rows, Unit_Row{owner = h, kind = kind, pos = pos, hp = max_hp})
+	append_soa(&units.rows, Unit{owner = h, kind = kind, pos = pos, hp = max_hp})
 	return h
 }
 

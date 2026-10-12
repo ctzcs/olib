@@ -397,7 +397,8 @@ web_relocate_app :: proc(app: ^App) -> ^App {
 	// main() 在 .JS 下于 Run 返回后立即返回, 其栈帧(含调用方声明的 App 结构)会被
 	// 后续调用复用。在 run() 入口把 App 拷贝到堆上并修正内部回指针, 之后的一切
 	// (含 StartupProc 里初始化的 Batcher 等)都指向堆副本。
-	// 注意: 经 AppSetUserData 传入的状态仍应是全局变量或堆分配(见文档 §0)。
+	// 注意: 经 AppSetUserData 传入的状态仍应是全局变量或堆分配(见文档 §0);
+	// 也不能把 App 嵌在该状态里, 嵌入的那份在这里搬走后即过期。
 	heap_app := new(App)
 	heap_app^ = app^
 

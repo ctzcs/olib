@@ -168,45 +168,61 @@ For browser checks, follow [tests/port_regression/README.md](tests/port_regressi
 
 ## App usage
 
-Odin does not have C#-style class inheritance. Use composition: put an `App`
-inside your game state, register lifecycle procedures, and attach the state with
-`AppSetUserData` when callbacks need access to it.
+Odin does not have C#-style class inheritance, so game state does not live on
+an `App` subclass. Keep the state in its own struct, attach it with
+`AppSetUserData`, and read it back in callbacks with `AppGetUserDataAs`.
+
+Two rules keep this working on every target:
+
+- **Allocate the state on the heap (or make it a global).** On the web target
+  `main()` returns right after `Run` registers the frame loop, so anything on
+  `main`'s stack is overwritten later.
+- **Do not embed `App` inside the state.** On the web target `Run` moves the
+  `App` to the heap and the callbacks receive that copy, so an embedded `App`
+  field goes stale. Use the `^foster.App` argument the callbacks receive.
 
 ```odin
 package main
 
 import foster "olib:foster"
 
-Game :: struct {
-    App: foster.App,
+World :: struct {
     Score: int,
 }
 
 startup :: proc(app: ^foster.App) {
-    game := cast(^Game)foster.AppGetUserData(app)
-    game.Score = 0
+    world := foster.AppGetUserDataAs(app, World)
+    world.Score = 0
 }
 
 update :: proc(app: ^foster.App) {
-    game := cast(^Game)foster.AppGetUserData(app)
-    game.Score += 1
+    world := foster.AppGetUserDataAs(app, World)
+    world.Score += 1
     if app.Time.Frame >= 60 {
         foster.Exit(app)
     }
 }
 
-main :: proc() {
-    game := Game{}
-    config := foster.DefaultAppConfig("MyGame", 1280, 720)
-    foster.InitApp(&game.App, config)
-    defer foster.Dispose(&game.App)
+shutdown :: proc(app: ^foster.App) {
+    free(foster.AppGetUserDataAs(app, World))
+    foster.AppSetUserData(app, nil)
+}
 
-    foster.AppSetUserData(&game.App, rawptr(&game))
-    game.App.StartupProc = startup
-    game.App.UpdateProc = update
-    foster.Run(&game.App)
+main :: proc() {
+    app: foster.App
+    foster.InitApp(&app, foster.DefaultAppConfig("MyGame", 1280, 720))
+    defer foster.Dispose(&app)
+
+    foster.AppSetUserData(&app, new(World))
+    app.StartupProc = startup
+    app.UpdateProc = update
+    app.ShutdownProc = shutdown
+    foster.Run(&app)
 }
 ```
+
+`AppGetUserDataAs` does not check the type: `T` must match the pointer passed
+to `AppSetUserData`.
 
 For a small program with no custom state, the callbacks can simply use the
 `^foster.App` argument directly, as shown in the `OFoster_Sample` project.

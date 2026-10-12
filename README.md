@@ -36,7 +36,7 @@ thirdparty/  外部绑定：clay-odin / odin-imgui（含 Foster 后端）
 prompts/     给 AI 的提示词：新项目创建 / 面向数据开发约定
 ```
 
-可运行示例在独立仓库 [OFoster_Sample](https://github.com/ctzcs/OFoster_Sample)（与 olib 同级检出，`run.bat <示例名>`）。
+可运行示例在独立仓库 [olib_sample](https://github.com/ctzcs/olib_sample)（与 olib 同级检出，`run.bat <示例名>`）。
 
 ## 使用
 
@@ -98,7 +98,7 @@ main :: proc() {
 控制台也安全；示例仓库中 `run.bat game_ui cli` 可试用 `help`、`quit`。
 
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
-游戏 UI 示例见 [OFoster_Sample](https://github.com/ctzcs/OFoster_Sample) 的 `game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
+游戏 UI 示例见 [olib_sample](https://github.com/ctzcs/olib_sample) 的 `game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
 基础控件验收页见同仓库的 `ui_gallery`。
 
 ## 测试
@@ -107,11 +107,11 @@ main :: proc() {
 
 ```powershell
 powershell -File check.ps1             # 全部检查
-powershell -File check.ps1 -NoSamples  # 跳过同级 OFoster_Sample 示例编译
+powershell -File check.ps1 -NoSamples  # 跳过同级 olib_sample 示例编译
 ```
 
 它会自动发现并运行 `core/`、`kit/` 下所有含 `@(test)` 的包，检查 `foster` 包、编译 foster 自带回归程序与
-odin-imgui 的 foster 后端示例、校验 foster 本地修改清单；同级存在 OFoster_Sample 时再编译全部示例。
+odin-imgui 的 foster 后端示例、校验 foster 本地修改清单；同级存在 olib_sample 时再编译全部示例。
 
 单独测一个包：
 

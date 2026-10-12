@@ -7,7 +7,7 @@
 - 结构与依赖方向：`core/`（纯 Odin）→ `foster/`（Foster 移植，唯一运行时）→ `kit/`（扩展），见 [README](README.md) 与 [CODE_STYLE](docs/CODE_STYLE.md)。
 - kit 不封装、不别名 foster；`foster/` 以外不得 import `olib:foster/internal/...`。
 - 修改 `foster/` 必须登记到 [foster/docs/LOCAL_CHANGES.md](foster/docs/LOCAL_CHANGES.md)，并在修改处写 `// [olib L-xxx]` 标记。
-- 示例在同级仓库 OFoster_Sample，库仓库只放库代码与测试。
+- 示例在同级仓库 olib_sample，库仓库只放库代码与测试。
 
 ## 提交前
 

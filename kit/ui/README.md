@@ -1,7 +1,7 @@
 # 游戏 UI
 
 Clay 负责布局，`kit/ui` 提供控件、交互与 Foster Batcher 后端。
-可运行游戏界面位于示例仓库 [OFoster_Sample](https://github.com/ctzcs/OFoster_Sample) 的 `src/game_ui`：遗迹场景上的生命/能量 HUD、
+可运行游戏界面位于示例仓库 [olib_sample](https://github.com/ctzcs/olib_sample) 的 `src/game_ui`：遗迹场景上的生命/能量 HUD、
 带冷却遮罩的技能栏、格子背包和暂停菜单。它使用同一套布局与交互，游戏皮肤在示例中定义。
 原来的设置页和控件验收示例在同仓库的 `src/ui_gallery`。
 示例仓库需与 olib 同级检出，以下 `run.bat` 命令均在示例仓库根目录执行。

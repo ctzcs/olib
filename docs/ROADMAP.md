@@ -6,7 +6,7 @@
 ## 现状（2026-10）
 
 - 三层：`core/`（纯 Odin）→ `foster/`（Foster 移植，唯一运行时）→ `kit/`（扩展能力），外加 `thirdparty/`（clay-odin / odin-imgui）。
-- 17 个包带单元测试，共 93 个测试；示例在同级仓库 OFoster_Sample（9 个，含 kit/ui 的截图验收）。
+- 17 个包带单元测试，共 93 个测试；示例在同级仓库 olib_sample（9 个，含 kit/ui 的截图验收）。
 - 原则：foster/ 保持 Foster API 对齐，本地修改登记到 [LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)；
   扩展能力在 kit/ 拼装，kit 不封装、不别名 foster（见 CODE_STYLE「foster 与 kit 的边界」）。
 - 3D 数学直接用 `core:math/linalg`；投影矩阵等少数缺口在 `kit/world` 做薄助手。
@@ -72,4 +72,4 @@ ShaderCompiler（HLSL → 四后端 + 哈希清单）、FbxToGltf、QoaEncode、
 | Paper UI | 由 `kit/ui`（clay）与 odin-imgui 替代 |
 | Vector2Int | `core:math` 已有 |
 | Roslyn Analyzers | C# 编译器机制，Odin 无对应 |
-| 库内示例 / 启动模板 | 库仓库只放库代码与测试；示例在同级仓库 OFoster_Sample，启动直接用 `foster.App`；早期根 main.odin 的环境知识见 git 历史 `1b3dc69` |
+| 库内示例 / 启动模板 | 库仓库只放库代码与测试；示例在同级仓库 olib_sample，启动直接用 `foster.App`；早期根 main.odin 的环境知识见 git 历史 `1b3dc69` |

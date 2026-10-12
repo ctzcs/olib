@@ -36,7 +36,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
    - `olib:foster` —— **唯一运行时**：App 生命周期、窗口、输入、图形、基础类型（`Color`、`Vec2`、`Rect`……）、存储。直接调用，不要再包一层“引擎类”。
    - `olib:kit/*` —— foster 没有的扩展能力：`kit/ui`（clay 布局的游戏 UI）、`kit/asset`（资源管线）、`kit/world`（相机/场景）、`kit/rendering`（Sprite/图集）、`kit/rendering3d`、`kit/animation`、`kit/audio`、`kit/storage`（资源根与存档路径）、`kit/app`（`has_arg` 与调试控制台）。
    - `olib:core/*` —— 纯 Odin 数据结构与格式：`core/handle`（代数句柄池）、`core/messaging`（命令队列/广播）、`core/encoding`（JSON/CSV）、`core/tween` 等。
-4. 先读 olib 根目录的 `README.md`、`docs/CODE_STYLE.md`，以及要用到的包源码和 README（`kit/ui/README.md`、`core/handle/README.md`、`kit/asset/README.md`），按真实签名写调用代码；不要凭印象编造 API。可运行示例在与 olib 同级的 OFoster_Sample 仓库（`src/game_ui` 是完整的 kit/ui 用法），只作参考，不是新游戏的依赖。
+4. 先读 olib 根目录的 `README.md`、`docs/CODE_STYLE.md`，以及要用到的包源码和 README（`kit/ui/README.md`、`core/handle/README.md`、`kit/asset/README.md`），按真实签名写调用代码；不要凭印象编造 API。可运行示例在与 olib 同级的 olib_sample 仓库（`src/game_ui` 是完整的 kit/ui 用法），只作参考，不是新游戏的依赖。
 5. 新游戏默认建在 olib 的同级独立目录。不要因为当前工作目录在 olib 就把游戏业务写进库，也不要复制 olib 源码进游戏。
 6. **不得 import `olib:foster/internal/...`**，这是 olib 的硬规则，对游戏同样适用。需要的能力在 foster 公开 API 或 kit 中找；确实缺失时说明缺口，不要绕道内部包。
 7. 默认不用 ECS：按数据形状选容器（见 `prompts/dod-guidelines.md` 第 1 节）。网格用扁平数组，没人跨帧引用的批量数据用 `#soa[dynamic]`，只有会被跨帧引用的实体才用 `core/handle` 句柄池 + SoA 行。`core/entities` 存在但不是默认方案。
@@ -53,7 +53,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 ├─ olib/                         库，不放新游戏业务代码
 │  ├─ prompts/                   AI 提示词文档（本文件所在目录）
 │  ├─ core/  foster/  kit/  thirdparty/
-├─ OFoster_Sample/               可选，olib 的可运行示例
+├─ olib_sample/                  可选，olib 的可运行示例
 └─ <ProjectName>/                新建的独立游戏项目
 ```
 
@@ -126,7 +126,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 odin build src/game -collection:olib=..\olib -collection:game=src -debug -out:build\dev\<ProjectName>.exe
 ```
 
-示例名之后的参数透传给游戏（`play.bat shot`、`play.bat cli`），参考 OFoster_Sample 的 `run.bat`。
+示例名之后的参数透传给游戏（`play.bat shot`、`play.bat cli`），参考 olib_sample 的 `run.bat`。
 
 **桌面发布 `publish.bat`**
 
@@ -172,7 +172,7 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 - `logic` 根据规则直接修改传入的数据；需要维护列、句柄或缓存版本一致性时调用 `data` 的存储操作，不要求为每个字段新增 setter。
 - `logic` 的 proc 显式接收状态指针、操作参数和 `dt`，例如 `step(world: ^data.World, dt: f32)`；不读取全局输入、foster 时钟或 App。
 - foster 的 `DefaultAppConfig` 默认固定 60 Hz 调用 `UpdateProc`，`app.Time.Delta` 即模拟步长。暂停和倍速由 `game` 决定本次调用几次 `logic`。UI 动画时间与模拟时间按用途区分；固定步长不自动保证确定性，需要重放时还要控制随机种子与迭代顺序。
-- kit/ui 每帧在 `RenderProc` 中声明（与 OFoster_Sample 的 game_ui 一致）。控件返回的确认事件写入操作请求队列（可用 `core/messaging` 的 `Command_Queue`），由下一次 `UpdateProc` 交给 `logic`；固定步长下两次渲染之间可能有零次或多次更新，验证一次点击只执行一次。合法性、费用扣除和结果修改集中在 `logic`；禁用按钮只是反馈，不能替代规则校验。
+- kit/ui 每帧在 `RenderProc` 中声明（与 olib_sample 的 game_ui 一致）。控件返回的确认事件写入操作请求队列（可用 `core/messaging` 的 `Command_Queue`），由下一次 `UpdateProc` 交给 `logic`；固定步长下两次渲染之间可能有零次或多次更新，验证一次点击只执行一次。合法性、费用扣除和结果修改集中在 `logic`；禁用按钮只是反馈，不能替代规则校验。
 - 先按数据形状选容器：单个值放普通字段，网格用一维数组（下标 `y*w + x`），没人跨帧引用的弹道、粒子、事件用 `#soa[dynamic]` + 交换删除。只有会被跨帧引用的实体才用 `core/handle/array` 的 `Pool` + `distinct ha.Handle`，属性存成 `#soa` 行（槽位对齐起步，热点时换紧凑布局）；跨帧引用只存句柄，使用前检查有效。不要为每个单位创建带 update 回调的结构体。
 - 新增实体属性就是在 `#soa` 行结构中加字段，所有列随追加、删除、扩容一起变化；生成时整行赋值，避免旧数据留给复用槽位的新实体，重开时检查释放。
 - 配置中的静态类型信息与实例状态分开保存。价格、攻击方式等由目录定义；实例只保存 1 字节类型编号和自身变化的数据。根据能力编写规则，不在多处按具体内容 ID 堆分支；ID 常量放在可选的 `ids` 包，`def / data / logic / view` 的非测试文件不 import 它。
@@ -192,7 +192,7 @@ Odin 没有 GC，所有权必须显式：
 
 ### UI 用什么以及如何接入
 
-玩家 UI 使用 **`kit/ui`**：clay 负责布局，kit/ui 提供控件、交互和 foster Batcher 后端。接入前完整阅读 olib 的 `kit/ui/README.md`，并对照 OFoster_Sample 的 `src/game_ui`。
+玩家 UI 使用 **`kit/ui`**：clay 负责布局，kit/ui 提供控件、交互和 foster Batcher 后端。接入前完整阅读 olib 的 `kit/ui/README.md`，并对照 olib_sample 的 `src/game_ui`。
 
 **先查 kit/ui 是否已有对应控件，再决定是否自定义。** 自定义控件用 `ui_interact` 复用悬停/按下/焦点/禁用状态，不从零重写交互。
 
@@ -434,7 +434,7 @@ shutdown :: proc(app: ^foster.App) {
 4. 需要调试/编辑工具时，作为 `src/` 下另一个 package main（如 `src/tools/editor`）或游戏内的调试面板（odin-imgui），不进入发布构建的可达代码。
 5. 目标平台包含 Web 时，按“桌面与 Web 发布入口”的约束拆出平台文件，核对资源内嵌、用户存储和 HTTP 预览，不直接复制桌面文件系统假设。
 6. 实现 `publish.bat`（和需要时的 `publish_web.bat`），验证实际产物；不能以开发构建能启动代替发布包可运行。
-7. 为 `logic` 及实际创建的子包写 `*_test.odin`（`#+test` + `@(test)`），用 `odin test` 无窗口运行；画面与输入用游戏 exe 的 `shot` / `smoke` 参数验证（参考 OFoster_Sample 的 game_ui：注入点击、渲染一帧、写 PNG 后退出）。
+7. 为 `logic` 及实际创建的子包写 `*_test.odin`（`#+test` + `@(test)`），用 `odin test` 无窗口运行；画面与输入用游戏 exe 的 `shot` / `smoke` 参数验证（参考 olib_sample 的 game_ui：注入点击、渲染一帧、写 PNG 后退出）。
 8. 编写 `check.ps1`：自动发现并运行所有含 `@(test)` 的包、运行 `tools/check_layers.ps1`、编译游戏；任何一项失败返回非零退出码（可参考 olib 根目录的 `check.ps1`）。
 9. 完成 README、`src/` 分层说明和简短 AGENTS.md。README 写明脚本用法、输出目录及依赖；新文档加入 `docs/README.md`，说明真实实现与尚未实现的内容。AGENTS.md 写明编码风格与注释遵循 olib 的 `docs/CODE_STYLE.md` 第 2～5 节，数据布局与分层遵循 olib 的 `prompts/dod-guidelines.md`（写出 olib 的相对路径），并写入计划归档规则：多步改动计划放 `docs/plans/`，完成并验收后由执行者 `git mv` 到 `docs/plans/archive/`、在标题下写完成日期、commit 范围与偏离，单独提交（规则原文见 olib 的 `docs/plans/README.md`）。
 
@@ -460,7 +460,7 @@ odin test src/logic -collection:olib=..\olib -collection:game=src
 .\play.bat shot
 ```
 
-上面的占位名称需要替换为实际项目。不要报告不存在的命令，也不要把 olib 或 OFoster_Sample 的测试和示例当作新游戏已经实现的功能和检查。
+上面的占位名称需要替换为实际项目。不要报告不存在的命令，也不要把 olib 或 olib_sample 的测试和示例当作新游戏已经实现的功能和检查。
 
 ### 最终交付
 
@@ -490,4 +490,4 @@ odin test src/logic -collection:olib=..\olib -collection:game=src
 | 配置读写 | [core/encoding](../core/encoding/) |
 | 面向数据的开发约定 | [dod-guidelines.md](dod-guidelines.md) |
 
-可运行示例位于独立的 OFoster_Sample 仓库，默认与 olib 同级（`run.bat <示例名>`）。它们用于参考库 API；新项目的业务、资源和验证应保存在新游戏自己的仓库中。
+可运行示例位于独立的 olib_sample 仓库，默认与 olib 同级（`run.bat <示例名>`）。它们用于参考库 API；新项目的业务、资源和验证应保存在新游戏自己的仓库中。

@@ -36,7 +36,7 @@ activation/manual-update helpers. The SDL3 bindings supplied with Odin are
 used directly.
 
 The library package is `foster/` in the olib repository. Runnable examples (Foster basics and
-kit/ui demos) are maintained in the separate `OFoster_Sample` project, checked out next to olib.
+kit/ui demos) are maintained in the separate `olib_sample` project, checked out next to olib.
 
 ## Use the framework
 
@@ -225,7 +225,7 @@ main :: proc() {
 to `AppSetUserData`.
 
 For a small program with no custom state, the callbacks can simply use the
-`^foster.App` argument directly, as shown in the `OFoster_Sample` project.
+`^foster.App` argument directly, as shown in the `olib_sample` project.
 
 ## Writing custom shaders
 

@@ -1,7 +1,7 @@
 ﻿# olib 一键验证：提交前运行，任何一项失败则以非零退出码结束。
 # 用法（olib 根目录）：
 #   powershell -File check.ps1              全部检查
-#   powershell -File check.ps1 -NoSamples   跳过同级 OFoster_Sample 示例编译
+#   powershell -File check.ps1 -NoSamples   跳过同级 olib_sample 示例编译
 # 产物写到 build/check/（已被 .gitignore 忽略）。
 
 param(
@@ -71,7 +71,7 @@ Invoke-Step 'build  odin-imgui ofoster example' {
 }
 
 # ---- 同级示例仓库（存在时） ----
-$samples = Join-Path (Split-Path -Parent $root) 'OFoster_Sample'
+$samples = Join-Path (Split-Path -Parent $root) 'olib_sample'
 if (-not $NoSamples -and (Test-Path (Join-Path $samples 'src'))) {
 	foreach ($s in Get-ChildItem -Directory (Join-Path $samples 'src')) {
 		Invoke-Step "sample $($s.Name)" {
@@ -79,7 +79,7 @@ if (-not $NoSamples -and (Test-Path (Join-Path $samples 'src'))) {
 		}
 	}
 } elseif (-not $NoSamples) {
-	Write-Host "skip   OFoster_Sample（未在 $samples 找到）"
+	Write-Host "skip   olib_sample（未在 $samples 找到）"
 }
 
 Write-Host ''

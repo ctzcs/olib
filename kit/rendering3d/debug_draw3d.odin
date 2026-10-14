@@ -275,6 +275,8 @@ debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, came
 		AlphaOperation   = .Add,
 		AlphaSource      = .One,
 		AlphaDestination = .OneMinusSrcAlpha,
+		Mask             = .RGBA, // 零值 .None 会关掉颜色写入
+		Color            = foster.White,
 	}
 	foster.GraphicsDeviceDraw(d.mesh.GraphicsDevice, &command)
 	foster.DrawCommandDispose(&command)

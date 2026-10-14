@@ -136,11 +136,15 @@ shader_blobs_embedded_and_driver_pick :: proc(t: ^testing.T) {
 	// 驱动分发
 	testing.expect(t, shader3d_driver_supported(.Vulkan))
 	testing.expect(t, shader3d_driver_supported(.D3D12))
-	testing.expect(t, !shader3d_driver_supported(.Metal))
+	testing.expect(t, shader3d_driver_supported(.Metal))
+	testing.expect(t, !shader3d_driver_supported(.None))
 	d3d_pick := shader3d_pick_code(.D3D12, debugline_vertex_spv, debugline_vertex_dxil)
 	testing.expect(t, len(d3d_pick) == len(debugline_vertex_dxil) && d3d_pick[0] == debugline_vertex_dxil[0])
 	vk_pick := shader3d_pick_code(.Vulkan, debugline_vertex_spv, debugline_vertex_dxil)
 	testing.expect(t, len(vk_pick) == len(debugline_vertex_spv) && vk_pick[0] == debugline_vertex_spv[0])
+	metal_pick := shader3d_pick_code(.Metal, debugline_vertex_spv, debugline_vertex_dxil, debugline_vertex_msl)
+	testing.expect(t, len(metal_pick) == len(debugline_vertex_msl) && metal_pick[0] == '#') // MSL 源码以 #include 开头
+	testing.expect(t, len(shader3d_pick_code(.Metal, debugline_vertex_spv, debugline_vertex_dxil)) == 0)
 }
 
 // ---------------------------------------------------------------------------

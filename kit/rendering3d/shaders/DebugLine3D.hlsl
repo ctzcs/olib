@@ -4,7 +4,8 @@ struct VsOutput { float4 Position : SV_Position; float4 Color : TEXCOORD0; };
 VsOutput vertex_main(VsInput input)
 {
     VsOutput output;
-    output.Position = mul(ViewProjection, float4(input.Position, 1));
+    // kit/world 是行向量约定（v * M），矩阵按 Matrix4 存储原样上传。
+    output.Position = mul(float4(input.Position, 1), ViewProjection);
     output.Color = input.Color;
     return output;
 }

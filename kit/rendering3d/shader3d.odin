@@ -2,8 +2,8 @@
 //
 // foster.ShaderInit 按驱动决定格式（Vulkan→SPIRV、D3D12→DXIL、Metal→MSL），
 // 调用方只需交给它对应格式的字节码：shader3d_pick_code 负责这一步。
-// 字节码由 shaders/build_shaders.ps1 编译后入库、#load 内嵌；游戏自己的着色器
-// 编译后同样用 shader3d_pick_code 选择。
+// 字节码由 shaders/build_shaders.ps1（SDL_shadercross）编译后入库、#load 内嵌；游戏自己的着色器
+// 用同一个脚本（-Dir 指向自己的目录）编译，再用 shader3d_pick_code 选择。
 // Web 后端走 WebGL + 手写 GLSL，不在这里。
 package rendering3d
 
@@ -26,24 +26,36 @@ debugline_fragment_spv :: #load("shaders/Compiled/DebugLine3D.fragment.spv")
 debugline_vertex_dxil :: #load("shaders/Compiled/DebugLine3D.vertex.dxil")
 @(private)
 debugline_fragment_dxil :: #load("shaders/Compiled/DebugLine3D.fragment.dxil")
+@(private)
+debugline_vertex_msl :: #load("shaders/Compiled/DebugLine3D.vertex.msl")
+@(private)
+debugline_fragment_msl :: #load("shaders/Compiled/DebugLine3D.fragment.msl")
 
 // ------------------------------------------------------------------------------
 // 字节码选择
 // ------------------------------------------------------------------------------
 
-// 驱动是否有对应的预编译字节码（当前 SPIR-V / DXIL）。
+// 驱动是否走预编译字节码（SPIR-V / DXIL / MSL）。Web 走手写 GLSL，不在此列。
 shader3d_driver_supported :: proc(driver: foster.GraphicsDriver) -> bool {
 	#partial switch driver {
-	case .Vulkan, .Private, .D3D12:
+	case .Vulkan, .Private, .D3D12, .Metal:
 		return true
 	case:
 		return false
 	}
 }
 
-// 按驱动取 spv / dxil 字节码。
-shader3d_pick_code :: proc(driver: foster.GraphicsDriver, spv, dxil: []u8) -> []u8 {
-	return driver == .D3D12 ? dxil : spv
+// 按驱动取 spv / dxil / msl 字节码。没给 msl 时 Metal 驱动返回空切片，
+// 调用方应检查长度（foster.ShaderInit 不接受空字节码）。
+shader3d_pick_code :: proc(driver: foster.GraphicsDriver, spv, dxil: []u8, msl: []u8 = nil) -> []u8 {
+	#partial switch driver {
+	case .D3D12:
+		return dxil
+	case .Metal:
+		return msl
+	case:
+		return spv
+	}
 }
 
 // ------------------------------------------------------------------------------
@@ -59,8 +71,8 @@ Shader3D_Debug_Line_Pair :: struct {
 shader3d_debug_line_init :: proc(pair: ^Shader3D_Debug_Line_Pair, device: ^foster.GraphicsDevice) -> bool {
 	if !shader3d_driver_supported(device.Driver) { return false }
 
-	vs_code := shader3d_pick_code(device.Driver, debugline_vertex_spv, debugline_vertex_dxil)
-	fs_code := shader3d_pick_code(device.Driver, debugline_fragment_spv, debugline_fragment_dxil)
+	vs_code := shader3d_pick_code(device.Driver, debugline_vertex_spv, debugline_vertex_dxil, debugline_vertex_msl)
+	fs_code := shader3d_pick_code(device.Driver, debugline_fragment_spv, debugline_fragment_dxil, debugline_fragment_msl)
 
 	foster.ShaderInit(&pair.vertex, device, foster.ShaderCreateInfo{
 		Stage              = .Vertex,

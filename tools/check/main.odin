@@ -18,7 +18,7 @@ import "core:strings"
 
 // 分区：
 //   入口 —— 参数解析 / 检查顺序 / 汇总
-//   检查项执行 —— 子进程运行与结果打印
+//   检查项执行 —— 子进程运行 / 过滤 / 结果打印（LOCAL_CHANGES 校验见 local_changes.odin）
 //   包发现 —— core/ kit/ tools/ 与 olib_sample/src
 //   路径 —— join / clean 的单返回值包装
 
@@ -100,9 +100,10 @@ main :: proc() {
 			"odin", "build", fmt.tprintf("foster/tests/%s", t), "-collection:olib=.",
 			fmt.tprintf("-out:%s/%s%s", c.out, t, EXE))
 	}
-	run(&c, "local  foster LOCAL_CHANGES",
-		"powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-		"foster/tests/check_local_changes.ps1")
+	if selected(&c, "local  foster LOCAL_CHANGES") {
+		ok, log := check_local_changes(c.root)
+		report(&c, "local  foster LOCAL_CHANGES", ok, log)
+	}
 
 	// ---- thirdparty 中依赖 foster 的绑定示例 ----
 	run(&c, "build  odin-imgui ofoster example",
@@ -145,29 +146,38 @@ main :: proc() {
 // 检查项执行
 // ==============================================================================
 
-// 在 olib 根目录运行一条命令作为一个检查项。输出只在失败时打印，避免淹没结果。
-// 每项结束后释放临时分配器（名称、参数都分配在其中）。
+// 在 olib 根目录运行一条命令作为一个检查项。
 run :: proc(c: ^Checker, name: string, command: ..string) {
-	defer free_all(context.temp_allocator)
-	if len(c.only) > 0 && !strings.contains(name, c.only) do return
+	if !selected(c, name) do return
 
 	state, stdout, stderr, err := os.process_exec(
 		{working_dir = c.root, command = command},
 		context.temp_allocator,
 	)
-	if err == nil && state.exited && state.exit_code == 0 {
+	log := strings.concatenate({string(stdout), string(stderr)}, context.temp_allocator)
+	if err != nil {
+		log = fmt.tprintf("无法运行 %s: %v\n%s", command[0], err, log)
+	}
+	report(c, name, err == nil && state.exited && state.exit_code == 0, log)
+}
+
+// -only 过滤：未指定时全部运行。
+selected :: proc(c: ^Checker, name: string) -> bool {
+	return len(c.only) == 0 || strings.contains(name, c.only)
+}
+
+// 记录一项结果。日志只在失败时打印，避免淹没结果；之后释放临时分配器
+//（名称、参数、日志都分配在其中）。
+report :: proc(c: ^Checker, name: string, ok: bool, log: string) {
+	defer free_all(context.temp_allocator)
+	if ok {
 		fmt.printfln("ok    %s", name)
 		c.passed += 1
 		return
 	}
-
 	fmt.printfln("FAIL  %s", name)
-	if err != nil {
-		fmt.printfln("无法运行 %s: %v", command[0], err)
-	}
-	log := strings.trim_right_space(strings.concatenate({string(stdout), string(stderr)}, context.temp_allocator))
-	if len(log) > 0 {
-		fmt.println(log)
+	if trimmed := strings.trim_right_space(log); len(trimmed) > 0 {
+		fmt.println(trimmed)
 	}
 	append(&c.failed, strings.clone(name))
 }

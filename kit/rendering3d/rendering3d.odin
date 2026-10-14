@@ -2,7 +2,7 @@
 //
 // 只提供每个 3D 游戏都要的机制；光照模型、材质模型、阴影、后处理等外观
 // 策略由游戏自己写。参考实现（Standard PBR 前向渲染器）在同级仓库
-// olib_sample 的 src/forward3d，复制过去按需修改。
+// olib_sample 的 src/forward3d，复制过去按需修改。写着色器的完整流程见 README.md。
 //
 // 矩阵约定：kit/world 是行向量（v' = v * M），std140_write_matrix 原样上传，
 // 着色器里写 mul(v, M)。

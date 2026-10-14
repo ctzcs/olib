@@ -1,5 +1,8 @@
 # Plan：foster 对外只保留 PascalCase 一套名字
 
+> **状态：已完成（2026-10-14）** · 提交 `8613c55`..`e5fcde9`
+> 偏离：步骤 1 删除 227 行别名（230 行中 `BeginFrame`、`EndFrame`、`ComputeStorageBufferUploadTyped` 按决策 2 保留并改指新定义）；重复实现中 `vec2_length_squared`、`vec2_normalized` 删除并改调 PascalCase 版，`BatcherPushMatrixRaw` 由包装改为直接实现，`clamp01` 与 `Clamp01` 对 NaN / -0.0 结果可能不同，保留并标 `@(private)`；文档步骤顺带改了 kit/rendering3d 与 imgui_impl_ofoster 注释里的旧名；Proj_Sand 无需改动；Web 端只做了 js_wasm32 类型检查，wasm 链接因本机缺 `vendor/sdl3/env.o` 失败（master 上同样失败）。
+
 ## 背景
 
 foster 沿用上游 C# Foster 的 PascalCase 命名（与 `vendor:sdl3` 保留 SDL 原名同理：方便对照上游源码与文档、同步上游）。但目前同一个函数常有两个名字，规则没有落实：

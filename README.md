@@ -24,7 +24,7 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── asset/       资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
 ├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
-├── rendering3d/ 3D 数据与队列层：Mesh 上传 / 材质状态 / 渲染排序
+├── rendering3d/ 3D 机制：Mesh 上传 / 泛型渲染队列 / 字节码选择 / std140 / DebugDraw3D / LOD（光照材质由游戏实现）
 ├── animation/   骨骼动画采样 / palette / 混合
 ├── storage/     资源根 / 用户存档路径策略
 ├── app/         CLI 参数 + 调试控制台（可选 cli_open 接入 foster.App）

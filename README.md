@@ -57,7 +57,10 @@ import asset "olib:kit/asset"
 import world "olib:kit/world"
 ```
 
-最小启动示例直接注册 Foster 回调；传 `cli` 参数时可选开启控制台：
+App 生命周期直接使用 Foster。游戏状态放在独立结构体中，通过 `AppSetUserData` 挂到 App，
+回调中用 `AppGetUserDataAs` 按类型取回；它不做类型校验，取回的类型必须与挂载的指针一致。
+
+下面的桌面启动示例直接注册 Foster 回调，传 `cli` 参数时可选开启控制台：
 
 ```odin
 package main
@@ -67,35 +70,49 @@ import "core:os"
 import foster "olib:foster"
 import app "olib:kit/app"
 
-game: foster.App
-console: app.Cli_Console
+Game_State :: struct {
+	console: app.Cli_Console,
+}
 
 startup :: proc(g: ^foster.App) {
-    if app.has_arg(os.args, "cli") {
-        _ = app.cli_open(&console, g)
-    }
+	state := foster.AppGetUserDataAs(g, Game_State)
+	if app.has_arg(os.args, "cli") {
+		_ = app.cli_open(&state.console, g)
+	}
 }
 
 update :: proc(g: ^foster.App) {
-    app.cli_update(&console)
+	state := foster.AppGetUserDataAs(g, Game_State)
+	app.cli_update(&state.console)
 }
 
 shutdown :: proc(g: ^foster.App) {
-    app.cli_dispose(&console)
+	state := foster.AppGetUserDataAs(g, Game_State)
+	app.cli_dispose(&state.console)
+	free(state)
+	foster.AppSetUserData(g, nil)
 }
 
 main :: proc() {
-    foster.InitApp(&game, foster.DefaultAppConfig("My Game", 1280, 720))
-    defer foster.Dispose(&game)
-    game.StartupProc = startup
-    game.UpdateProc = update
-    game.ShutdownProc = shutdown
-    foster.Run(&game)
+	game: foster.App
+	foster.InitApp(&game, foster.DefaultAppConfig("My Game", 1280, 720))
+	defer foster.Dispose(&game)
+	foster.AppSetUserData(&game, new(Game_State))
+	game.StartupProc = startup
+	game.UpdateProc = update
+	game.ShutdownProc = shutdown
+	foster.Run(&game)
 }
 ```
 
 退出统一调用 `foster.Exit`。`cli_update` 和 `cli_dispose` 对零值控制台及开启失败后的
 控制台也安全；示例仓库中 `run.bat game_ui cli` 可试用 `help`、`quit`。
+
+游戏状态应堆分配（如上面的 `new(Game_State)`，在 `shutdown` 中释放），也可使用全局变量。
+Web 上 `Run` 会把 App 拷贝到堆上并立即返回，但不会搬移游戏状态；因此状态不能放在 `main` 的栈上，
+也不要在状态结构体中内嵌 App。回调应使用收到的 `^foster.App`，不要缓存 `Run` 前的 App 指针。
+上面的 CLI 示例依赖 `core:os` 与 `kit/app`，仅限桌面；跨平台的状态组合示例见
+[Foster App 用法](foster/README.md#app-usage)与示例仓库的 `app_composition`。
 
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
 游戏 UI 示例见 [olib_sample](https://github.com/ctzcs/olib_sample) 的 `game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；

@@ -143,7 +143,10 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 - 产物目录：`<ProjectName>.wasm`、`odin.js`（`odin root` 下 `core\sys\wasm\js\odin.js`）、`foster.js`（olib `foster\internal\web\foster.js`）、`index.html`（参照 `foster/tests/webtest/index.html`）。
 - **`core:os` 在 js 目标上一 import 就编译失败**。以下 olib 包目前仅限桌面，Web 构建的可达代码里不能出现：`kit/storage`、`kit/app`、`kit/audio`、`kit/asset`、`kit/rendering` 的 Aseprite 部分、`core/encoding`。游戏自己的文件读写收口到成对平台文件（`#+build !js` / `#+build js wasm32, js wasm64p32`）；存档用 foster 的 `OpenUserStorage`（Web 上落到 localStorage）。
 - 资源全部 `#load` 内嵌；字体按文本实际用到的字符集裁剪后内嵌。
-- App 与游戏状态必须是包级全局变量：Web 上 `main` 返回后栈会被复用，框架会把 App 搬到堆上，但 `main` 里的局部变量不会。
+- 游戏状态放在独立结构体中，堆分配（在 ShutdownProc 中释放）或使用全局变量，
+  再用 `AppSetUserData` 挂到 App，回调用 `AppGetUserDataAs` 取回。
+  Web 上 `Run` 会把 App 拷贝到堆上并立即返回，但不会搬移状态，所以状态不能放在 `main` 的栈上，
+  也不要内嵌 App；回调使用收到的 `^foster.App`，不要缓存 `Run` 前的 App 指针。
 - 发布后检查 wasm 中没有 SDL 导入（`strings <ProjectName>.wasm | findstr SDL3` 应无输出），用 HTTP 预览（`python -m http.server`），不能双击 `index.html` 验证。`serve` 参数在发布成功后启动预览。
 
 在 README 中说明以下入口、前置依赖和对应输出：
@@ -374,6 +377,8 @@ view_destroy :: proc(v: ^View) {
 
 App 骨架（`src/game/main.odin`）：
 
+`Game_State` 由 game 持有模拟与表现实例，通过 App 的用户数据传给回调；取回类型必须与挂载类型一致。
+
 ```odin
 package main
 
@@ -383,14 +388,17 @@ import "game:data"
 import "game:logic/economy"
 import "game:view"
 
-// game 持有这些实例；包级存储保证 Web 上 main 返回后仍然有效。
-game:         foster.App
-world:        data.World
-presentation: view.View
+// game 持有这些实例；独立状态的生命周期覆盖 Web 的后续帧。
+Game_State :: struct {
+	world:        data.World,
+	presentation: view.View,
+}
 
 main :: proc() {
+	game: foster.App
 	foster.InitApp(&game, foster.DefaultAppConfig("MyGame", 1280, 720))
 	defer foster.Dispose(&game)
+	foster.AppSetUserData(&game, new(Game_State))
 	game.StartupProc = startup
 	game.UpdateProc = update
 	game.RenderProc = render
@@ -399,20 +407,26 @@ main :: proc() {
 }
 
 startup :: proc(app: ^foster.App) {
-	view.view_init(&presentation, app)
+	state := foster.AppGetUserDataAs(app, Game_State)
+	view.view_init(&state.presentation, app)
 }
 
 // 默认固定 60 Hz；Delta 即模拟步长。
 update :: proc(app: ^foster.App) {
-	economy.income_step(&world.income, app.Time.Delta, 2, 3)
+	state := foster.AppGetUserDataAs(app, Game_State)
+	economy.income_step(&state.world.income, app.Time.Delta, 2, 3)
 }
 
 render :: proc(app: ^foster.App) {
-	view.view_draw(&presentation, app)
+	state := foster.AppGetUserDataAs(app, Game_State)
+	view.view_draw(&state.presentation, app)
 }
 
 shutdown :: proc(app: ^foster.App) {
-	view.view_destroy(&presentation)
+	state := foster.AppGetUserDataAs(app, Game_State)
+	view.view_destroy(&state.presentation)
+	free(state)
+	foster.AppSetUserData(app, nil)
 }
 ```
 

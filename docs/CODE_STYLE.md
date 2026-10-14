@@ -121,6 +121,11 @@ odin fmt kit
 
 ## 7. Odin 语言注意事项（踩过的坑）
 
+- 尽量不要使用多重赋值（`a, b = x, y`），尤其是包含大结构体或大数组时：
+  在 Odin `dev-2026-10-nightly:84bc3fc` 中，默认 `-o:minimal` 下曾触发 LLVM
+  中间代码膨胀，导致编译异常缓慢（见[排查记录](codex://threads/01a13a20-e70c-7323-87c5-f6933c1ae5d4)）。
+  独立赋值优先拆成多条语句；交换值或右侧依赖旧值时，先用临时变量保存，
+  保留原有求值语义。小值的多返回值接收（如 `value, ok = lookup(...)`）可按需使用。
 - proc 字面量**没有闭包**：需要状态的回调走 `proc(item, userdata: rawptr)` +
   userdata 惯例（见 `core/messaging` 的 `queue_drain`）。
 - 泛型参数上的隐式枚举选择子无法解析：调用处写显式成员名

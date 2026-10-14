@@ -29,7 +29,7 @@ begin :: proc(device: ^foster.GraphicsDevice) {
 }
 
 submit :: proc(device: ^foster.GraphicsDevice) {
-    foster.end_render_pass(device)
+    foster.GraphicsDeviceEndRenderPass(device)
     assert(SDL.SubmitGPUCommandBuffer(device.CommandBuffer))
     device.CommandBuffer = nil
     device.InFrame = false
@@ -166,7 +166,7 @@ run :: proc(driver: foster.GraphicsDriver, directory: string) {
     device.Device = SDL.CreateGPUDevice({.SPIRV, .DXIL}, false, driver_name)
     assert(device.Device != nil, string(SDL.GetError()))
     defer SDL.DestroyGPUDevice(device.Device)
-    defer foster.graphics_device_dispose_caches(&device)
+    defer foster.GraphicsDeviceDisposeCaches(&device)
     fmt.println("Testing", driver)
     verify_compute(&device, directory)
 

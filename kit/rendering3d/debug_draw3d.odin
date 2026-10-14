@@ -54,8 +54,8 @@ debug_draw_init :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bo
 
 	format := debug_line_format()
 	defer foster.VertexFormatDispose(&format)
-	foster.mesh_init_with_format(&d.mesh, device, format, .ThirtyTwo, "Debug lines 3d")
-	foster.material_init_with_shaders(&d.material, &d.shaders.vertex, &d.shaders.fragment)
+	foster.MeshInitWithFormat(&d.mesh, device, format, .ThirtyTwo, "Debug lines 3d")
+	foster.MaterialInitWithShaders(&d.material, &d.shaders.vertex, &d.shaders.fragment)
 	d.has_gpu = true
 	return true
 }
@@ -287,7 +287,7 @@ debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, came
 
 // 调试线顶点格式（Float3 + Float4，28B）。
 debug_line_format :: proc() -> foster.VertexFormat {
-	return foster.vertex_format_make(
+	return foster.VertexFormatMake(
 		[]foster.VertexElement{
 			{0, .Float3, false},
 			{1, .Float4, false},

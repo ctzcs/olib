@@ -34,8 +34,8 @@ renderer3d_init :: proc(r: ^Renderer3D, device: ^foster.GraphicsDevice) -> bool 
 	if !shader3d_standard_init(&r.shaders, device) {
 		return false
 	}
-	foster.material_init_with_shaders(&r.material_static, &r.shaders.static_vertex, &r.shaders.static_fragment)
-	foster.material_init_with_shaders(&r.material_skinned, &r.shaders.skinned_vertex, &r.shaders.skinned_fragment)
+	foster.MaterialInitWithShaders(&r.material_static, &r.shaders.static_vertex, &r.shaders.static_fragment)
+	foster.MaterialInitWithShaders(&r.material_skinned, &r.shaders.skinned_vertex, &r.shaders.skinned_fragment)
 	return true
 }
 

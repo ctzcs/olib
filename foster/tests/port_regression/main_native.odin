@@ -5,7 +5,7 @@ import SDL "vendor:sdl3"
 import "core:fmt"
 
 flush_native :: proc(device: ^foster.GraphicsDevice) {
-	foster.end_render_pass(device)
+	foster.GraphicsDeviceEndRenderPass(device)
 	assert(SDL.SubmitGPUCommandBuffer(device.CommandBuffer))
 	assert(SDL.WaitForGPUIdle(device.Device))
 	device.CommandBuffer = SDL.AcquireGPUCommandBuffer(device.Device)
@@ -20,7 +20,7 @@ verify_native_graphics :: proc(driver: foster.GraphicsDriver, name: cstring) {
 	device.Device = SDL.CreateGPUDevice({.SPIRV, .DXIL}, false, name)
 	assert(device.Device != nil, string(SDL.GetError()))
 	defer SDL.DestroyGPUDevice(device.Device)
-	defer foster.graphics_device_dispose_caches(&device)
+	defer foster.GraphicsDeviceDisposeCaches(&device)
 	device.CommandBuffer = SDL.AcquireGPUCommandBuffer(device.Device)
 	assert(device.CommandBuffer != nil)
 	fmt.println("Testing", driver)

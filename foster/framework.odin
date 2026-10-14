@@ -36,11 +36,11 @@ FosterVersionMajor :: 0
 FosterVersionMinor :: 4
 FosterVersionPatch :: 2
 
-version_string :: proc() -> string {
+VersionString :: proc() -> string {
 	return fmt.aprintf("%d.%d.%d", FosterVersionMajor, FosterVersionMinor, FosterVersionPatch)
 }
 
-sdl_version_string :: proc() -> string {
+SDLVersionString :: proc() -> string {
 	v := SDL.GetVersion()
 	return fmt.aprintf(
 		"%d.%d.%d",
@@ -502,7 +502,7 @@ GraphicsDeviceStartup :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.Win
 GraphicsDeviceShutdown :: proc(graphics_device: ^GraphicsDevice) {
 	when ODIN_OS == .JS {
 		graphics_device_dispose_backbuffer(graphics_device)
-		graphics_device_dispose_caches(graphics_device)
+		GraphicsDeviceDisposeCaches(graphics_device)
 		DefaultResourcesDispose(graphics_device)
 		graphics_device.Window = nil
 		graphics_device.Driver = .None
@@ -517,7 +517,7 @@ GraphicsDeviceShutdown :: proc(graphics_device: ^GraphicsDevice) {
 			graphics_device.UploadStagingCursor = 0
 		}
 		graphics_device_dispose_backbuffer(graphics_device)
-		graphics_device_dispose_caches(graphics_device)
+		GraphicsDeviceDisposeCaches(graphics_device)
 		graphics_device_dispose_debug_draw(graphics_device)
 		SDL.ReleaseWindowFromGPUDevice(graphics_device.Device, graphics_device.Window)
 	}
@@ -1660,11 +1660,11 @@ InitApp :: proc(app: ^App, config: AppConfig) {
 	app.GraphicsDevice.RequestedDriver = config.PreferredGraphicsDriver
 	app.main_thread_id = platform_current_thread_id()
 
-	fmt.println("Foster:", version_string())
+	fmt.println("Foster:", VersionString())
 	when ODIN_OS == .JS {
 		fmt.println("SDL: web backend (js_wasm32)")
 	} else {
-		fmt.println("SDL:", sdl_version_string())
+		fmt.println("SDL:", SDLVersionString())
 		_ = SDL.SetHint(SDL.HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1")
 
 		init_flags := SDL.INIT_VIDEO + SDL.INIT_EVENTS + SDL.INIT_JOYSTICK + SDL.INIT_GAMEPAD

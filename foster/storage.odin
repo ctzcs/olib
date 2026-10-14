@@ -93,7 +93,7 @@ FileSystem :: struct {
 // Storage / StorageContainer / Operations — 路径与读写操作
 // ------------------------------------------------------------------------------
 
-storage_join_path :: proc(container: ^StorageContainer, path: string) -> string {
+StorageJoinPath :: proc(container: ^StorageContainer, path: string) -> string {
 	if container.Root == "" {
 		return storage_path_clean(path)
 	}
@@ -108,7 +108,7 @@ Exists :: proc(container: ^StorageContainer, path: string) -> bool {
 	if container.ZipEntries != nil {
 		return FileExists(container, path) || DirectoryExists(container, path)
 	}
-	return storage_os_exists(storage_join_path(container, path))
+	return storage_os_exists(StorageJoinPath(container, path))
 }
 
 FileExists :: proc(container: ^StorageContainer, path: string) -> bool {
@@ -116,7 +116,7 @@ FileExists :: proc(container: ^StorageContainer, path: string) -> bool {
 		_, ok := container.ZipEntries^[storage_zip_path(container, path)]
 		return ok
 	}
-	full := storage_join_path(container, path)
+	full := StorageJoinPath(container, path)
 	return storage_os_exists(full) && !storage_os_is_directory(full)
 }
 
@@ -134,7 +134,7 @@ DirectoryExists :: proc(container: ^StorageContainer, path: string) -> bool {
 		}
 		return false
 	}
-	return storage_os_is_directory(storage_join_path(container, path))
+	return storage_os_is_directory(StorageJoinPath(container, path))
 }
 
 storage_enumerate_immediate :: proc(
@@ -167,7 +167,7 @@ storage_enumerate_immediate :: proc(
 		}
 		return result
 	}
-	return storage_os_enumerate(storage_join_path(container, path), allocator)
+	return storage_os_enumerate(StorageJoinPath(container, path), allocator)
 }
 
 storage_match_pattern :: proc(name, pattern: string) -> bool {
@@ -244,14 +244,14 @@ CreateDirectory :: proc(container: ^StorageContainer, path: string) -> bool {
 	if !container.Writable {
 		return false
 	}
-	return storage_os_make_directory_all(storage_join_path(container, path))
+	return storage_os_make_directory_all(StorageJoinPath(container, path))
 }
 
 Remove :: proc(container: ^StorageContainer, path: string) -> bool {
 	if !container.Writable {
 		return false
 	}
-	return storage_os_remove(storage_join_path(container, path))
+	return storage_os_remove(StorageJoinPath(container, path))
 }
 
 ReadAllBytes :: proc(
@@ -268,7 +268,7 @@ ReadAllBytes :: proc(
 		copy(result, data[:])
 		return result
 	}
-	return storage_os_read_file(storage_join_path(container, path), allocator)
+	return storage_os_read_file(StorageJoinPath(container, path), allocator)
 }
 
 ReadAllText :: proc(
@@ -287,7 +287,7 @@ WriteAllBytes :: proc(container: ^StorageContainer, path: string, data: []byte) 
 	if !container.Writable {
 		return false
 	}
-	full := storage_join_path(container, path)
+	full := StorageJoinPath(container, path)
 	parent, _ := storage_path_split(full)
 	if parent != "" {
 		_ = storage_os_make_directory_all(parent)
@@ -312,7 +312,7 @@ DisposeStorage :: proc(container: ^StorageContainer) {
 }
 
 storage_zip_path :: proc(container: ^StorageContainer, path: string) -> string {
-	name := storage_join_path(container, path)
+	name := StorageJoinPath(container, path)
 	name, _ = strings.replace_all(name, "\\", "/", context.temp_allocator)
 	if name == "." {
 		return ""
@@ -366,11 +366,11 @@ storage_dialog_callback :: proc "c" (userdata: rawptr, filelist: [^]cstring, fil
 		}
 	}
 	delete(files)
-	storage_dialog_dispose(request)
+	StorageDialogDispose(request)
 	_ = filter
 }
 
-storage_dialog_dispose :: proc(request: ^DialogRequest) {
+StorageDialogDispose :: proc(request: ^DialogRequest) {
 	for filter in request.Filters {
 		delete(filter.name, request.Allocator)
 		delete(filter.pattern, request.Allocator)
@@ -379,7 +379,7 @@ storage_dialog_dispose :: proc(request: ^DialogRequest) {
 	free(request, request.Allocator)
 }
 
-storage_dialog_filters :: proc(filters: []DialogFilter) -> [dynamic]SDL.DialogFileFilter {
+StorageDialogFilters :: proc(filters: []DialogFilter) -> [dynamic]SDL.DialogFileFilter {
 	result: [dynamic]SDL.DialogFileFilter
 	for filter in filters {
 		name, _ := strings.clone_to_cstring(filter.Name)
@@ -413,7 +413,7 @@ storage_dialog_properties :: proc(
 		)
 	}
 	if len(filters) > 0 {
-		request.Filters = storage_dialog_filters(filters)
+		request.Filters = StorageDialogFilters(filters)
 		converted := request.Filters
 		_ = SDL.SetPointerProperty(
 			props,
@@ -461,7 +461,7 @@ RelativeStorageContainer :: proc(storage: ^RelativeStorage) -> StorageContainer 
 	if storage == nil {
 		return {}
 	}
-	root := storage_join_path(&storage.Container, storage.Prefix)
+	root := StorageJoinPath(&storage.Container, storage.Prefix)
 	// [olib L-001] 拼接路径必须跨帧有效；临时路径只用于比较与克隆。
 	if storage.owned_root != root {
 		owned, _ := strings.clone(root)
@@ -804,7 +804,7 @@ FlushStorageFileAsync :: proc(
 		return
 	}
 	when ODIN_OS == .JS {
-		full_path := storage_join_path(container, path)
+		full_path := StorageJoinPath(container, path)
 		web_storage_flush(full_path, callback)
 	} else {
 		callback(FileExists(container, path))
@@ -891,7 +891,7 @@ OpenFileDialog :: proc(
 		)
 		SDL.DestroyProperties(props)
 	} else {
-		storage_dialog_dispose(request)
+		StorageDialogDispose(request)
 		callback(DialogResult{Cancelled = true})
 	}
 }
@@ -922,7 +922,7 @@ OpenFolderDialog :: proc(
 		)
 		SDL.DestroyProperties(props)
 	} else {
-		storage_dialog_dispose(request)
+		StorageDialogDispose(request)
 		callback("")
 	}
 }
@@ -954,7 +954,7 @@ SaveFileDialog :: proc(
 		)
 		SDL.DestroyProperties(props)
 	} else {
-		storage_dialog_dispose(request)
+		StorageDialogDispose(request)
 		callback("")
 	}
 }
@@ -1214,7 +1214,7 @@ Create :: proc(
 		return {}, .Unknown
 	}
 	state := new(StorageWriteStream, allocator)
-	state.Path, _ = strings.clone(storage_join_path(container, path), allocator)
+	state.Path, _ = strings.clone(StorageJoinPath(container, path), allocator)
 	state.Data = make([dynamic]u8, allocator = allocator)
 	state.Allocator = allocator
 	return io.Stream{procedure = storage_write_stream_proc, data = state}, .None

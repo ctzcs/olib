@@ -14,7 +14,7 @@ import foster "olib:foster"
 
 // 静态顶点格式：Float3 位置 + Float3 法线 + Float2 UV + Float4 切线（48B）。
 mesh3d_static_format :: proc() -> foster.VertexFormat {
-	return foster.vertex_format_make(
+	return foster.VertexFormatMake(
 		[]foster.VertexElement{
 			{0, .Float3, false},
 			{1, .Float3, false},
@@ -27,7 +27,7 @@ mesh3d_static_format :: proc() -> foster.VertexFormat {
 
 // 蒙皮顶点格式：静态布局 + UByte4 关节 + Float4 权重（68B）。
 mesh3d_skin_format :: proc() -> foster.VertexFormat {
-	return foster.vertex_format_make(
+	return foster.VertexFormatMake(
 		[]foster.VertexElement{
 			{0, .Float3, false},
 			{1, .Float3, false},
@@ -54,7 +54,7 @@ mesh3d_upload :: proc(mesh: ^foster.Mesh, device: ^foster.GraphicsDevice, p: ^da
 	format := skinned ? mesh3d_skin_format() : mesh3d_static_format()
 	defer foster.VertexFormatDispose(&format)
 
-	foster.mesh_init_with_format(mesh, device, format, .ThirtyTwo, name)
+	foster.MeshInitWithFormat(mesh, device, format, .ThirtyTwo, name)
 
 	if skinned {
 		if p.skin_vertices == nil { return false }

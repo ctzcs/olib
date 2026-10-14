@@ -36,7 +36,7 @@ startup :: proc(app: ^foster.App) {
 }
 
 flush_web :: proc(device: ^foster.GraphicsDevice) {
-	foster.end_render_pass(device)
+	foster.GraphicsDeviceEndRenderPass(device)
 }
 
 render :: proc(app: ^foster.App) {

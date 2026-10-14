@@ -237,7 +237,7 @@ Render :: proc(owner: ^foster.App, build_ui: foster.AppCallback = nil) {
 	// ofoster keeps its render pass open while drawing; ImGui opens its own
 	// pass below, so close the current one (at the ofoster level, which also
 	// resets its cached pass/pipeline state)
-	foster.end_render_pass(device)
+	foster.GraphicsDeviceEndRenderPass(device)
 
 	imgui_sdlgpu3.NewFrame()
 	imgui.NewFrame()

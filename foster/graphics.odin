@@ -838,7 +838,7 @@ Material :: struct {
 	Fragment: MaterialStage,
 }
 
-material_init_with_shaders :: proc(
+MaterialInitWithShaders :: proc(
 	material: ^Material,
 	vertex_shader: ^Shader,
 	fragment_shader: ^Shader,
@@ -850,7 +850,7 @@ material_init_with_shaders :: proc(
 }
 
 material_init :: proc(material: ^Material) {
-	material_init_with_shaders(material, nil, nil)
+	MaterialInitWithShaders(material, nil, nil)
 }
 
 MaterialCopyTo :: proc(material: ^Material, to: ^Material) {
@@ -871,7 +871,7 @@ MaterialClone :: proc(material: ^Material) -> Material {
 
 MaterialInit :: proc {
 	material_init,
-	material_init_with_shaders,
+	MaterialInitWithShaders,
 }
 
 MaterialStageDispose :: proc(stage: ^MaterialStage) {
@@ -909,7 +909,7 @@ Mesh :: struct {
 	HasInstanceBuffer: bool,
 }
 
-mesh_init_with_format :: proc(
+MeshInitWithFormat :: proc(
 	mesh: ^Mesh,
 	graphics_device: ^GraphicsDevice,
 	vertex_format: VertexFormat,
@@ -937,10 +937,10 @@ mesh_init :: proc(
 	index_format: IndexFormat,
 	name: string = "",
 ) {
-	mesh_init_with_format(
+	MeshInitWithFormat(
 		mesh,
 		graphics_device,
-		vertex_format_make(nil, vertex_stride),
+		VertexFormatMake(nil, vertex_stride),
 		index_format,
 		name,
 	)
@@ -953,7 +953,7 @@ mesh_init_instanced_with_format :: proc(
 	index_format: IndexFormat,
 	name: string = "",
 ) {
-	mesh_init_with_format(mesh, graphics_device, vertex_format, index_format, name)
+	MeshInitWithFormat(mesh, graphics_device, vertex_format, index_format, name)
 	instance_name := ""
 	if name != "" {
 		// [olib L-003] 实例缓冲区克隆名字。
@@ -978,8 +978,8 @@ mesh_init_instanced :: proc(
 	mesh_init_instanced_with_format(
 		mesh,
 		graphics_device,
-		vertex_format_make(nil, vertex_stride),
-		vertex_format_make(nil, instance_stride),
+		VertexFormatMake(nil, vertex_stride),
+		VertexFormatMake(nil, instance_stride),
 		index_format,
 		name,
 	)
@@ -1036,7 +1036,7 @@ MeshDispose :: proc(mesh: ^Mesh) {
 
 MeshInit :: proc {
 	mesh_init,
-	mesh_init_with_format,
+	MeshInitWithFormat,
 }
 MeshInitInstanced :: proc {
 	mesh_init_instanced,
@@ -1274,7 +1274,7 @@ drawable_target_backing_target :: proc(
 // Graphics / GraphicsDevice / RenderPass — 渲染通道
 // ==============================================================================
 
-end_render_pass :: proc(graphics_device: ^GraphicsDevice) {
+GraphicsDeviceEndRenderPass :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device == nil {
 		return
 	}
@@ -1325,7 +1325,7 @@ begin_render_pass_ex :: proc(
 	}
 
 	when ODIN_OS == .JS {
-		end_render_pass(graphics_device)
+		GraphicsDeviceEndRenderPass(graphics_device)
 		if !resolved_target.IsWindow {
 			target_ptr := cast(^Target)resolved_target.Surface
 			if target_ptr == nil || target_ptr.Disposed {
@@ -1371,7 +1371,7 @@ begin_render_pass_ex :: proc(
 		return true
 	}
 
-	end_render_pass(graphics_device)
+	GraphicsDeviceEndRenderPass(graphics_device)
 
 	target_ptr, target_size := drawable_target_backing_target(graphics_device, resolved_target)
 	if target_ptr == nil || len(target_ptr.Attachments) <= 0 {
@@ -1746,7 +1746,7 @@ graphics_device_release_pipeline_hashes :: proc(
 	hashes^ = nil
 }
 
-graphics_device_dispose_caches :: proc(graphics_device: ^GraphicsDevice) {
+GraphicsDeviceDisposeCaches :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device == nil || graphics_device.Device == nil {
 		return
 	}
@@ -2715,7 +2715,7 @@ InitDefaultBatchMaterial :: proc(
 
 	ShaderInit(vertex_shader, graphics_device, vertex_info, "BatcherVertex")
 	ShaderInit(fragment_shader, graphics_device, fragment_info, "BatcherFragment")
-	material_init_with_shaders(material, vertex_shader, fragment_shader)
+	MaterialInitWithShaders(material, vertex_shader, fragment_shader)
 }
 
 InitDefaultTexturedMaterial :: proc(
@@ -2759,7 +2759,7 @@ InitDefaultTexturedMaterial :: proc(
 			StorageBufferCount = 0,
 			EntryPoint         = "fragment_main",
 		}, "TexturedFragment")
-	material_init_with_shaders(material, vertex_shader, fragment_shader)
+	MaterialInitWithShaders(material, vertex_shader, fragment_shader)
 }
 
 InitDefaultMsdfMaterial :: proc(
@@ -2803,7 +2803,7 @@ InitDefaultMsdfMaterial :: proc(
 			StorageBufferCount = 0,
 			EntryPoint         = "fragment_main",
 		}, "MsdfFragment")
-	material_init_with_shaders(material, vertex_shader, fragment_shader)
+	MaterialInitWithShaders(material, vertex_shader, fragment_shader)
 }
 
 // ==============================================================================
@@ -3415,7 +3415,7 @@ TextureSetDataRegion :: proc(tex: ^Texture, data: []u8, x, y, width, height: int
 	if device == nil || device.Device == nil || tex.Resource == nil {
 		return
 	}
-	end_render_pass(device)
+	GraphicsDeviceEndRenderPass(device)
 	transfer := SDL.CreateGPUTransferBuffer(
 		device.Device,
 		{usage = .UPLOAD, size = u32(width * height * bpp)},
@@ -3526,7 +3526,7 @@ TextureBlit :: proc(
 		return
 	}
 	when ODIN_OS == .JS {
-		end_render_pass(source.GraphicsDevice)
+		GraphicsDeviceEndRenderPass(source.GraphicsDevice)
 		fw_gl_blit_texture(
 			web_handle_u32(rawptr(TextureSampleResource(source))),
 			web_handle_u32(rawptr(TextureSampleResource(destination))),
@@ -3546,7 +3546,7 @@ TextureBlit :: proc(
 	   source.GraphicsDevice.Device != nil &&
 	   source.Resource != nil &&
 	   destination.Resource != nil {
-		end_render_pass(source.GraphicsDevice)
+		GraphicsDeviceEndRenderPass(source.GraphicsDevice)
 		command_buffer := source.GraphicsDevice.CommandBuffer
 		owned := command_buffer == nil
 		if owned {
@@ -4142,7 +4142,7 @@ vertex_buffer_init :: proc(
 	if stride == size_of(BatcherVertex) {
 		format = BatcherVertexFormat()
 	} else {
-		format = vertex_format_make(nil, stride)
+		format = VertexFormatMake(nil, stride)
 	}
 	vertex_buffer_init_with_format(vb, graphics_device, format, name)
 	VertexFormatDispose(&format)
@@ -4440,7 +4440,7 @@ GraphicsDeviceDispatch :: proc(device: ^GraphicsDevice, command: ^ComputeCommand
 			return false
 		}
 	}
-	end_render_pass(device)
+	GraphicsDeviceEndRenderPass(device)
 	command_buffer := device.CommandBuffer
 	own_command_buffer := false
 	if command_buffer == nil {
@@ -4588,7 +4588,7 @@ VertexFormatOf :: proc($T: typeid) -> VertexFormat {
 	} else when T == PosTexColVertex {
 		return PosTexColVertexFormat()
 	} else {
-		return vertex_format_make(nil, size_of(T))
+		return VertexFormatMake(nil, size_of(T))
 	}
 }
 
@@ -4611,7 +4611,7 @@ mesh_init_typed :: proc(
 ) {
 	format := VertexFormatOf(TVertex)
 	defer VertexFormatDispose(&format)
-	mesh_init_with_format(mesh, graphics_device, format, index_format, name)
+	MeshInitWithFormat(mesh, graphics_device, format, index_format, name)
 }
 
 mesh_init_instanced_typed :: proc(
@@ -4908,7 +4908,7 @@ vertex_format_init :: proc(format: ^VertexFormat, elements: []VertexElement, str
 	}
 }
 
-vertex_format_make :: proc(elements: []VertexElement, stride: int = 0) -> VertexFormat {
+VertexFormatMake :: proc(elements: []VertexElement, stride: int = 0) -> VertexFormat {
 	format: VertexFormat
 	vertex_format_init(&format, elements, stride)
 	return format
@@ -4951,7 +4951,7 @@ BatcherVertexFormat :: proc() -> VertexFormat {
 		{Index = 2, Type = .UByte4, Normalized = true},
 		{Index = 3, Type = .UByte4, Normalized = true},
 	}
-	return vertex_format_make(elements[:], size_of(BatcherVertex))
+	return VertexFormatMake(elements[:], size_of(BatcherVertex))
 }
 
 PosTexColVertexFormat :: proc() -> VertexFormat {
@@ -4960,12 +4960,12 @@ PosTexColVertexFormat :: proc() -> VertexFormat {
 		{Index = 1, Type = .Float2, Normalized = false},
 		{Index = 2, Type = .UByte4, Normalized = true},
 	}
-	return vertex_format_make(elements[:])
+	return VertexFormatMake(elements[:])
 }
 
 VertexFormatInit :: proc {
 	vertex_format_init,
-	vertex_format_make,
+	VertexFormatMake,
 }
 
 // ==============================================================================

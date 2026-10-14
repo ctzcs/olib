@@ -98,9 +98,9 @@ verify_font_memory :: proc() {
 
 		request := new(foster.DialogRequest)
 		request.Allocator = context.allocator
-		request.Filters = foster.storage_dialog_filters({{"图片", "*.png;*.qoi"}})
+		request.Filters = foster.StorageDialogFilters({{"图片", "*.png;*.qoi"}})
 		assert(string(request.Filters[0].name) == "图片")
-		foster.storage_dialog_dispose(request)
+		foster.StorageDialogDispose(request)
 		provider := foster.InputProviderMake()
 		foster.InputProviderText(&provider, "中文😀")
 		foster.InputProviderUpdate(&provider, {})

@@ -275,7 +275,7 @@ import_all :: proc(assets_root: string, library_root: string) -> (Import_Stats, 
 // =============================================================================
 
 // 拼接 root/rel，结果总是新分配（context），可安全 delete。
-// 不直接用 foster.storage_join_path：filepath.Clean 可能返回输入的子切片，
+// 不直接用 foster.StorageJoinPath：filepath.Clean 可能返回输入的子切片，
 // 对借用内存 delete 会导致 bad free。
 @(private)
 join_owned :: proc(root, rel: string) -> string {

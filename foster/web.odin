@@ -342,7 +342,7 @@ web_dialog_complete :: proc(id: u32, succeeded: bool) {
 		return
 	}
 	delete_key(&web_dialog_requests, id)
-	defer storage_dialog_dispose(request)
+	defer StorageDialogDispose(request)
 	payload := web_event_text()
 	files: []string
 	if succeeded && payload != "" {
@@ -373,7 +373,7 @@ web_storage_complete :: proc(id: u32, succeeded: bool) {
 
 web_storage_shutdown :: proc() {
 	for _, request in web_dialog_requests {
-		storage_dialog_dispose(request)
+		StorageDialogDispose(request)
 	}
 	delete(web_dialog_requests)
 	web_dialog_requests = nil

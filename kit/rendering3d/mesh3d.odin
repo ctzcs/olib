@@ -52,31 +52,31 @@ mesh3d_upload :: proc(mesh: ^foster.Mesh, device: ^foster.GraphicsDevice, p: ^da
 
 	skinned := dasset.dasset_primitive_is_skinned(p)
 	format := skinned ? mesh3d_skin_format() : mesh3d_static_format()
-	defer foster.vertex_format_dispose(&format)
+	defer foster.VertexFormatDispose(&format)
 
 	foster.mesh_init_with_format(mesh, device, format, .ThirtyTwo, name)
 
 	if skinned {
 		if p.skin_vertices == nil { return false }
-		foster.mesh_set_vertex_count(mesh, len(p.skin_vertices))
-		foster.mesh_set_vertices(mesh, raw_data(p.skin_vertices), len(p.skin_vertices))
+		foster.MeshSetVertexCount(mesh, len(p.skin_vertices))
+		foster.MeshSetVertices(mesh, raw_data(p.skin_vertices), len(p.skin_vertices))
 	} else {
 		if p.vertices == nil { return false }
-		foster.mesh_set_vertex_count(mesh, len(p.vertices))
-		foster.mesh_set_vertices(mesh, raw_data(p.vertices), len(p.vertices))
+		foster.MeshSetVertexCount(mesh, len(p.vertices))
+		foster.MeshSetVertices(mesh, raw_data(p.vertices), len(p.vertices))
 	}
-	foster.mesh_set_index_count(mesh, len(p.indices))
-	foster.mesh_set_indices(mesh, raw_data(p.indices), len(p.indices))
+	foster.MeshSetIndexCount(mesh, len(p.indices))
+	foster.MeshSetIndices(mesh, raw_data(p.indices), len(p.indices))
 	return true
 }
 
 // 释放 Mesh 的 GPU 缓冲。终止态调用。
 mesh3d_dispose :: proc(mesh: ^foster.Mesh) {
 	if mesh == nil { return }
-	foster.vertex_buffer_dispose(&mesh.VertexData)
-	foster.index_buffer_dispose(&mesh.IndexData)
+	foster.VertexBufferDispose(&mesh.VertexData)
+	foster.IndexBufferDispose(&mesh.IndexData)
 	if mesh.HasInstanceBuffer {
-		foster.vertex_buffer_dispose(&mesh.InstanceData)
+		foster.VertexBufferDispose(&mesh.InstanceData)
 	}
 	mesh^ = {}
 }

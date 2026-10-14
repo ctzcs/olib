@@ -70,7 +70,7 @@ verify_web_input :: proc(app: ^foster.App) {
 	defer done()
 	input := &app.Input
 	step(0)
-	foster.poll_events(app)
+	foster.PollEvents(app)
 	foster.InputStep(input, foster.Time{Elapsed = 1})
 	controller := &input.State.Controllers[0]
 	assert(
@@ -86,7 +86,7 @@ verify_web_input :: proc(app: ^foster.App) {
 	foster.Rumble(input, controller.ID, .5, .25, .2)
 	assert(rumble_ok())
 	step(1)
-	foster.poll_events(app)
+	foster.PollEvents(app)
 	foster.InputStep(input, foster.Time{Elapsed = 2})
 	assert(
 		foster.ControllerReleased(controller, .South) &&
@@ -94,18 +94,18 @@ verify_web_input :: proc(app: ^foster.App) {
 	)
 	assert(controller.axis[0] == .25)
 	step(2)
-	foster.poll_events(app)
+	foster.PollEvents(app)
 	foster.InputStep(input, foster.Time{Elapsed = 3})
 	assert(!controller.Connected)
 
 	foster.StartTextInput(&app.Window)
 	step(3)
-	foster.poll_events(app)
+	foster.PollEvents(app)
 	foster.InputStep(input, foster.Time{Elapsed = 4})
 	assert(input.State.Keyboard.Text == "hello😀中文", input.State.Keyboard.Text)
 	foster.StopTextInput(&app.Window)
 	step(4)
-	foster.poll_events(app)
+	foster.PollEvents(app)
 	foster.InputStep(input, foster.Time{Elapsed = 5})
 	assert(input.State.Keyboard.Text == "")
 

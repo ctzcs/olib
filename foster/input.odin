@@ -720,7 +720,7 @@ input_state_step :: proc(state: ^InputState, time: Time) {
 // Input / Input / Lifecycle — 初始化、事件供给与帧更新
 // ------------------------------------------------------------------------------
 
-input_init :: proc(input: ^Input, app: ^App) {
+InputInit :: proc(input: ^Input, app: ^App) {
 	input.App = app
 	input.Enabled = InputEnabledAll
 	input_state_init(&input.State)
@@ -728,13 +728,13 @@ input_init :: proc(input: ^Input, app: ^App) {
 	input_state_init(&input.NextState)
 }
 
-input_step :: proc(input: ^Input, time: Time) {
+InputStep :: proc(input: ^Input, time: Time) {
 	input_state_copy(&input.LastState, input.State)
 	input_state_copy(&input.State, input.NextState)
 	input_state_step(&input.NextState, time)
 }
 
-get_controller :: proc(input: ^Input, id: ControllerID) -> ^ControllerState {
+GetController :: proc(input: ^Input, id: ControllerID) -> ^ControllerState {
 	for i in 0 ..< InputMaxControllers {
 		if input.State.Controllers[i].ID == id {
 			return &input.State.Controllers[i]
@@ -797,14 +797,14 @@ input_disconnect_controller :: proc(input: ^Input, id: ControllerID) {
 	}
 }
 
-input_key :: proc(input: ^Input, key: Keys, pressed: bool, stamp: coretime.Duration) {
+InputKey :: proc(input: ^Input, key: Keys, pressed: bool, stamp: coretime.Duration) {
 	if !(.KeyboardKeys in input.Enabled) {
 		return
 	}
 	keyboard_on_key(&input.NextState.Keyboard, int(key), pressed, stamp)
 }
 
-input_mouse_button :: proc(
+InputMouseButton :: proc(
 	input: ^Input,
 	button: MouseButtons,
 	pressed: bool,
@@ -816,21 +816,21 @@ input_mouse_button :: proc(
 	mouse_on_button(&input.NextState.Mouse, int(button), pressed, stamp)
 }
 
-input_mouse_move :: proc(input: ^Input, position, delta: Vec2f, stamp: coretime.Duration) {
+InputMouseMove :: proc(input: ^Input, position, delta: Vec2f, stamp: coretime.Duration) {
 	if !(.MouseMotion in input.Enabled) {
 		return
 	}
 	mouse_on_motion(&input.NextState.Mouse, position, delta, stamp)
 }
 
-input_mouse_wheel :: proc(input: ^Input, wheel: Vec2f) {
+InputMouseWheel :: proc(input: ^Input, wheel: Vec2f) {
 	if !(.MouseWheel in input.Enabled) {
 		return
 	}
 	mouse_on_wheel(&input.NextState.Mouse, wheel)
 }
 
-input_text :: proc(input: ^Input, text: string, window: ^Window) {
+InputText :: proc(input: ^Input, text: string, window: ^Window) {
 	if !(.Text in input.Enabled) || text == "" {
 		return
 	}
@@ -841,7 +841,7 @@ input_text :: proc(input: ^Input, text: string, window: ^Window) {
 	}
 }
 
-input_controller_button :: proc(
+InputControllerButton :: proc(
 	input: ^Input,
 	id: ControllerID,
 	button: int,
@@ -857,7 +857,7 @@ input_controller_button :: proc(
 	}
 }
 
-input_controller_axis :: proc(
+InputControllerAxis :: proc(
 	input: ^Input,
 	id: ControllerID,
 	axis: int,
@@ -889,8 +889,8 @@ input_update :: proc(input: ^Input, window: ^Window, stamp: coretime.Duration) {
 	// 改用窗口相对坐标的 GetMouseState: 各平台一致且 Wayland 安全。
 	wx, wy: f32
 	_ = SDL.GetMouseState(&wx, &wy)
-	size := window_size(window)
-	size_px := window_size_in_pixels(window)
+	size := Size(window)
+	size_px := SizeInPixels(window)
 
 	mouse_x := wx
 	mouse_y := wy
@@ -916,11 +916,11 @@ input_update :: proc(input: ^Input, window: ^Window, stamp: coretime.Duration) {
 	   delta.X != 0 ||
 	   delta.Y != 0 {
 		input.last_mouse = position
-		input_mouse_move(input, position, delta, stamp)
+		InputMouseMove(input, position, delta, stamp)
 	}
 }
 
-input_set_clipboard :: proc(input: ^Input, value: string) -> bool {
+SetClipboardString :: proc(input: ^Input, value: string) -> bool {
 	_ = input
 	when ODIN_OS == .JS {
 		ptr, length := web_string_bytes(value)
@@ -929,7 +929,7 @@ input_set_clipboard :: proc(input: ^Input, value: string) -> bool {
 	return SDL.SetClipboardText(to_cstring(value))
 }
 
-input_get_clipboard :: proc(input: ^Input) -> string {
+GetClipboardString :: proc(input: ^Input) -> string {
 	_ = input
 	when ODIN_OS == .JS {
 		length := fw_clipboard_cached(nil, 0)
@@ -975,14 +975,14 @@ SetClipboardStringAsync :: proc(input: ^Input, value: string, callback: Clipboar
 		ptr, length := web_string_bytes(value)
 		_ = fw_clipboard_write(web_clipboard_register(callback), ptr, length)
 	} else {
-		succeeded := input_set_clipboard(input, value)
+		succeeded := SetClipboardString(input, value)
 		if callback != nil {
 			callback(value, succeeded)
 		}
 	}
 }
 
-input_rumble :: proc(
+Rumble :: proc(
 	input: ^Input,
 	id: ControllerID,
 	low_intensity, high_intensity, duration: f32,
@@ -1086,21 +1086,21 @@ input_on_event :: proc(
 ) {
 	#partial switch event.type {
 	case .MOUSE_BUTTON_DOWN:
-		input_mouse_button(input, cast(MouseButtons)int(event.button.button), true, stamp)
+		InputMouseButton(input, cast(MouseButtons)int(event.button.button), true, stamp)
 	case .MOUSE_BUTTON_UP:
-		input_mouse_button(input, cast(MouseButtons)int(event.button.button), false, stamp)
+		InputMouseButton(input, cast(MouseButtons)int(event.button.button), false, stamp)
 	case .MOUSE_WHEEL:
-		input_mouse_wheel(input, Vec2f{event.wheel.x, event.wheel.y})
+		InputMouseWheel(input, Vec2f{event.wheel.x, event.wheel.y})
 	case .KEY_DOWN:
 		if !event.key.repeat {
-			input_key(input, cast(Keys)int(event.key.scancode), true, stamp)
+			InputKey(input, cast(Keys)int(event.key.scancode), true, stamp)
 		}
 	case .KEY_UP:
 		if !event.key.repeat {
-			input_key(input, cast(Keys)int(event.key.scancode), false, stamp)
+			InputKey(input, cast(Keys)int(event.key.scancode), false, stamp)
 		}
 	case .TEXT_INPUT:
-		input_text(input, string(event.text.text), window)
+		InputText(input, string(event.text.text), window)
 	case .JOYSTICK_ADDED:
 		id := event.jdevice.which
 		if SDL.IsGamepad(id) {
@@ -1136,7 +1136,7 @@ input_on_event :: proc(
 		input_disconnect_controller(input, ControllerID(u32(id)))
 	case .JOYSTICK_BUTTON_DOWN:
 		if !SDL.IsGamepad(event.jbutton.which) {
-			input_controller_button(
+			InputControllerButton(
 				input,
 				ControllerID(u32(event.jbutton.which)),
 				int(event.jbutton.button),
@@ -1146,7 +1146,7 @@ input_on_event :: proc(
 		}
 	case .JOYSTICK_BUTTON_UP:
 		if !SDL.IsGamepad(event.jbutton.which) {
-			input_controller_button(
+			InputControllerButton(
 				input,
 				ControllerID(u32(event.jbutton.which)),
 				int(event.jbutton.button),
@@ -1156,7 +1156,7 @@ input_on_event :: proc(
 		}
 	case .JOYSTICK_AXIS_MOTION:
 		if !SDL.IsGamepad(event.jaxis.which) {
-			input_controller_axis(
+			InputControllerAxis(
 				input,
 				ControllerID(u32(event.jaxis.which)),
 				int(event.jaxis.axis),
@@ -1192,7 +1192,7 @@ input_on_event :: proc(
 		}
 		input_disconnect_controller(input, ControllerID(u32(id)))
 	case .GAMEPAD_BUTTON_DOWN:
-		input_controller_button(
+		InputControllerButton(
 			input,
 			ControllerID(u32(event.gbutton.which)),
 			int(cast(SDL.GamepadButton)event.gbutton.button),
@@ -1200,7 +1200,7 @@ input_on_event :: proc(
 			stamp,
 		)
 	case .GAMEPAD_BUTTON_UP:
-		input_controller_button(
+		InputControllerButton(
 			input,
 			ControllerID(u32(event.gbutton.which)),
 			int(cast(SDL.GamepadButton)event.gbutton.button),
@@ -1208,7 +1208,7 @@ input_on_event :: proc(
 			stamp,
 		)
 	case .GAMEPAD_AXIS_MOTION:
-		input_controller_axis(
+		InputControllerAxis(
 			input,
 			ControllerID(u32(event.gaxis.which)),
 			int(cast(SDL.GamepadAxis)event.gaxis.axis),
@@ -1540,8 +1540,6 @@ ControllerRightStick :: proc(state: ^ControllerState) -> Vec2f {
 	return Vec2f{state.axis[int(Axes.RightX)], state.axis[int(Axes.RightY)]}
 }
 
-GetController :: get_controller
-
 InputStateClear :: proc(state: ^InputState) {
 	if state == nil {
 		return
@@ -1573,9 +1571,6 @@ InputCreateEcho :: proc(input: ^Input) -> Input {
 	}
 	return Input{App = input.App, Enabled = input.Enabled}
 }
-SetClipboardString :: input_set_clipboard
-GetClipboardString :: input_get_clipboard
-Rumble :: input_rumble
 
 AddSDLGamepadMapping :: proc(mapping: string) -> bool {
 	when ODIN_OS == .JS {
@@ -1593,15 +1588,6 @@ AddSDLGamepadMappings :: proc(mappings: []string) -> int {
 	}
 	return added
 }
-InputKey :: input_key
-InputMouseButton :: input_mouse_button
-InputMouseMove :: input_mouse_move
-InputMouseWheel :: input_mouse_wheel
-InputText :: input_text
-InputControllerButton :: input_controller_button
-InputControllerAxis :: input_controller_axis
-InputInit :: input_init
-InputStep :: input_step
 
 // ==============================================================================
 // Input / Bindings — 输入绑定
@@ -2630,7 +2616,7 @@ InputProviderUpdate :: proc(p: ^InputProvider, t: Time) {
 
 InputProviderText :: proc(p: ^InputProvider, text: string) {
 	if p.Input != nil {
-		input_text(p.Input, text, nil)
+		InputText(p.Input, text, nil)
 	}
 }
 

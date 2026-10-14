@@ -233,9 +233,9 @@ web_vertex_type :: proc(t: VertexType) -> u32 {
 	return u32(t)
 }
 
-// Foster 内部 Web 事件。不假扮 SDL.Event 结构; 窗口事件在 poll_events 的
-// .JS 分支里映射为 SDL.EventType 枚举值复用现有 window_on_event, 输入事件
-// 直接派发到 input_key/input_mouse_* 等现有入口。
+// Foster 内部 Web 事件。不假扮 SDL.Event 结构; 窗口事件在 PollEvents 的
+// .JS 分支里映射为 SDL.EventType 枚举值复用现有 OnEvent, 输入事件
+// 直接派发到 InputKey/input_mouse_* 等现有入口。
 // 结构布局被 foster.js 按小端写入(24 字节), 改字段必须两侧同步。
 // ==============================================================================
 // Platform / Web / Events — 事件桥
@@ -395,7 +395,7 @@ web_device_placeholder: u64
 
 web_relocate_app :: proc(app: ^App) -> ^App {
 	// main() 在 .JS 下于 Run 返回后立即返回, 其栈帧(含调用方声明的 App 结构)会被
-	// 后续调用复用。在 run() 入口把 App 拷贝到堆上并修正内部回指针, 之后的一切
+	// 后续调用复用。在 Run() 入口把 App 拷贝到堆上并修正内部回指针, 之后的一切
 	// (含 StartupProc 里初始化的 Batcher 等)都指向堆副本。
 	// 注意: 经 AppSetUserData 传入的状态仍应是全局变量或堆分配(见文档 §0);
 	// 也不能把 App 嵌在该状态里, 嵌入的那份在这里搬走后即过期。
@@ -459,7 +459,7 @@ web_window_size_in_pixels :: proc() -> Point2 {
 	return Point2{int(w), int(h)}
 }
 
-// run() 在 .JS 下返回后, 每帧由 foster.js 的 requestAnimationFrame 调用。
+// Run() 在 .JS 下返回后, 每帧由 foster.js 的 requestAnimationFrame 调用。
 @(export)
 
 foster_step :: proc(dt: f64) -> (keep_going: bool) {
@@ -474,7 +474,7 @@ foster_step :: proc(dt: f64) -> (keep_going: bool) {
 	}
 	web_frame_delta = coretime.Duration(clamped * 1e9)
 
-	tick_app(app)
+	Tick(app)
 
 	if app.Exiting {
 		web_log("foster_step: exiting -> run_finish")

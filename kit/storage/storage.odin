@@ -100,7 +100,7 @@ with_user_storage :: proc(
 	defer delete(root)
 
 	ds: foster.DirectoryStorage
-	foster.directory_storage_init(&ds, root, true)
+	foster.DirectoryStorageInit(&ds, root, true)
 	use(&ds, userdata)
 	return true
 }

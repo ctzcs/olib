@@ -99,25 +99,21 @@ ApproachScalar :: proc(from, target, amount: f32) -> f32 {
 	return Min(from + amount, target)
 }
 
-map_range :: proc(val, min_value, max_value, new_min, new_max: f32) -> f32 {
+MapTo :: proc(val, min_value, max_value, new_min, new_max: f32) -> f32 {
 	return ((val - min_value) / (max_value - min_value)) * (new_max - new_min) + new_min
 }
 
 Map :: proc(val, min_value, max_value: f32) -> f32 {
-	return map_range(val, min_value, max_value, 0, 1)
+	return MapTo(val, min_value, max_value, 0, 1)
 }
 
-MapTo :: map_range
-
-clamped_map_range :: proc(val, min_value, max_value, new_min, new_max: f32) -> f32 {
+ClampedMapTo :: proc(val, min_value, max_value, new_min, new_max: f32) -> f32 {
 	return Clamp01((val - min_value) / (max_value - min_value)) * (new_max - new_min) + new_min
 }
 
 ClampedMap :: proc(val, min_value, max_value: f32) -> f32 {
-	return clamped_map_range(val, min_value, max_value, 0, 1)
+	return ClampedMapTo(val, min_value, max_value, 0, 1)
 }
-
-ClampedMapTo :: clamped_map_range
 
 YoYo :: proc(value: f32) -> f32 {
 	if value <= 0.5 {
@@ -149,20 +145,20 @@ Point2Left :: Point2{-1, 0}
 Point2Up :: Point2{0, -1}
 Point2Down :: Point2{0, 1}
 
-point2_length_squared :: proc(p: Point2) -> f32 {
+Point2LengthSquared :: proc(p: Point2) -> f32 {
 	return f32(p.X * p.X + p.Y * p.Y)
 }
 
-point2_length :: proc(p: Point2) -> f32 {
-	return math.sqrt(point2_length_squared(p))
+Point2Length :: proc(p: Point2) -> f32 {
+	return math.sqrt(Point2LengthSquared(p))
 }
 
-point2_vector2 :: proc(p: Point2) -> [2]f32 {
+Point2Vector2 :: proc(p: Point2) -> [2]f32 {
 	return [2]f32{f32(p.X), f32(p.Y)}
 }
 
-point2_normalized :: proc(p: Point2) -> [2]f32 {
-	v := point2_vector2(p)
+Point2Normalized :: proc(p: Point2) -> [2]f32 {
+	v := Point2Vector2(p)
 	length := math.sqrt(v[0] * v[0] + v[1] * v[1])
 	if length == 0 {
 		return [2]f32{}
@@ -170,14 +166,14 @@ point2_normalized :: proc(p: Point2) -> [2]f32 {
 	return [2]f32{v[0] / length, v[1] / length}
 }
 
-point2_get_length_and_normalize :: proc(
+Point2GetLengthAndNormalize :: proc(
 	p: Point2,
 	fallback: [2]f32 = {},
 ) -> (
 	result: [2]f32,
 	length: f32,
 ) {
-	result = point2_vector2(p)
+	result = Point2Vector2(p)
 	length = math.sqrt(result[0] * result[0] + result[1] * result[1])
 	if length == 0 {
 		result = fallback
@@ -187,15 +183,15 @@ point2_get_length_and_normalize :: proc(
 	return
 }
 
-point2_add :: proc(a, b: Point2) -> Point2 {
+Point2Add :: proc(a, b: Point2) -> Point2 {
 	return Point2{a.X + b.X, a.Y + b.Y}
 }
 
-point2_sub :: proc(a, b: Point2) -> Point2 {
+Point2Sub :: proc(a, b: Point2) -> Point2 {
 	return Point2{a.X - b.X, a.Y - b.Y}
 }
 
-point2_negate :: proc(p: Point2) -> Point2 {
+Point2Negate :: proc(p: Point2) -> Point2 {
 	return Point2{-p.X, -p.Y}
 }
 
@@ -256,27 +252,27 @@ point2_round_to_point :: proc(p, intervals: Point2) -> Point2 {
 	}
 }
 
-point2_only_x :: proc(p: Point2) -> Point2 {
+Point2OnlyX :: proc(p: Point2) -> Point2 {
 	return Point2{p.X, 0}
 }
 
-point2_only_y :: proc(p: Point2) -> Point2 {
+Point2OnlyY :: proc(p: Point2) -> Point2 {
 	return Point2{0, p.Y}
 }
 
-point2_turn_right :: proc(p: Point2) -> Point2 {
+Point2TurnRight :: proc(p: Point2) -> Point2 {
 	return Point2{-p.Y, p.X}
 }
 
-point2_turn_left :: proc(p: Point2) -> Point2 {
+Point2TurnLeft :: proc(p: Point2) -> Point2 {
 	return Point2{p.Y, -p.X}
 }
 
-point2_sign :: proc(p: Point2) -> Point2 {
+Point2Sign :: proc(p: Point2) -> Point2 {
 	return Point2{int(math.sign(f32(p.X))), int(math.sign(f32(p.Y)))}
 }
 
-point2_abs :: proc(p: Point2) -> Point2 {
+Point2Abs :: proc(p: Point2) -> Point2 {
 	return Point2{math.abs(p.X), math.abs(p.Y)}
 }
 
@@ -288,7 +284,7 @@ point2_clamp_rect :: proc(p: Point2, bounds: RectInt) -> Point2 {
 	return point2_clamp(p, RectIntTopLeft(bounds), RectIntBottomRight(bounds))
 }
 
-point2_manhattan_dist :: proc(a, b: Point2) -> int {
+Point2ManhattanDist :: proc(a, b: Point2) -> int {
 	return math.abs(a.X - b.X) + math.abs(a.Y - b.Y)
 }
 
@@ -316,7 +312,7 @@ point2_max4 :: proc(a, b, c, d: Point2) -> Point2 {
 	return Point2{Max4(a.X, b.X, c.X, d.X), Max4(a.Y, b.Y, c.Y, d.Y)}
 }
 
-point2_from_bools :: proc(left, right, up, down: bool) -> Point2 {
+Point2FromBools :: proc(left, right, up, down: bool) -> Point2 {
 	if right {
 		return Point2Right
 	}
@@ -332,14 +328,6 @@ point2_from_bools :: proc(left, right, up, down: bool) -> Point2 {
 	return Point2Zero
 }
 
-Point2Length :: point2_length
-Point2LengthSquared :: point2_length_squared
-Point2Vector2 :: point2_vector2
-Point2Normalized :: point2_normalized
-Point2GetLengthAndNormalize :: point2_get_length_and_normalize
-Point2Add :: point2_add
-Point2Sub :: point2_sub
-Point2Negate :: point2_negate
 Point2Scale :: proc {
 	point2_scale_int,
 	point2_scale_float,
@@ -359,17 +347,10 @@ Point2RoundTo :: proc {
 	point2_round_to,
 	point2_round_to_point,
 }
-Point2OnlyX :: point2_only_x
-Point2OnlyY :: point2_only_y
-Point2TurnRight :: point2_turn_right
-Point2TurnLeft :: point2_turn_left
-Point2Sign :: point2_sign
-Point2Abs :: point2_abs
 Point2Clamp :: proc {
 	point2_clamp,
 	point2_clamp_rect,
 }
-Point2ManhattanDist :: point2_manhattan_dist
 Point2Min :: proc {
 	point2_min,
 	point2_min3,
@@ -380,7 +361,6 @@ Point2Max :: proc {
 	point2_max3,
 	point2_max4,
 }
-Point2FromBools :: point2_from_bools
 
 // ==============================================================================
 // Images / Color — 颜色转换与运算

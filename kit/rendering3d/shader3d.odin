@@ -99,28 +99,28 @@ shader3d_standard_init :: proc(pair: ^Shader3D_Pair, device: ^foster.GraphicsDev
 	vs_code_skin := shader3d_pick_code(device.Driver, standard3d_skinned_vertex_spv, standard3d_skinned_vertex_dxil)
 	fs_code_skin := shader3d_pick_code(device.Driver, standard3d_skinned_fragment_spv, standard3d_skinned_fragment_dxil)
 
-	foster.shader_init(&pair.static_vertex, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.static_vertex, device, foster.ShaderCreateInfo{
 		Stage              = .Vertex,
 		Code               = vs_code_static,
 		SamplerCount       = 0,
 		UniformBufferCount = 2, // b0 矩阵块 / b1 阴影矩阵
 		EntryPoint         = "vertex_main",
 	}, "Standard3DVertex")
-	foster.shader_init(&pair.static_fragment, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.static_fragment, device, foster.ShaderCreateInfo{
 		Stage              = .Fragment,
 		Code               = fs_code_static,
 		SamplerCount       = 6, // albedo/normal/shadow/MR/AO/emissive
 		UniformBufferCount = 4, // b0 光照 / b1 材质 / b2 阴影 / b3 点光
 		EntryPoint         = "fragment_main",
 	}, "Standard3DFragment")
-	foster.shader_init(&pair.skinned_vertex, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.skinned_vertex, device, foster.ShaderCreateInfo{
 		Stage              = .Vertex,
 		Code               = vs_code_skin,
 		SamplerCount       = 0,
 		UniformBufferCount = 4, // 再加 b2/b3 palette 两块
 		EntryPoint         = "vertex_main",
 	}, "Standard3DSkinnedVertex")
-	foster.shader_init(&pair.skinned_fragment, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.skinned_fragment, device, foster.ShaderCreateInfo{
 		Stage              = .Fragment,
 		Code               = fs_code_skin,
 		SamplerCount       = 6,
@@ -146,14 +146,14 @@ shader3d_debug_line_init :: proc(pair: ^Shader3D_Debug_Line_Pair, device: ^foste
 	vs_code := shader3d_pick_code(device.Driver, debugline_vertex_spv, debugline_vertex_dxil)
 	fs_code := shader3d_pick_code(device.Driver, debugline_fragment_spv, debugline_fragment_dxil)
 
-	foster.shader_init(&pair.vertex, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.vertex, device, foster.ShaderCreateInfo{
 		Stage              = .Vertex,
 		Code               = vs_code,
 		SamplerCount       = 0,
 		UniformBufferCount = 1,
 		EntryPoint         = "vertex_main",
 	}, "DebugLine3DVertex")
-	foster.shader_init(&pair.fragment, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.fragment, device, foster.ShaderCreateInfo{
 		Stage      = .Fragment,
 		Code       = fs_code,
 		EntryPoint = "fragment_main",
@@ -185,24 +185,24 @@ shader3d_depth_init :: proc(pair: ^Shader3D_Depth_Pair, device: ^foster.Graphics
 	vs_skin := shader3d_pick_code(device.Driver, depthonly_skinned_vertex_spv, depthonly_skinned_vertex_dxil)
 	fs_skin := shader3d_pick_code(device.Driver, depthonly_skinned_fragment_spv, depthonly_skinned_fragment_dxil)
 
-	foster.shader_init(&pair.static_vertex, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.static_vertex, device, foster.ShaderCreateInfo{
 		Stage              = .Vertex,
 		Code               = vs_static,
 		UniformBufferCount = 2,
 		EntryPoint         = "vertex_main",
 	}, "DepthOnlyVertex")
-	foster.shader_init(&pair.static_fragment, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.static_fragment, device, foster.ShaderCreateInfo{
 		Stage      = .Fragment,
 		Code       = fs_static,
 		EntryPoint = "fragment_main",
 	}, "DepthOnlyFragment")
-	foster.shader_init(&pair.skinned_vertex, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.skinned_vertex, device, foster.ShaderCreateInfo{
 		Stage              = .Vertex,
 		Code               = vs_skin,
 		UniformBufferCount = 4,
 		EntryPoint         = "vertex_main",
 	}, "DepthOnlySkinnedVertex")
-	foster.shader_init(&pair.skinned_fragment, device, foster.ShaderCreateInfo{
+	foster.ShaderInit(&pair.skinned_fragment, device, foster.ShaderCreateInfo{
 		Stage      = .Fragment,
 		Code       = fs_skin,
 		EntryPoint = "fragment_main",

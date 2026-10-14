@@ -1725,7 +1725,7 @@ StackList64 :: struct($T: typeid) {
 	Count: int,
 }
 
-stack_add :: proc(list: ^$L, value: $T) where intrinsics.type_is_struct(L) {
+StackListAdd :: proc(list: ^$L, value: $T) where intrinsics.type_is_struct(L) {
 	if list.Count >= len(list.Data) {
 		panic("Exceeding Capacity of StackList")
 	}
@@ -1734,23 +1734,23 @@ stack_add :: proc(list: ^$L, value: $T) where intrinsics.type_is_struct(L) {
 }
 
 StackList4Add :: proc(list: ^StackList4($T), value: T) {
-	stack_add(list, value)
+	StackListAdd(list, value)
 }
 
 StackList8Add :: proc(list: ^StackList8($T), value: T) {
-	stack_add(list, value)
+	StackListAdd(list, value)
 }
 
 StackList16Add :: proc(list: ^StackList16($T), value: T) {
-	stack_add(list, value)
+	StackListAdd(list, value)
 }
 
 StackList32Add :: proc(list: ^StackList32($T), value: T) {
-	stack_add(list, value)
+	StackListAdd(list, value)
 }
 
 StackList64Add :: proc(list: ^StackList64($T), value: T) {
-	stack_add(list, value)
+	StackListAdd(list, value)
 }
 
 StackList4Clear :: proc(list: ^StackList4($T)) {
@@ -1776,8 +1776,6 @@ StackList64Clear :: proc(list: ^StackList64($T)) {
 // ------------------------------------------------------------------------------
 // Utility / StackList / Operations — 各容量共用的集合操作
 // ------------------------------------------------------------------------------
-
-StackListAdd :: stack_add
 
 StackListClear :: proc(list: ^$L) where intrinsics.type_is_struct(L) {
 	for i in 0 ..< list.Count {

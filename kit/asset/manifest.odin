@@ -67,7 +67,7 @@ manifest_write :: proc(library: ^foster.StorageContainer, guid_by_path: map[stri
 
 	name_buf: [37]u8
 	name, _ := guid_filename(GUID_MANIFEST, name_buf[:])
-	if !foster.storage_write_all_bytes(library, name, blob) {
+	if !foster.WriteAllBytes(library, name, blob) {
 		fmt.eprintf("asset: 写 manifest 失败\n")
 		return .Write_Error
 	}

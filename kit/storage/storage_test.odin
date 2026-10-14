@@ -52,8 +52,8 @@ Write_State :: struct {
 @(private)
 write_then_check :: proc(ds: ^foster.DirectoryStorage, ud: rawptr) {
 	state := (^Write_State)(ud)
-	ok := foster.storage_write_all_bytes(
-		foster.directory_storage_as_container(ds),
+	ok := foster.WriteAllBytes(
+		foster.DirectoryStorageContainer(ds),
 		"saves/save1.dat",
 		[]u8{1, 2, 3, 4},
 	)

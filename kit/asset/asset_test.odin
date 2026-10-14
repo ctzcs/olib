@@ -102,8 +102,8 @@ make_test_qoi :: proc(t: ^testing.T, path: string, w, h: int) -> (c00, c10, c01,
 @(private)
 meta_read_by_path :: proc(t: ^testing.T, assets_root, rel: string) -> Guid {
 	ds: foster.DirectoryStorage
-	foster.directory_storage_init(&ds, assets_root, false)
-	g, e := meta_read(foster.directory_storage_as_container(&ds), rel)
+	foster.DirectoryStorageInit(&ds, assets_root, false)
+	g, e := meta_read(foster.DirectoryStorageContainer(&ds), rel)
 	testing.expectf(t, e == .None, "meta_read(%s): %v", rel, e)
 	return g
 }
@@ -179,8 +179,8 @@ meta_identity :: proc(t: ^testing.T) {
 	if root == "" { return }
 
 	ds: foster.DirectoryStorage
-	foster.directory_storage_init(&ds, root, true)
-	assets := foster.directory_storage_as_container(&ds)
+	foster.DirectoryStorageInit(&ds, root, true)
+	assets := foster.DirectoryStorageContainer(&ds)
 
 	make_test_qoi(t, join_path(root, "a.qoi"), 4, 4)
 
@@ -387,15 +387,15 @@ orphan_meta_warns :: proc(t: ^testing.T) {
 	testing.expectf(t, e0 == nil, "mkdir: %v", e0)
 
 	ds: foster.DirectoryStorage
-	foster.directory_storage_init(&ds, assets_root, true)
-	assets := foster.directory_storage_as_container(&ds)
+	foster.DirectoryStorageInit(&ds, assets_root, true)
+	assets := foster.DirectoryStorageContainer(&ds)
 	e1 := meta_write(assets, "ghost.png", guid_generate())
 	testing.expectf(t, e1 == .None, "meta_write: %v", e1)
 
 	stats, e2 := import_all(assets_root, library_root)
 	testing.expectf(t, e2 == .None, "孤儿 .meta 不应报错: %v", e2)
 	testing.expect(t, stats.scanned == 0 && stats.orphaned_meta == 1)
-	testing.expect(t, foster.storage_file_exists(assets, "ghost.png.meta"))
+	testing.expect(t, foster.FileExists(assets, "ghost.png.meta"))
 }
 
 // ---------------------------------------------------------------------------

@@ -53,7 +53,7 @@ TextureFormat :: enum {
 	Color = R8G8B8A8,
 }
 
-texture_format_size :: proc(format: TextureFormat) -> int {
+TextureFormatSize :: proc(format: TextureFormat) -> int {
 	switch format {
 	case .R8G8B8A8:
 		return 4
@@ -81,7 +81,7 @@ texture_format_size :: proc(format: TextureFormat) -> int {
 	panic("Invalid TextureFormat")
 }
 
-texture_format_is_color_format :: proc(format: TextureFormat) -> bool {
+TextureFormatIsColorFormat :: proc(format: TextureFormat) -> bool {
 	switch format {
 	case .R8G8B8A8, .R8, .R8G8, .R16G16B16A16_FLOAT, .R32G32B32A32_FLOAT, .R11G11B10_UFLOAT:
 		return true
@@ -91,7 +91,7 @@ texture_format_is_color_format :: proc(format: TextureFormat) -> bool {
 	panic("Invalid TextureFormat")
 }
 
-texture_format_to_sdl :: proc(format: TextureFormat) -> SDL.GPUTextureFormat {
+TextureFormatToSDL :: proc(format: TextureFormat) -> SDL.GPUTextureFormat {
 	switch format {
 	case .R8G8B8A8:
 		return .R8G8B8A8_UNORM
@@ -130,7 +130,7 @@ SampleCount :: enum {
 	Eight,
 }
 
-sample_count_to_sdl :: proc(samples: SampleCount) -> SDL.GPUSampleCount {
+SampleCountToSDL :: proc(samples: SampleCount) -> SDL.GPUSampleCount {
 	#partial switch samples {
 	case .One:
 		return ._1
@@ -149,7 +149,7 @@ IndexFormat :: enum {
 	ThirtyTwo,
 }
 
-index_format_size_in_bytes :: proc(format: IndexFormat) -> int {
+IndexFormatSizeInBytes :: proc(format: IndexFormat) -> int {
 	#partial switch format {
 	case .Sixteen:
 		return 2
@@ -159,7 +159,7 @@ index_format_size_in_bytes :: proc(format: IndexFormat) -> int {
 	return 0
 }
 
-index_format_to_sdl :: proc(format: IndexFormat) -> SDL.GPUIndexElementSize {
+IndexFormatToSDL :: proc(format: IndexFormat) -> SDL.GPUIndexElementSize {
 	#partial switch format {
 	case .Sixteen:
 		return ._16BIT
@@ -179,7 +179,7 @@ ShaderStage :: enum {
 	Compute,
 }
 
-shader_stage_to_sdl :: proc(stage: ShaderStage) -> SDL.GPUShaderStage {
+ShaderStageToSDL :: proc(stage: ShaderStage) -> SDL.GPUShaderStage {
 	#partial switch stage {
 	case .Vertex:
 		return .VERTEX
@@ -211,7 +211,7 @@ ShaderCreateInfo :: struct {
 	ThreadCountX, ThreadCountY, ThreadCountZ: int,
 }
 
-default_shader_create_info :: proc(stage: ShaderStage, code: []u8) -> ShaderCreateInfo {
+DefaultShaderCreateInfo :: proc(stage: ShaderStage, code: []u8) -> ShaderCreateInfo {
 	return ShaderCreateInfo {
 		Stage              = stage,
 		Code               = code,
@@ -224,15 +224,6 @@ default_shader_create_info :: proc(stage: ShaderStage, code: []u8) -> ShaderCrea
 		ThreadCountZ       = 1,
 	}
 }
-
-TextureFormatSize :: texture_format_size
-TextureFormatIsColorFormat :: texture_format_is_color_format
-TextureFormatToSDL :: texture_format_to_sdl
-SampleCountToSDL :: sample_count_to_sdl
-IndexFormatSizeInBytes :: index_format_size_in_bytes
-IndexFormatToSDL :: index_format_to_sdl
-ShaderStageToSDL :: shader_stage_to_sdl
-DefaultShaderCreateInfo :: default_shader_create_info
 
 // ------------------------------------------------------------------------------
 // Graphics / Enums / BlendFactor, BlendOp & BlendMask
@@ -522,7 +513,7 @@ DrawableTarget :: struct {
 	IsWindow:       bool,
 }
 
-drawable_target_from_window :: proc(window: ^Window) -> DrawableTarget {
+DrawableTargetFromWindow :: proc(window: ^Window) -> DrawableTarget {
 	if window == nil {
 		return DrawableTarget{}
 	}
@@ -535,7 +526,7 @@ drawable_target_from_window :: proc(window: ^Window) -> DrawableTarget {
 	}
 }
 
-drawable_target_from_target :: proc(target: ^Target) -> DrawableTarget {
+DrawableTargetFromTarget :: proc(target: ^Target) -> DrawableTarget {
 	if target == nil {
 		return DrawableTarget{}
 	}
@@ -548,18 +539,13 @@ drawable_target_from_target :: proc(target: ^Target) -> DrawableTarget {
 	}
 }
 
-drawable_target_size_in_pixels :: proc(target: DrawableTarget) -> Point2 {
+DrawableTargetSizeInPixels :: proc(target: DrawableTarget) -> Point2 {
 	return Point2{target.WidthInPixels, target.HeightInPixels}
 }
 
-drawable_target_bounds_in_pixels :: proc(target: DrawableTarget) -> RectInt {
+DrawableTargetBoundsInPixels :: proc(target: DrawableTarget) -> RectInt {
 	return RectInt{0, 0, target.WidthInPixels, target.HeightInPixels}
 }
-
-DrawableTargetFromWindow :: drawable_target_from_window
-DrawableTargetFromTarget :: drawable_target_from_target
-DrawableTargetSizeInPixels :: drawable_target_size_in_pixels
-DrawableTargetBoundsInPixels :: drawable_target_bounds_in_pixels
 
 // ==============================================================================
 // Graphics / Target — 离屏目标与附件
@@ -607,7 +593,7 @@ target_init_with_attachments :: proc(
 
 	for attachment, index in attachments {
 		usage: SDL.GPUTextureUsageFlags
-		if texture_format_is_color_format(attachment.Format) {
+		if TextureFormatIsColorFormat(attachment.Format) {
 			usage = SDL.GPUTextureUsageFlags{.SAMPLER, .COLOR_TARGET}
 		} else {
 			usage = SDL.GPUTextureUsageFlags{.DEPTH_STENCIL_TARGET}
@@ -620,7 +606,7 @@ target_init_with_attachments :: proc(
 		}
 
 		tex: Texture
-		texture_init_ex(
+		TextureInitEx(
 			&tex,
 			graphics_device,
 			width,
@@ -652,7 +638,7 @@ target_init :: proc(
 	)
 }
 
-target_dispose :: proc(target: ^Target) {
+TargetDispose :: proc(target: ^Target) {
 	if target == nil || target.Disposed {
 		return
 	}
@@ -717,7 +703,7 @@ target_attachment_dispose_cpu :: proc(texture: ^Texture) {
 	texture.Disposed = true
 }
 
-target_attachment :: proc(target: ^Target, index: int = 0) -> ^Texture {
+TargetAttachment :: proc(target: ^Target, index: int = 0) -> ^Texture {
 	if target == nil || index < 0 || index >= len(target.Attachments) {
 		return nil
 	}
@@ -728,8 +714,6 @@ TargetInit :: proc {
 	target_init,
 	target_init_with_attachments,
 }
-TargetDispose :: target_dispose
-TargetAttachment :: target_attachment
 
 // ------------------------------------------------------------------------------
 // Graphics / Structs / BoundSampler — 纹理与采样器绑定
@@ -752,41 +736,41 @@ MaterialStage :: struct {
 	Stage:                ShaderStage,
 }
 
-material_stage_init :: proc(stage: ^MaterialStage, shader_stage: ShaderStage) {
+MaterialStageInit :: proc(stage: ^MaterialStage, shader_stage: ShaderStage) {
 	stage.Stage = shader_stage
 	stage.Shader = nil
 	for i := 0; i < len(stage.UniformBuffers); i += 1 {
 		stage.UniformBuffers[i] = nil
-		uniform_buffer_init(&stage.UniformBufferObjects[i])
+		UniformBufferInit(&stage.UniformBufferObjects[i])
 	}
 }
 
-material_stage_set_shader :: proc(stage: ^MaterialStage, shader: ^Shader) {
+MaterialStageSetShader :: proc(stage: ^MaterialStage, shader: ^Shader) {
 	if shader != nil && shader.Stage != stage.Stage {
 		panic("Invalid Shader Stage")
 	}
 	stage.Shader = shader
 }
 
-material_stage_set_uniform_buffer :: proc(stage: ^MaterialStage, data: []u8, slot: int = 0) {
+MaterialStageSetUniformBuffer :: proc(stage: ^MaterialStage, data: []u8, slot: int = 0) {
 	if slot < 0 || slot >= len(stage.UniformBuffers) {
 		panic("Uniform buffer slot out of range")
 	}
 	delete(stage.UniformBuffers[slot])
 	stage.UniformBuffers[slot] = nil
 	append(&stage.UniformBuffers[slot], ..data)
-	uniform_buffer_clear(&stage.UniformBufferObjects[slot])
-	uniform_buffer_set(&stage.UniformBufferObjects[slot], data)
+	UniformBufferClear(&stage.UniformBufferObjects[slot])
+	UniformBufferSet(&stage.UniformBufferObjects[slot], data)
 }
 
-material_stage_get_uniform_buffer :: proc(stage: ^MaterialStage, slot: int = 0) -> []u8 {
+MaterialStageGetUniformBuffer :: proc(stage: ^MaterialStage, slot: int = 0) -> []u8 {
 	if slot < 0 || slot >= len(stage.UniformBuffers) {
 		return nil
 	}
 	return stage.UniformBuffers[slot][:]
 }
 
-material_stage_copy_to :: proc(stage: ^MaterialStage, to: ^MaterialStage) {
+MaterialStageCopyTo :: proc(stage: ^MaterialStage, to: ^MaterialStage) {
 	if stage == to {
 		return
 	}
@@ -797,16 +781,11 @@ material_stage_copy_to :: proc(stage: ^MaterialStage, to: ^MaterialStage) {
 		delete(to.UniformBuffers[i])
 		to.UniformBuffers[i] = nil
 		append(&to.UniformBuffers[i], ..stage.UniformBuffers[i][:])
-		uniform_buffer_dispose(&to.UniformBufferObjects[i])
-		uniform_buffer_init(&to.UniformBufferObjects[i])
-		uniform_buffer_set(&to.UniformBufferObjects[i], stage.UniformBufferObjects[i].Data[:])
+		UniformBufferDispose(&to.UniformBufferObjects[i])
+		UniformBufferInit(&to.UniformBufferObjects[i])
+		UniformBufferSet(&to.UniformBufferObjects[i], stage.UniformBufferObjects[i].Data[:])
 	}
 }
-
-MaterialStageInit :: material_stage_init
-MaterialStageSetShader :: material_stage_set_shader
-MaterialStageSetUniformBuffer :: material_stage_set_uniform_buffer
-MaterialStageGetUniformBuffer :: material_stage_get_uniform_buffer
 
 MaterialStageGetUniformBufferObject :: proc(
 	stage: ^MaterialStage,
@@ -817,7 +796,6 @@ MaterialStageGetUniformBufferObject :: proc(
 	}
 	return &stage.UniformBufferObjects[slot]
 }
-MaterialStageCopyTo :: material_stage_copy_to
 
 MaterialStageMaxUniformBuffers :: proc(stage: ^MaterialStage) -> int {
 	if stage == nil {
@@ -865,29 +843,29 @@ material_init_with_shaders :: proc(
 	vertex_shader: ^Shader,
 	fragment_shader: ^Shader,
 ) {
-	material_stage_init(&material.Vertex, .Vertex)
-	material_stage_init(&material.Fragment, .Fragment)
-	material_stage_set_shader(&material.Vertex, vertex_shader)
-	material_stage_set_shader(&material.Fragment, fragment_shader)
+	MaterialStageInit(&material.Vertex, .Vertex)
+	MaterialStageInit(&material.Fragment, .Fragment)
+	MaterialStageSetShader(&material.Vertex, vertex_shader)
+	MaterialStageSetShader(&material.Fragment, fragment_shader)
 }
 
 material_init :: proc(material: ^Material) {
 	material_init_with_shaders(material, nil, nil)
 }
 
-material_copy_to :: proc(material: ^Material, to: ^Material) {
-	material_stage_copy_to(&material.Vertex, &to.Vertex)
-	material_stage_copy_to(&material.Fragment, &to.Fragment)
+MaterialCopyTo :: proc(material: ^Material, to: ^Material) {
+	MaterialStageCopyTo(&material.Vertex, &to.Vertex)
+	MaterialStageCopyTo(&material.Fragment, &to.Fragment)
 }
 
-material_copy_from :: proc(material: ^Material, from: ^Material) {
-	material_copy_to(from, material)
+MaterialCopyFrom :: proc(material: ^Material, from: ^Material) {
+	MaterialCopyTo(from, material)
 }
 
-material_clone :: proc(material: ^Material) -> Material {
+MaterialClone :: proc(material: ^Material) -> Material {
 	clone: Material
 	material_init(&clone)
-	material_copy_to(material, &clone)
+	MaterialCopyTo(material, &clone)
 	return clone
 }
 
@@ -895,9 +873,6 @@ MaterialInit :: proc {
 	material_init,
 	material_init_with_shaders,
 }
-MaterialCopyTo :: material_copy_to
-MaterialCopyFrom :: material_copy_from
-MaterialClone :: material_clone
 
 MaterialStageDispose :: proc(stage: ^MaterialStage) {
 	if stage == nil {
@@ -951,7 +926,7 @@ mesh_init_with_format :: proc(
 		index_name = fmt.tprintf("%s-Indices", name)
 	}
 	vertex_buffer_init_with_format(&mesh.VertexData, graphics_device, vertex_format, vertex_name)
-	index_buffer_init(&mesh.IndexData, graphics_device, index_format, index_name)
+	IndexBufferInit(&mesh.IndexData, graphics_device, index_format, index_name)
 	mesh.HasInstanceBuffer = false
 }
 
@@ -1010,52 +985,52 @@ mesh_init_instanced :: proc(
 	)
 }
 
-mesh_clear :: proc(mesh: ^Mesh) {
-	vertex_buffer_clear(&mesh.VertexData)
-	index_buffer_clear(&mesh.IndexData)
+MeshClear :: proc(mesh: ^Mesh) {
+	VertexBufferClear(&mesh.VertexData)
+	IndexBufferClear(&mesh.IndexData)
 	if mesh.HasInstanceBuffer {
-		vertex_buffer_clear(&mesh.InstanceData)
+		VertexBufferClear(&mesh.InstanceData)
 	}
 }
 
-mesh_set_index_count :: proc(mesh: ^Mesh, count: int) {
-	index_buffer_clear(&mesh.IndexData)
+MeshSetIndexCount :: proc(mesh: ^Mesh, count: int) {
+	IndexBufferClear(&mesh.IndexData)
 	IndexBufferReserve(&mesh.IndexData, count)
 }
 
-mesh_set_vertex_count :: proc(mesh: ^Mesh, count: int) {
-	vertex_buffer_clear(&mesh.VertexData)
+MeshSetVertexCount :: proc(mesh: ^Mesh, count: int) {
+	VertexBufferClear(&mesh.VertexData)
 	VertexBufferReserve(&mesh.VertexData, count)
 }
 
-mesh_set_instance_count :: proc(mesh: ^Mesh, count: int) {
+MeshSetInstanceCount :: proc(mesh: ^Mesh, count: int) {
 	if !mesh.HasInstanceBuffer {
 		panic("Mesh does not contain an instance buffer")
 	}
-	vertex_buffer_clear(&mesh.InstanceData)
+	VertexBufferClear(&mesh.InstanceData)
 	VertexBufferReserve(&mesh.InstanceData, count)
 }
 
-mesh_set_indices :: proc(mesh: ^Mesh, data: rawptr, count: int, offset: int = 0) {
-	index_buffer_upload(&mesh.IndexData, data, count, offset)
+MeshSetIndices :: proc(mesh: ^Mesh, data: rawptr, count: int, offset: int = 0) {
+	IndexBufferUpload(&mesh.IndexData, data, count, offset)
 }
 
-mesh_set_vertices :: proc(mesh: ^Mesh, data: rawptr, count: int, offset: int = 0) {
-	vertex_buffer_upload(&mesh.VertexData, data, count, offset)
+MeshSetVertices :: proc(mesh: ^Mesh, data: rawptr, count: int, offset: int = 0) {
+	VertexBufferUpload(&mesh.VertexData, data, count, offset)
 }
 
-mesh_set_instances :: proc(mesh: ^Mesh, data: rawptr, count: int, offset: int = 0) {
+MeshSetInstances :: proc(mesh: ^Mesh, data: rawptr, count: int, offset: int = 0) {
 	if !mesh.HasInstanceBuffer {
 		panic("Mesh does not contain an instance buffer")
 	}
-	vertex_buffer_upload(&mesh.InstanceData, data, count, offset)
+	VertexBufferUpload(&mesh.InstanceData, data, count, offset)
 }
 
-mesh_dispose :: proc(mesh: ^Mesh) {
-	vertex_buffer_dispose(&mesh.VertexData)
-	index_buffer_dispose(&mesh.IndexData)
+MeshDispose :: proc(mesh: ^Mesh) {
+	VertexBufferDispose(&mesh.VertexData)
+	IndexBufferDispose(&mesh.IndexData)
 	if mesh.HasInstanceBuffer {
-		vertex_buffer_dispose(&mesh.InstanceData)
+		VertexBufferDispose(&mesh.InstanceData)
 	}
 }
 
@@ -1067,14 +1042,6 @@ MeshInitInstanced :: proc {
 	mesh_init_instanced,
 	mesh_init_instanced_with_format,
 }
-MeshClear :: mesh_clear
-MeshSetIndexCount :: mesh_set_index_count
-MeshSetVertexCount :: mesh_set_vertex_count
-MeshSetInstanceCount :: mesh_set_instance_count
-MeshSetIndices :: mesh_set_indices
-MeshSetVertices :: mesh_set_vertices
-MeshSetInstances :: mesh_set_instances
-MeshDispose :: mesh_dispose
 
 MeshVertexCount :: proc(mesh: ^Mesh) -> int {
 	if mesh == nil {
@@ -1147,7 +1114,7 @@ DrawCommand :: struct {
 	HasScissor:             bool,
 }
 
-draw_command_init :: proc(command: ^DrawCommand) {
+DrawCommandInit :: proc(command: ^DrawCommand) {
 	command.Target = DrawableTarget{}
 	command.Material = nil
 	command.VertexBuffers = nil
@@ -1175,13 +1142,13 @@ draw_command_init :: proc(command: ^DrawCommand) {
 	command.HasScissor = false
 }
 
-draw_command_from_mesh :: proc(
+DrawCommandFromMesh :: proc(
 	command: ^DrawCommand,
 	target: DrawableTarget,
 	mesh: ^Mesh,
 	material: ^Material,
 ) {
-	draw_command_init(command)
+	DrawCommandInit(command)
 	command.Target = target
 	command.Material = material
 	append(
@@ -1205,13 +1172,13 @@ draw_command_from_mesh :: proc(
 	}
 }
 
-draw_command_from_vertex_buffer :: proc(
+DrawCommandFromVertexBuffer :: proc(
 	command: ^DrawCommand,
 	target: DrawableTarget,
 	vertex_buffer: ^VertexBuffer,
 	material: ^Material,
 ) {
-	draw_command_init(command)
+	DrawCommandInit(command)
 	command.Target = target
 	command.Material = material
 	append(
@@ -1221,7 +1188,7 @@ draw_command_from_vertex_buffer :: proc(
 	command.VertexCount = vertex_buffer.Base.Count
 }
 
-draw_command_dispose :: proc(command: ^DrawCommand) {
+DrawCommandDispose :: proc(command: ^DrawCommand) {
 	delete(command.VertexBuffers)
 	delete(command.VertexStorageBuffers)
 	delete(command.FragmentStorageBuffers)
@@ -1229,11 +1196,6 @@ draw_command_dispose :: proc(command: ^DrawCommand) {
 	command.VertexStorageBuffers = nil
 	command.FragmentStorageBuffers = nil
 }
-
-DrawCommandInit :: draw_command_init
-DrawCommandFromMesh :: draw_command_from_mesh
-DrawCommandFromVertexBuffer :: draw_command_from_vertex_buffer
-DrawCommandDispose :: draw_command_dispose
 
 drawable_target_matches :: proc(a, b: DrawableTarget) -> bool {
 	if a.GraphicsDevice != b.GraphicsDevice || a.IsWindow != b.IsWindow {
@@ -1374,7 +1336,7 @@ begin_render_pass_ex :: proc(
 			depth_handle: u32
 			for i in 0 ..< len(target_ptr.Attachments) {
 				texture := &target_ptr.Attachments[i]
-				if texture_format_is_color_format(texture.Format) {
+				if TextureFormatIsColorFormat(texture.Format) {
 					append(&colors, web_handle_u32(rawptr(texture.Resource)))
 				} else {
 					depth_handle = web_handle_u32(rawptr(texture.Resource))
@@ -1401,7 +1363,7 @@ begin_render_pass_ex :: proc(
 		}
 		graphics_device.RenderPass = cast(^SDL.GPURenderPass)&web_renderpass_placeholder
 		graphics_device.RenderPassTarget = resolved_target
-		graphics_device.RenderPassTargetSize = drawable_target_size_in_pixels(resolved_target)
+		graphics_device.RenderPassTargetSize = DrawableTargetSizeInPixels(resolved_target)
 		graphics_device.RenderPassPipeline = nil
 		graphics_device.RenderPassIndexBuffer = nil
 		graphics_device.HasRenderPassViewport = false
@@ -1432,7 +1394,7 @@ begin_render_pass_ex :: proc(
 			continue
 		}
 
-		if texture_format_is_color_format(attachment.Format) {
+		if TextureFormatIsColorFormat(attachment.Format) {
 			color_target := SDL.GPUColorTargetInfo {
 				texture              = attachment.Resource,
 				mip_level            = 0,
@@ -1902,10 +1864,10 @@ create_pipeline_for_draw_command :: proc(
 			attrs[attr_index] = SDL.GPUVertexAttribute {
 				location    = u32(element.Index),
 				buffer_slot = u32(i),
-				format      = vertex_type_to_sdl(element.Type, element.Normalized),
+				format      = VertexTypeToSDL(element.Type, element.Normalized),
 				offset      = u32(offset),
 			}
-			offset += vertex_type_size_in_bytes(element.Type)
+			offset += VertexTypeSizeInBytes(element.Type)
 			attr_index += 1
 		}
 	}
@@ -1942,12 +1904,12 @@ create_pipeline_for_draw_command :: proc(
 	}
 	for i := 0; i < len(target_ptr.Attachments); i += 1 {
 		attachment := target_ptr.Attachments[i]
-		attachment_format := texture_format_to_sdl(attachment.Format)
-		attachment_sample_count := sample_count_to_sdl(attachment.SampleCount)
+		attachment_format := TextureFormatToSDL(attachment.Format)
+		attachment_sample_count := SampleCountToSDL(attachment.SampleCount)
 		if attachment_sample_count > sample_count {
 			sample_count = attachment_sample_count
 		}
-		if texture_format_is_color_format(attachment.Format) {
+		if TextureFormatIsColorFormat(attachment.Format) {
 			color_target_desc[color_target_count] = SDL.GPUColorTargetDescription {
 				format      = attachment_format,
 				blend_state = blend_state,
@@ -2170,7 +2132,7 @@ create_pipeline_for_draw_command :: proc(
 // Graphics / GraphicsDevice / Draw — 资源绑定与提交
 // ------------------------------------------------------------------------------
 
-graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCommand) {
+GraphicsDeviceDraw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCommand) {
 	if graphics_device == nil {
 		return
 	}
@@ -2311,7 +2273,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 				if command.Material.Vertex.Samplers[i].Texture != nil {
 					texture_handle = web_handle_u32(
 						rawptr(
-							texture_sample_resource(command.Material.Vertex.Samplers[i].Texture),
+							TextureSampleResource(command.Material.Vertex.Samplers[i].Texture),
 						),
 					)
 					if cached := create_sampler_from_texture_sampler(
@@ -2333,7 +2295,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 				texture := graphics_device.DebugTexture
 				sampler := graphics_device.DebugSampler
 				if command.Material.Vertex.Samplers[i].Texture != nil {
-					texture = texture_sample_resource(command.Material.Vertex.Samplers[i].Texture)
+					texture = TextureSampleResource(command.Material.Vertex.Samplers[i].Texture)
 					cached := create_sampler_from_texture_sampler(
 						graphics_device,
 						command.Material.Vertex.Samplers[i].Sampler,
@@ -2359,7 +2321,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 				if command.Material.Fragment.Samplers[i].Texture != nil {
 					texture_handle = web_handle_u32(
 						rawptr(
-							texture_sample_resource(command.Material.Fragment.Samplers[i].Texture),
+							TextureSampleResource(command.Material.Fragment.Samplers[i].Texture),
 						),
 					)
 					if cached := create_sampler_from_texture_sampler(
@@ -2381,7 +2343,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 				texture := graphics_device.DebugTexture
 				sampler := graphics_device.DebugSampler
 				if command.Material.Fragment.Samplers[i].Texture != nil {
-					texture = texture_sample_resource(
+					texture = TextureSampleResource(
 						command.Material.Fragment.Samplers[i].Texture,
 					)
 					cached := create_sampler_from_texture_sampler(
@@ -2402,7 +2364,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 	}
 
 	for i := 0; i < vertex_info.UniformBufferCount; i += 1 {
-		uniform := material_stage_get_uniform_buffer(&command.Material.Vertex, i)
+		uniform := MaterialStageGetUniformBuffer(&command.Material.Vertex, i)
 		when ODIN_OS == .JS {
 			// M1 决策: 逐 draw 设 uniform(非 UBO)。顶点 slot0 = 64 字节列主序 mat4
 			if len(uniform) >= 64 {
@@ -2430,7 +2392,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 	}
 
 	for i := 0; i < fragment_info.UniformBufferCount; i += 1 {
-		uniform := material_stage_get_uniform_buffer(&command.Material.Fragment, i)
+		uniform := MaterialStageGetUniformBuffer(&command.Material.Fragment, i)
 		when ODIN_OS == .JS {
 			// M1: 已知着色器的片元 uniform 仅 Msdf 的 DistanceRange(4 字节 float)
 			if len(uniform) >= 4 {
@@ -2471,7 +2433,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 					i32(vb.Stride),
 					i32(attr_offset),
 				)
-				attr_offset += vertex_type_size_in_bytes(element.Type)
+				attr_offset += VertexTypeSizeInBytes(element.Type)
 			}
 		}
 	} else {
@@ -2578,7 +2540,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 			SDL.BindGPUIndexBuffer(
 				graphics_device.RenderPass,
 				index_binding,
-				index_format_to_sdl(command.IndexBuffer.Format),
+				IndexFormatToSDL(command.IndexBuffer.Format),
 			)
 			graphics_device.RenderPassIndexBuffer = command.IndexBuffer.Base.Resource
 			SDL.DrawGPUIndexedPrimitives(
@@ -2609,9 +2571,7 @@ graphics_device_draw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawCom
 	}
 }
 
-GraphicsDeviceDraw :: graphics_device_draw
-
-graphics_device_is_texture_format_supported :: proc(
+GraphicsDeviceIsTextureFormatSupported :: proc(
 	device: ^GraphicsDevice,
 	format: TextureFormat,
 ) -> bool {
@@ -2622,15 +2582,15 @@ graphics_device_is_texture_format_supported :: proc(
 		return fw_gl_texture_supported(u32(format))
 	}
 	usage: SDL.GPUTextureUsageFlags = {.SAMPLER}
-	if texture_format_is_color_format(format) {
+	if TextureFormatIsColorFormat(format) {
 		usage += {.COLOR_TARGET}
 	} else {
 		usage += {.DEPTH_STENCIL_TARGET}
 	}
-	return SDL.GPUTextureSupportsFormat(device.Device, texture_format_to_sdl(format), .D2, usage)
+	return SDL.GPUTextureSupportsFormat(device.Device, TextureFormatToSDL(format), .D2, usage)
 }
 
-graphics_device_is_texture_multisample_supported :: proc(
+GraphicsDeviceIsTextureMultiSampleSupported :: proc(
 	device: ^GraphicsDevice,
 	format: TextureFormat,
 	samples: SampleCount,
@@ -2643,26 +2603,22 @@ graphics_device_is_texture_multisample_supported :: proc(
 	}
 	return SDL.GPUTextureSupportsSampleCount(
 		device.Device,
-		texture_format_to_sdl(format),
-		sample_count_to_sdl(samples),
+		TextureFormatToSDL(format),
+		SampleCountToSDL(samples),
 	)
 }
 
-graphics_device_resource_handle :: proc(device: ^GraphicsDevice) -> rawptr {
+GraphicsDeviceResourceHandle :: proc(device: ^GraphicsDevice) -> rawptr {
 	if device == nil {
 		return nil
 	}
 	return rawptr(device.Device)
 }
 
-graphics_device_origin_bottom_left :: proc(device: ^GraphicsDevice) -> bool {
+GraphicsDeviceOriginBottomLeft :: proc(device: ^GraphicsDevice) -> bool {
 	_ = device
 	return false
 }
-GraphicsDeviceIsTextureFormatSupported :: graphics_device_is_texture_format_supported
-GraphicsDeviceIsTextureMultiSampleSupported :: graphics_device_is_texture_multisample_supported
-GraphicsDeviceResourceHandle :: graphics_device_resource_handle
-GraphicsDeviceOriginBottomLeft :: graphics_device_origin_bottom_left
 
 graphics_device_clear_mask :: proc(
 	graphics_device: ^GraphicsDevice,
@@ -2714,7 +2670,7 @@ GraphicsDeviceClear :: proc {
 // Graphics / Defaults / Materials — 默认材质
 // ==============================================================================
 
-init_default_batch_material :: proc(
+InitDefaultBatchMaterial :: proc(
 	material: ^Material,
 	vertex_shader: ^Shader,
 	fragment_shader: ^Shader,
@@ -2757,14 +2713,12 @@ init_default_batch_material :: proc(
 		EntryPoint         = "fragment_main",
 	}
 
-	shader_init(vertex_shader, graphics_device, vertex_info, "BatcherVertex")
-	shader_init(fragment_shader, graphics_device, fragment_info, "BatcherFragment")
+	ShaderInit(vertex_shader, graphics_device, vertex_info, "BatcherVertex")
+	ShaderInit(fragment_shader, graphics_device, fragment_info, "BatcherFragment")
 	material_init_with_shaders(material, vertex_shader, fragment_shader)
 }
 
-InitDefaultBatchMaterial :: init_default_batch_material
-
-init_default_textured_material :: proc(
+InitDefaultTexturedMaterial :: proc(
 	material: ^Material,
 	vertex_shader: ^Shader,
 	fragment_shader: ^Shader,
@@ -2789,7 +2743,7 @@ init_default_textured_material :: proc(
 		case .None:
 		}
 	}
-	shader_init(vertex_shader, graphics_device, ShaderCreateInfo {
+	ShaderInit(vertex_shader, graphics_device, ShaderCreateInfo {
 			Stage              = .Vertex,
 			Code               = vertex_code,
 			SamplerCount       = 0,
@@ -2797,7 +2751,7 @@ init_default_textured_material :: proc(
 			StorageBufferCount = 0,
 			EntryPoint         = "vertex_main",
 		}, "TexturedVertex")
-	shader_init(fragment_shader, graphics_device, ShaderCreateInfo {
+	ShaderInit(fragment_shader, graphics_device, ShaderCreateInfo {
 			Stage              = .Fragment,
 			Code               = fragment_code,
 			SamplerCount       = 1,
@@ -2808,7 +2762,7 @@ init_default_textured_material :: proc(
 	material_init_with_shaders(material, vertex_shader, fragment_shader)
 }
 
-init_default_msdf_material :: proc(
+InitDefaultMsdfMaterial :: proc(
 	material: ^Material,
 	vertex_shader: ^Shader,
 	fragment_shader: ^Shader,
@@ -2833,7 +2787,7 @@ init_default_msdf_material :: proc(
 		case .None:
 		}
 	}
-	shader_init(vertex_shader, graphics_device, ShaderCreateInfo {
+	ShaderInit(vertex_shader, graphics_device, ShaderCreateInfo {
 			Stage              = .Vertex,
 			Code               = vertex_code,
 			SamplerCount       = 0,
@@ -2841,7 +2795,7 @@ init_default_msdf_material :: proc(
 			StorageBufferCount = 0,
 			EntryPoint         = "vertex_main",
 		}, "MsdfVertex")
-	shader_init(fragment_shader, graphics_device, ShaderCreateInfo {
+	ShaderInit(fragment_shader, graphics_device, ShaderCreateInfo {
 			Stage              = .Fragment,
 			Code               = fragment_code,
 			SamplerCount       = 1,
@@ -2851,9 +2805,6 @@ init_default_msdf_material :: proc(
 		}, "MsdfFragment")
 	material_init_with_shaders(material, vertex_shader, fragment_shader)
 }
-
-InitDefaultTexturedMaterial :: init_default_textured_material
-InitDefaultMsdfMaterial :: init_default_msdf_material
 
 // ==============================================================================
 // Graphics / IGraphicResource — 资源操作
@@ -2868,7 +2819,7 @@ GraphicResource :: enum {
 	Pipeline,
 }
 
-graphics_device_destroy_resource :: proc(
+GraphicsDeviceDestroyResource :: proc(
 	graphics_device: ^GraphicsDevice,
 	kind: GraphicResource,
 	resource: rawptr,
@@ -2912,9 +2863,7 @@ graphics_device_destroy_resource :: proc(
 	}
 }
 
-GraphicsDeviceDestroyResource :: graphics_device_destroy_resource
-
-graphics_device_upload_to_buffer :: proc(
+GraphicsDeviceUploadToBuffer :: proc(
 	graphics_device: ^GraphicsDevice,
 	buffer: ^SDL.GPUBuffer,
 	data: rawptr,
@@ -2961,7 +2910,7 @@ graphics_device_upload_to_buffer :: proc(
 			}
 			transfer := SDL.CreateGPUTransferBuffer(device, transfer_info)
 			if transfer == nil {
-				panic(create_error_from_sdl("SDL_CreateGPUTransferBuffer"))
+				panic(CreateExceptionFromSDL("SDL_CreateGPUTransferBuffer"))
 			}
 			graphics_device.UploadStaging = transfer
 			graphics_device.UploadStagingSize = next
@@ -2969,7 +2918,7 @@ graphics_device_upload_to_buffer :: proc(
 		transfer := graphics_device.UploadStaging
 		mapped := SDL.MapGPUTransferBuffer(device, transfer, false)
 		if mapped == nil {
-			panic(create_error_from_sdl("SDL_MapGPUTransferBuffer"))
+			panic(CreateExceptionFromSDL("SDL_MapGPUTransferBuffer"))
 		}
 		dst := ([^]byte)(mapped)
 		mem.copy(raw_data(dst[cursor:int(cursor) + int(required)]), data, int(data_size))
@@ -3002,13 +2951,13 @@ graphics_device_upload_to_buffer :: proc(
 	}
 	transfer := SDL.CreateGPUTransferBuffer(device, transfer_info)
 	if transfer == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUTransferBuffer"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUTransferBuffer"))
 	}
 	defer SDL.ReleaseGPUTransferBuffer(device, transfer)
 
 	mapped := SDL.MapGPUTransferBuffer(device, transfer, false)
 	if mapped == nil {
-		panic(create_error_from_sdl("SDL_MapGPUTransferBuffer"))
+		panic(CreateExceptionFromSDL("SDL_MapGPUTransferBuffer"))
 	}
 	mem.copy(mapped, data, int(data_size))
 	SDL.UnmapGPUTransferBuffer(device, transfer)
@@ -3037,12 +2986,10 @@ graphics_device_upload_to_buffer :: proc(
 
 	SDL.EndGPUCopyPass(copy_pass)
 	if !SDL.SubmitGPUCommandBuffer(command_buffer) {
-		panic(create_error_from_sdl("SDL_SubmitGPUCommandBuffer"))
+		panic(CreateExceptionFromSDL("SDL_SubmitGPUCommandBuffer"))
 	}
 	_ = SDL.WaitForGPUIdle(device)
 }
-
-GraphicsDeviceUploadToBuffer :: graphics_device_upload_to_buffer
 
 // ==============================================================================
 // Graphics / Texture — 创建、上传、读回与复制
@@ -3065,16 +3012,14 @@ Texture :: struct {
 	Disposed:           bool,
 }
 
-texture_memory_size :: proc(tex: ^Texture) -> int {
+TextureMemorySize :: proc(tex: ^Texture) -> int {
 	if tex == nil {
 		return 0
 	}
-	return tex.Width * tex.Height * texture_format_size(tex.Format)
+	return tex.Width * tex.Height * TextureFormatSize(tex.Format)
 }
 
-TextureMemorySize :: texture_memory_size
-
-texture_init_ex :: proc(
+TextureInitEx :: proc(
 	tex: ^Texture,
 	graphics_device: ^GraphicsDevice,
 	width, height: int,
@@ -3112,12 +3057,12 @@ texture_init_ex :: proc(
 		tex.Flags = TextureFlags{}
 		delete(tex.Pixels)
 		tex.Pixels = nil
-		resize(&tex.Pixels, width * height * texture_format_size(format))
+		resize(&tex.Pixels, width * height * TextureFormatSize(format))
 		tex.Disposed = false
 		return
 	}
 
-	sdl_format := texture_format_to_sdl(format)
+	sdl_format := TextureFormatToSDL(format)
 	info := SDL.GPUTextureCreateInfo {
 		type                 = .D2,
 		format               = sdl_format,
@@ -3126,17 +3071,17 @@ texture_init_ex :: proc(
 		height               = u32(height),
 		layer_count_or_depth = 1,
 		num_levels           = 1,
-		sample_count         = sample_count_to_sdl(sample_count),
+		sample_count         = SampleCountToSDL(sample_count),
 		props                = 0,
 	}
 
 	resource := SDL.CreateGPUTexture(graphics_device.Device, info)
 	if resource == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUTexture"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUTexture"))
 	}
 
 	resolve_resource: ^SDL.GPUTexture = nil
-	if is_target_attachment && sample_count != .One && texture_format_is_color_format(format) {
+	if is_target_attachment && sample_count != .One && TextureFormatIsColorFormat(format) {
 		resolve_info := SDL.GPUTextureCreateInfo {
 			type                 = .D2,
 			format               = sdl_format,
@@ -3151,7 +3096,7 @@ texture_init_ex :: proc(
 		resolve_resource = SDL.CreateGPUTexture(graphics_device.Device, resolve_info)
 		if resolve_resource == nil {
 			SDL.ReleaseGPUTexture(graphics_device.Device, resource)
-			panic(create_error_from_sdl("SDL_CreateGPUTexture", "resolve"))
+			panic(CreateExceptionFromSDL("SDL_CreateGPUTexture", "resolve"))
 		}
 	}
 
@@ -3168,18 +3113,18 @@ texture_init_ex :: proc(
 	tex.Flags = TextureFlags{}
 	delete(tex.Pixels)
 	tex.Pixels = nil
-	resize(&tex.Pixels, width * height * texture_format_size(format))
+	resize(&tex.Pixels, width * height * TextureFormatSize(format))
 	tex.Disposed = false
 }
 
-texture_init :: proc(
+TextureInit :: proc(
 	tex: ^Texture,
 	graphics_device: ^GraphicsDevice,
 	width, height: int,
 	format: TextureFormat = .Color,
 	name: string = "",
 ) {
-	texture_init_ex(
+	TextureInitEx(
 		tex,
 		graphics_device,
 		width,
@@ -3192,7 +3137,7 @@ texture_init :: proc(
 	)
 }
 
-texture_init_flags :: proc(
+TextureInitFlags :: proc(
 	tex: ^Texture,
 	graphics_device: ^GraphicsDevice,
 	width, height: int,
@@ -3207,11 +3152,11 @@ texture_init_flags :: proc(
 	if .ComputeWrite in flags {
 		usage += {.COMPUTE_STORAGE_WRITE}
 	}
-	texture_init_ex(tex, graphics_device, width, height, format, .One, usage, false, name)
+	TextureInitEx(tex, graphics_device, width, height, format, .One, usage, false, name)
 	tex.Flags = flags
 }
 
-texture_dispose :: proc(tex: ^Texture) {
+TextureDispose :: proc(tex: ^Texture) {
 	if tex == nil || tex.Disposed {
 		return
 	}
@@ -3245,7 +3190,7 @@ texture_dispose :: proc(tex: ^Texture) {
 	tex.Disposed = true
 }
 
-texture_sample_resource :: proc(tex: ^Texture) -> ^SDL.GPUTexture {
+TextureSampleResource :: proc(tex: ^Texture) -> ^SDL.GPUTexture {
 	if tex == nil {
 		return nil
 	}
@@ -3258,7 +3203,7 @@ texture_sample_resource :: proc(tex: ^Texture) -> ^SDL.GPUTexture {
 // Data contains native texel bits, not converted RGBA8 colors: float formats
 // use f16/f32 components, and R11G11B10_UFLOAT uses packed unsigned float bits.
 
-texture_set_data :: proc(tex: ^Texture, data: rawptr, length: int) {
+TextureSetData :: proc(tex: ^Texture, data: rawptr, length: int) {
 	if tex == nil ||
 	   tex.Disposed ||
 	   tex.GraphicsDevice == nil ||
@@ -3267,7 +3212,7 @@ texture_set_data :: proc(tex: ^Texture, data: rawptr, length: int) {
 		panic("Resource is Disposed")
 	}
 
-	mem_size := texture_memory_size(tex)
+	mem_size := TextureMemorySize(tex)
 	if length < mem_size {
 		panic("Data Buffer is smaller than the Size of the Texture")
 	}
@@ -3296,13 +3241,13 @@ texture_set_data :: proc(tex: ^Texture, data: rawptr, length: int) {
 	}
 	transfer := SDL.CreateGPUTransferBuffer(device, transfer_info)
 	if transfer == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUTransferBuffer"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUTransferBuffer"))
 	}
 	defer SDL.ReleaseGPUTransferBuffer(device, transfer)
 
 	mapped := SDL.MapGPUTransferBuffer(device, transfer, false)
 	if mapped == nil {
-		panic(create_error_from_sdl("SDL_MapGPUTransferBuffer"))
+		panic(CreateExceptionFromSDL("SDL_MapGPUTransferBuffer"))
 	}
 	mem.copy(mapped, data, mem_size)
 	if mem_size > 0 {
@@ -3342,21 +3287,14 @@ texture_set_data :: proc(tex: ^Texture, data: rawptr, length: int) {
 
 	SDL.EndGPUCopyPass(copy_pass)
 	if !SDL.SubmitGPUCommandBuffer(command_buffer) {
-		panic(create_error_from_sdl("SDL_SubmitGPUCommandBuffer"))
+		panic(CreateExceptionFromSDL("SDL_SubmitGPUCommandBuffer"))
 	}
 	_ = SDL.WaitForGPUIdle(device)
 }
 
-TextureInit :: texture_init
-TextureInitEx :: texture_init_ex
-TextureInitFlags :: texture_init_flags
-TextureDispose :: texture_dispose
-TextureSetData :: texture_set_data
-TextureSampleResource :: texture_sample_resource
-
 // Returns native texel bits in the texture's format; the caller decodes them.
 
-texture_download_data :: proc(tex: ^Texture, allocator := context.allocator) -> []byte {
+TextureDownloadData :: proc(tex: ^Texture, allocator := context.allocator) -> []byte {
 	if tex == nil ||
 	   tex.Disposed ||
 	   tex.GraphicsDevice == nil ||
@@ -3365,9 +3303,9 @@ texture_download_data :: proc(tex: ^Texture, allocator := context.allocator) -> 
 		return nil
 	}
 	when ODIN_OS == .JS {
-		web_result := make([]byte, texture_memory_size(tex), allocator)
+		web_result := make([]byte, TextureMemorySize(tex), allocator)
 		if !fw_gl_download_texture(
-			web_handle_u32(rawptr(texture_sample_resource(tex))),
+			web_handle_u32(rawptr(TextureSampleResource(tex))),
 			raw_data(web_result),
 			i32(len(web_result)),
 		) {
@@ -3376,7 +3314,7 @@ texture_download_data :: proc(tex: ^Texture, allocator := context.allocator) -> 
 		}
 		return web_result
 	}
-	mem_size := texture_memory_size(tex)
+	mem_size := TextureMemorySize(tex)
 	if mem_size <= 0 {
 		return nil
 	}
@@ -3398,7 +3336,7 @@ texture_download_data :: proc(tex: ^Texture, allocator := context.allocator) -> 
 		return nil
 	}
 	SDL.DownloadFromGPUTexture(copy_pass, SDL.GPUTextureRegion {
-		texture   = texture_sample_resource(tex),
+		texture   = TextureSampleResource(tex),
 		mip_level = 0,
 		layer     = 0,
 		x         = 0,
@@ -3431,12 +3369,12 @@ texture_download_data :: proc(tex: ^Texture, allocator := context.allocator) -> 
 	return result
 }
 
-texture_get_data :: proc(tex: ^Texture, allocator := context.allocator) -> []byte {
+TextureGetData :: proc(tex: ^Texture, allocator := context.allocator) -> []byte {
 	if tex == nil || tex.Disposed {
 		return nil
 	}
 	if tex.GraphicsDevice != nil && tex.GraphicsDevice.Device != nil && tex.Resource != nil {
-		if data := texture_download_data(tex, allocator); data != nil {
+		if data := TextureDownloadData(tex, allocator); data != nil {
 			return data
 		}
 	}
@@ -3445,14 +3383,14 @@ texture_get_data :: proc(tex: ^Texture, allocator := context.allocator) -> []byt
 	return result
 }
 
-texture_set_data_region :: proc(tex: ^Texture, data: []u8, x, y, width, height: int) {
+TextureSetDataRegion :: proc(tex: ^Texture, data: []u8, x, y, width, height: int) {
 	if tex == nil || tex.Disposed || x < 0 || y < 0 || width <= 0 || height <= 0 {
 		return
 	}
 	if x + width > tex.Width || y + height > tex.Height {
 		return
 	}
-	bpp := texture_format_size(tex.Format)
+	bpp := TextureFormatSize(tex.Format)
 	if len(data) < width * height * bpp {
 		return
 	}
@@ -3519,11 +3457,11 @@ texture_set_data_region :: proc(tex: ^Texture, data: []u8, x, y, width, height: 
 	}
 }
 
-texture_set_data_region_rect :: proc(tex: ^Texture, data: []u8, region: RectInt) {
-	texture_set_data_region(tex, data, region.X, region.Y, region.Width, region.Height)
+TextureSetDataRegionRect :: proc(tex: ^Texture, data: []u8, region: RectInt) {
+	TextureSetDataRegion(tex, data, region.X, region.Y, region.Width, region.Height)
 }
 
-texture_clone :: proc(tex: ^Texture, name: string = "") -> Texture {
+TextureClone :: proc(tex: ^Texture, name: string = "") -> Texture {
 	result: Texture
 	if tex == nil || tex.Disposed || tex.GraphicsDevice == nil {
 		return result
@@ -3535,7 +3473,7 @@ texture_clone :: proc(tex: ^Texture, name: string = "") -> Texture {
 	if .ComputeWrite in tex.Flags {
 		usage += {.COMPUTE_STORAGE_WRITE}
 	}
-	texture_init_ex(
+	TextureInitEx(
 		&result,
 		tex.GraphicsDevice,
 		tex.Width,
@@ -3547,7 +3485,7 @@ texture_clone :: proc(tex: ^Texture, name: string = "") -> Texture {
 		name,
 	)
 	result.Flags = tex.Flags
-	texture_blit(
+	TextureBlit(
 		tex,
 		&result,
 		RectInt{0, 0, tex.Width, tex.Height},
@@ -3556,7 +3494,7 @@ texture_clone :: proc(tex: ^Texture, name: string = "") -> Texture {
 	return result
 }
 
-texture_blit :: proc(
+TextureBlit :: proc(
 	source, destination: ^Texture,
 	source_rect, destination_rect: RectInt,
 	filter: TextureFilter = .Nearest,
@@ -3564,8 +3502,8 @@ texture_blit :: proc(
 	if source == nil || destination == nil || source.Disposed || destination.Disposed {
 		return
 	}
-	bpp := texture_format_size(source.Format)
-	if bpp != texture_format_size(destination.Format) ||
+	bpp := TextureFormatSize(source.Format)
+	if bpp != TextureFormatSize(destination.Format) ||
 	   source_rect.Width <= 0 ||
 	   source_rect.Height <= 0 {
 		return
@@ -3590,8 +3528,8 @@ texture_blit :: proc(
 	when ODIN_OS == .JS {
 		end_render_pass(source.GraphicsDevice)
 		fw_gl_blit_texture(
-			web_handle_u32(rawptr(texture_sample_resource(source))),
-			web_handle_u32(rawptr(texture_sample_resource(destination))),
+			web_handle_u32(rawptr(TextureSampleResource(source))),
+			web_handle_u32(rawptr(TextureSampleResource(destination))),
 			i32(source_rect.X),
 			i32(source_rect.Y),
 			i32(source_rect.Width),
@@ -3626,11 +3564,11 @@ texture_blit :: proc(
 					return
 				}
 				SDL.CopyGPUTextureToTexture(pass, {
-						texture = texture_sample_resource(source),
+						texture = TextureSampleResource(source),
 						x       = u32(source_rect.X),
 						y       = u32(source_rect.Y),
 					}, {
-						texture = texture_sample_resource(destination),
+						texture = TextureSampleResource(destination),
 						x       = u32(destination_rect.X),
 						y       = u32(destination_rect.Y),
 					}, u32(source_rect.Width), u32(source_rect.Height), 1, false)
@@ -3639,7 +3577,7 @@ texture_blit :: proc(
 				// Blit destinations must support COLOR_TARGET, unlike a plain sampled
 				// texture. Use a temporary target, then copy its result to the destination.
 				temporary: Texture
-				texture_init_ex(
+				TextureInitEx(
 					&temporary,
 					source.GraphicsDevice,
 					destination_rect.Width,
@@ -3649,10 +3587,10 @@ texture_blit :: proc(
 					{.SAMPLER, .COLOR_TARGET},
 					false,
 				)
-				defer texture_dispose(&temporary)
+				defer TextureDispose(&temporary)
 				SDL.BlitGPUTexture(command_buffer, SDL.GPUBlitInfo {
 					source = SDL.GPUBlitRegion {
-						texture = texture_sample_resource(source),
+						texture = TextureSampleResource(source),
 						x       = u32(source_rect.X),
 						y       = u32(source_rect.Y),
 						w       = u32(source_rect.Width),
@@ -3676,7 +3614,7 @@ texture_blit :: proc(
 					return
 				}
 				SDL.CopyGPUTextureToTexture(pass, {texture = temporary.Resource}, {
-						texture = texture_sample_resource(destination),
+						texture = TextureSampleResource(destination),
 						x       = u32(destination_rect.X),
 						y       = u32(destination_rect.Y),
 					}, u32(destination_rect.Width), u32(destination_rect.Height), 1, false)
@@ -3688,13 +3626,6 @@ texture_blit :: proc(
 		}
 	}
 }
-
-TextureGetData :: texture_get_data
-TextureDownloadData :: texture_download_data
-TextureSetDataRegion :: texture_set_data_region
-TextureSetDataRegionRect :: texture_set_data_region_rect
-TextureClone :: texture_clone
-TextureBlit :: texture_blit
 
 // ==============================================================================
 // Graphics / Shader — 创建、重建与释放
@@ -3712,7 +3643,7 @@ Shader :: struct {
 	Disposed:        bool,
 }
 
-shader_init :: proc(
+ShaderInit :: proc(
 	shader: ^Shader,
 	graphics_device: ^GraphicsDevice,
 	create_info: ShaderCreateInfo,
@@ -3757,7 +3688,7 @@ shader_init :: proc(
 		return
 	}
 
-	sdl_stage := shader_stage_to_sdl(create_info.Stage)
+	sdl_stage := ShaderStageToSDL(create_info.Stage)
 
 	format := SDL.GPU_SHADERFORMAT_INVALID
 	#partial switch graphics_device.Driver {
@@ -3805,7 +3736,7 @@ shader_init :: proc(
 		}
 		compute_resource := SDL.CreateGPUComputePipeline(graphics_device.Device, compute_info)
 		if compute_resource == nil {
-			panic(create_error_from_sdl("SDL_CreateGPUComputePipeline"))
+			panic(CreateExceptionFromSDL("SDL_CreateGPUComputePipeline"))
 		}
 		shader.GraphicsDevice = graphics_device
 		shader.Stage = create_info.Stage
@@ -3821,7 +3752,7 @@ shader_init :: proc(
 
 	res := SDL.CreateGPUShader(graphics_device.Device, info)
 	if res == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUShader"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUShader"))
 	}
 
 	shader.GraphicsDevice = graphics_device
@@ -3835,7 +3766,7 @@ shader_init :: proc(
 	shader.Disposed = false
 }
 
-shader_recreate :: proc(shader: ^Shader, create_info: ShaderCreateInfo) {
+ShaderRecreate :: proc(shader: ^Shader, create_info: ShaderCreateInfo) {
 	if shader == nil ||
 	   shader.Disposed ||
 	   shader.GraphicsDevice == nil ||
@@ -3861,10 +3792,10 @@ shader_recreate :: proc(shader: ^Shader, create_info: ShaderCreateInfo) {
 		}
 		shader.ComputeResource = nil
 	}
-	shader_init(shader, shader.GraphicsDevice, create_info, shader.Name)
+	ShaderInit(shader, shader.GraphicsDevice, create_info, shader.Name)
 }
 
-shader_dispose :: proc(shader: ^Shader) {
+ShaderDispose :: proc(shader: ^Shader) {
 	if shader == nil || shader.Disposed {
 		return
 	}
@@ -3891,10 +3822,6 @@ shader_dispose :: proc(shader: ^Shader) {
 	shader.PipelineHashes = nil
 	shader.Disposed = true
 }
-
-ShaderInit :: shader_init
-ShaderRecreate :: shader_recreate
-ShaderDispose :: shader_dispose
 
 // ==============================================================================
 // Graphics / GraphicsBuffer — 图形缓冲
@@ -3933,7 +3860,7 @@ resource_replace_name :: proc(owned: ^string, allocator: ^runtime.Allocator, nam
 	allocator^ = context.allocator
 }
 
-graphics_buffer_init :: proc(
+GraphicsBufferInit :: proc(
 	buf: ^GraphicsBuffer,
 	graphics_device: ^GraphicsDevice,
 	element_size_in_bytes: int,
@@ -4000,7 +3927,7 @@ graphics_buffer_init :: proc(
 
 	res := SDL.CreateGPUBuffer(graphics_device.Device, info)
 	if res == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUBuffer"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUBuffer"))
 	}
 
 	buf.GraphicsDevice = graphics_device
@@ -4081,12 +4008,12 @@ graphics_buffer_ensure_size :: proc(buf: ^GraphicsBuffer, required_bytes: int) {
 	}
 	buf.Resource = SDL.CreateGPUBuffer(buf.GraphicsDevice.Device, info)
 	if buf.Resource == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUBuffer"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUBuffer"))
 	}
 	buf.ByteSize = next_size
 }
 
-graphics_buffer_upload :: proc(
+GraphicsBufferUpload :: proc(
 	buf: ^GraphicsBuffer,
 	data: rawptr,
 	element_count: int,
@@ -4113,7 +4040,7 @@ graphics_buffer_upload :: proc(
 	dest_offset := u32(element_offset * buf.ElementSizeInBytes)
 	required := int(dest_offset + data_size)
 	graphics_buffer_ensure_size(buf, required)
-	graphics_device_upload_to_buffer(
+	GraphicsDeviceUploadToBuffer(
 		buf.GraphicsDevice,
 		buf.Resource,
 		data,
@@ -4122,13 +4049,13 @@ graphics_buffer_upload :: proc(
 	)
 }
 
-graphics_buffer_clear :: proc(buf: ^GraphicsBuffer) {
+GraphicsBufferClear :: proc(buf: ^GraphicsBuffer) {
 	if buf != nil {
 		buf.Count = 0
 	}
 }
 
-graphics_buffer_dispose :: proc(buf: ^GraphicsBuffer) {
+GraphicsBufferDispose :: proc(buf: ^GraphicsBuffer) {
 	if buf == nil || buf.Disposed {
 		return
 	}
@@ -4147,9 +4074,7 @@ graphics_buffer_dispose :: proc(buf: ^GraphicsBuffer) {
 	buf.Disposed = true
 }
 
-GraphicsBufferInit :: graphics_buffer_init
-
-graphics_buffer_reserve :: proc(buf: ^GraphicsBuffer, count: int) {
+GraphicsBufferReserve :: proc(buf: ^GraphicsBuffer, count: int) {
 	if buf == nil || buf.Disposed {
 		return
 	}
@@ -4160,11 +4085,6 @@ graphics_buffer_reserve :: proc(buf: ^GraphicsBuffer, count: int) {
 	buf.Count = count_value
 	graphics_buffer_ensure_size(buf, count_value * buf.ElementSizeInBytes)
 }
-
-GraphicsBufferReserve :: graphics_buffer_reserve
-GraphicsBufferUpload :: graphics_buffer_upload
-GraphicsBufferClear :: graphics_buffer_clear
-GraphicsBufferDispose :: graphics_buffer_dispose
 
 GraphicsBufferCount :: proc(buf: ^GraphicsBuffer) -> int {
 	if buf == nil {
@@ -4208,8 +4128,8 @@ vertex_buffer_init_with_format :: proc(
 	name: string = "",
 ) {
 	vb.Stride = format.Stride
-	vb.Format = vertex_format_clone(format)
-	graphics_buffer_init(&vb.Base, graphics_device, format.Stride, .Vertex, .Sixteen, name)
+	vb.Format = VertexFormatClone(format)
+	GraphicsBufferInit(&vb.Base, graphics_device, format.Stride, .Vertex, .Sixteen, name)
 }
 
 vertex_buffer_init :: proc(
@@ -4220,25 +4140,25 @@ vertex_buffer_init :: proc(
 ) {
 	format: VertexFormat
 	if stride == size_of(BatcherVertex) {
-		format = default_batcher_vertex_format()
+		format = BatcherVertexFormat()
 	} else {
 		format = vertex_format_make(nil, stride)
 	}
 	vertex_buffer_init_with_format(vb, graphics_device, format, name)
-	vertex_format_dispose(&format)
+	VertexFormatDispose(&format)
 }
 
-vertex_buffer_upload :: proc(vb: ^VertexBuffer, data: rawptr, vertex_count: int, offset: int = 0) {
-	graphics_buffer_upload(&vb.Base, data, vertex_count, offset)
+VertexBufferUpload :: proc(vb: ^VertexBuffer, data: rawptr, vertex_count: int, offset: int = 0) {
+	GraphicsBufferUpload(&vb.Base, data, vertex_count, offset)
 }
 
-vertex_buffer_clear :: proc(vb: ^VertexBuffer) {
-	graphics_buffer_clear(&vb.Base)
+VertexBufferClear :: proc(vb: ^VertexBuffer) {
+	GraphicsBufferClear(&vb.Base)
 }
 
-vertex_buffer_dispose :: proc(vb: ^VertexBuffer) {
-	vertex_format_dispose(&vb.Format)
-	graphics_buffer_dispose(&vb.Base)
+VertexBufferDispose :: proc(vb: ^VertexBuffer) {
+	VertexFormatDispose(&vb.Format)
+	GraphicsBufferDispose(&vb.Base)
 }
 
 VertexBufferInit :: proc {
@@ -4247,11 +4167,8 @@ VertexBufferInit :: proc {
 }
 
 VertexBufferReserve :: proc(vb: ^VertexBuffer, count: int) {
-	graphics_buffer_reserve(&vb.Base, count)
+	GraphicsBufferReserve(&vb.Base, count)
 }
-VertexBufferUpload :: vertex_buffer_upload
-VertexBufferClear :: vertex_buffer_clear
-VertexBufferDispose :: vertex_buffer_dispose
 
 // ------------------------------------------------------------------------------
 // Graphics / GraphicsBuffer / IndexBuffer
@@ -4262,43 +4179,38 @@ IndexBuffer :: struct {
 	Format: IndexFormat,
 }
 
-index_buffer_init :: proc(
+IndexBufferInit :: proc(
 	ib: ^IndexBuffer,
 	graphics_device: ^GraphicsDevice,
 	format: IndexFormat,
 	name: string = "",
 ) {
 	ib.Format = format
-	graphics_buffer_init(
+	GraphicsBufferInit(
 		&ib.Base,
 		graphics_device,
-		index_format_size_in_bytes(format),
+		IndexFormatSizeInBytes(format),
 		.Index,
 		format,
 		name,
 	)
 }
 
-index_buffer_upload :: proc(ib: ^IndexBuffer, data: rawptr, index_count: int, offset: int = 0) {
-	graphics_buffer_upload(&ib.Base, data, index_count, offset)
+IndexBufferUpload :: proc(ib: ^IndexBuffer, data: rawptr, index_count: int, offset: int = 0) {
+	GraphicsBufferUpload(&ib.Base, data, index_count, offset)
 }
 
-index_buffer_clear :: proc(ib: ^IndexBuffer) {
-	graphics_buffer_clear(&ib.Base)
+IndexBufferClear :: proc(ib: ^IndexBuffer) {
+	GraphicsBufferClear(&ib.Base)
 }
 
-index_buffer_dispose :: proc(ib: ^IndexBuffer) {
-	graphics_buffer_dispose(&ib.Base)
+IndexBufferDispose :: proc(ib: ^IndexBuffer) {
+	GraphicsBufferDispose(&ib.Base)
 }
-
-IndexBufferInit :: index_buffer_init
 
 IndexBufferReserve :: proc(ib: ^IndexBuffer, count: int) {
-	graphics_buffer_reserve(&ib.Base, count)
+	GraphicsBufferReserve(&ib.Base, count)
 }
-IndexBufferUpload :: index_buffer_upload
-IndexBufferClear :: index_buffer_clear
-IndexBufferDispose :: index_buffer_dispose
 
 // ------------------------------------------------------------------------------
 // Graphics / GraphicsBuffer / StorageBuffer
@@ -4308,13 +4220,13 @@ StorageBuffer :: struct {
 	Base: GraphicsBuffer,
 }
 
-storage_buffer_init :: proc(
+StorageBufferInit :: proc(
 	sb: ^StorageBuffer,
 	graphics_device: ^GraphicsDevice,
 	element_size_in_bytes: int,
 	name: string = "",
 ) {
-	graphics_buffer_init(
+	GraphicsBufferInit(
 		&sb.Base,
 		graphics_device,
 		element_size_in_bytes,
@@ -4324,31 +4236,26 @@ storage_buffer_init :: proc(
 	)
 }
 
-storage_buffer_upload :: proc(
+StorageBufferUpload :: proc(
 	sb: ^StorageBuffer,
 	data: rawptr,
 	element_count: int,
 	offset: int = 0,
 ) {
-	graphics_buffer_upload(&sb.Base, data, element_count, offset)
+	GraphicsBufferUpload(&sb.Base, data, element_count, offset)
 }
 
-storage_buffer_clear :: proc(sb: ^StorageBuffer) {
-	graphics_buffer_clear(&sb.Base)
+StorageBufferClear :: proc(sb: ^StorageBuffer) {
+	GraphicsBufferClear(&sb.Base)
 }
 
-storage_buffer_dispose :: proc(sb: ^StorageBuffer) {
-	graphics_buffer_dispose(&sb.Base)
+StorageBufferDispose :: proc(sb: ^StorageBuffer) {
+	GraphicsBufferDispose(&sb.Base)
 }
-
-StorageBufferInit :: storage_buffer_init
 
 StorageBufferReserve :: proc(sb: ^StorageBuffer, count: int) {
-	graphics_buffer_reserve(&sb.Base, count)
+	GraphicsBufferReserve(&sb.Base, count)
 }
-StorageBufferUpload :: storage_buffer_upload
-StorageBufferClear :: storage_buffer_clear
-StorageBufferDispose :: storage_buffer_dispose
 
 // Same layout as StorageBuffer so writable compute results can also be read
 // by graphics shaders. The backing buffer carries the compute-write usage.
@@ -4360,7 +4267,7 @@ ComputeStorageBufferInit :: proc(
 	element_size: int,
 	name: string = "",
 ) {
-	graphics_buffer_init(&buffer.Base, device, element_size, .Compute, .Sixteen, name)
+	GraphicsBufferInit(&buffer.Base, device, element_size, .Compute, .Sixteen, name)
 }
 
 ComputeStorageBufferInitTyped :: proc(
@@ -4373,7 +4280,7 @@ ComputeStorageBufferInitTyped :: proc(
 }
 ComputeStorageBufferReserve :: StorageBufferReserve
 ComputeStorageBufferUpload :: StorageBufferUpload
-ComputeStorageBufferUploadTyped :: storage_buffer_upload_typed
+ComputeStorageBufferUploadTyped :: StorageBufferUploadTyped
 ComputeStorageBufferClear :: StorageBufferClear
 ComputeStorageBufferDispose :: StorageBufferDispose
 
@@ -4403,7 +4310,7 @@ ComputeCommand :: struct {
 	GroupCountX, GroupCountY, GroupCountZ: int,
 }
 
-compute_command_init :: proc(command: ^ComputeCommand) {
+ComputeCommandInit :: proc(command: ^ComputeCommand) {
 	if command == nil {
 		return
 	}
@@ -4421,7 +4328,7 @@ compute_command_init :: proc(command: ^ComputeCommand) {
 	command.GroupCountZ = 1
 }
 
-compute_command_dispose :: proc(command: ^ComputeCommand) {
+ComputeCommandDispose :: proc(command: ^ComputeCommand) {
 	if command == nil {
 		return
 	}
@@ -4435,7 +4342,7 @@ compute_command_dispose :: proc(command: ^ComputeCommand) {
 	delete(command.UniformBuffers)
 }
 
-compute_command_set_groups :: proc(command: ^ComputeCommand, x, y, z: int) {
+ComputeCommandSetGroups :: proc(command: ^ComputeCommand, x, y, z: int) {
 	if command == nil {
 		return
 	}
@@ -4444,7 +4351,7 @@ compute_command_set_groups :: proc(command: ^ComputeCommand, x, y, z: int) {
 	command.GroupCountZ = z
 }
 
-graphics_device_dispatch :: proc(device: ^GraphicsDevice, command: ^ComputeCommand) -> bool {
+GraphicsDeviceDispatch :: proc(device: ^GraphicsDevice, command: ^ComputeCommand) -> bool {
 	if device == nil ||
 	   device.Disposed ||
 	   device.Device == nil ||
@@ -4596,7 +4503,7 @@ graphics_device_dispatch :: proc(device: ^GraphicsDevice, command: ^ComputeComma
 	samplers := make([]SDL.GPUTextureSamplerBinding, len(command.Samplers), context.temp_allocator)
 	for sampler, i in command.Samplers {
 		samplers[i] = {
-			texture = texture_sample_resource(sampler.Texture),
+			texture = TextureSampleResource(sampler.Texture),
 			sampler = create_sampler_from_texture_sampler(device, sampler.Sampler),
 		}
 	}
@@ -4648,11 +4555,6 @@ graphics_device_dispatch :: proc(device: ^GraphicsDevice, command: ^ComputeComma
 	return true
 }
 
-ComputeCommandInit :: compute_command_init
-ComputeCommandDispose :: compute_command_dispose
-ComputeCommandSetGroups :: compute_command_set_groups
-GraphicsDeviceDispatch :: graphics_device_dispatch
-
 // ==============================================================================
 // Graphics / Defaults / Vertices — 默认顶点与类型化助手
 // ==============================================================================
@@ -4663,7 +4565,7 @@ PosTexColVertex :: struct #packed {
 	Col: Color,
 }
 
-make_pos_tex_col_vertex :: proc(position, texcoord: [2]f32, color: Color) -> PosTexColVertex {
+MakePosTexColVertex :: proc(position, texcoord: [2]f32, color: Color) -> PosTexColVertex {
 	return PosTexColVertex {
 		Pos = position,
 		Tex = texcoord,
@@ -4671,7 +4573,7 @@ make_pos_tex_col_vertex :: proc(position, texcoord: [2]f32, color: Color) -> Pos
 	}
 }
 
-make_batcher_vertex :: proc(position, texcoord: [2]f32, color, mode: Color) -> BatcherVertex {
+MakeBatcherVertex :: proc(position, texcoord: [2]f32, color, mode: Color) -> BatcherVertex {
 	return BatcherVertex {
 		Pos  = position,
 		Tex  = texcoord,
@@ -4680,17 +4582,17 @@ make_batcher_vertex :: proc(position, texcoord: [2]f32, color, mode: Color) -> B
 	}
 }
 
-vertex_format_of :: proc($T: typeid) -> VertexFormat {
+VertexFormatOf :: proc($T: typeid) -> VertexFormat {
 	when T == BatcherVertex {
-		return default_batcher_vertex_format()
+		return BatcherVertexFormat()
 	} else when T == PosTexColVertex {
-		return default_pos_tex_col_vertex_format()
+		return PosTexColVertexFormat()
 	} else {
 		return vertex_format_make(nil, size_of(T))
 	}
 }
 
-index_format_of :: proc($T: typeid) -> IndexFormat {
+IndexFormatOf :: proc($T: typeid) -> IndexFormat {
 	when T == u16 || T == i16 {
 		return .Sixteen
 	} else when T == u32 || T == i32 {
@@ -4707,8 +4609,8 @@ mesh_init_typed :: proc(
 	index_format: IndexFormat,
 	name: string = "",
 ) {
-	format := vertex_format_of(TVertex)
-	defer vertex_format_dispose(&format)
+	format := VertexFormatOf(TVertex)
+	defer VertexFormatDispose(&format)
 	mesh_init_with_format(mesh, graphics_device, format, index_format, name)
 }
 
@@ -4719,10 +4621,10 @@ mesh_init_instanced_typed :: proc(
 	index_format: IndexFormat,
 	name: string = "",
 ) {
-	vertex_format := vertex_format_of(TVertex)
-	instance_format := vertex_format_of(TInstance)
-	defer vertex_format_dispose(&vertex_format)
-	defer vertex_format_dispose(&instance_format)
+	vertex_format := VertexFormatOf(TVertex)
+	instance_format := VertexFormatOf(TInstance)
+	defer VertexFormatDispose(&vertex_format)
+	defer VertexFormatDispose(&instance_format)
 	mesh_init_instanced_with_format(
 		mesh,
 		graphics_device,
@@ -4739,7 +4641,7 @@ mesh_init_typed_indexed :: proc(
 	graphics_device: ^GraphicsDevice,
 	name: string = "",
 ) {
-	mesh_init_typed(TVertex, mesh, graphics_device, index_format_of(TIndex), name)
+	mesh_init_typed(TVertex, mesh, graphics_device, IndexFormatOf(TIndex), name)
 }
 
 mesh_init_instanced_typed_indexed :: proc(
@@ -4753,86 +4655,82 @@ mesh_init_instanced_typed_indexed :: proc(
 		TInstance,
 		mesh,
 		graphics_device,
-		index_format_of(TIndex),
+		IndexFormatOf(TIndex),
 		name,
 	)
 }
 
-mesh_set_vertices_typed :: proc($T: typeid, mesh: ^Mesh, data: []T, offset: int = 0) {
+MeshSetVerticesTyped :: proc($T: typeid, mesh: ^Mesh, data: []T, offset: int = 0) {
 	if len(data) <= 0 {
 		return
 	}
-	mesh_set_vertices(mesh, raw_data(data), len(data), offset)
+	MeshSetVertices(mesh, raw_data(data), len(data), offset)
 }
 
-mesh_set_instances_typed :: proc($T: typeid, mesh: ^Mesh, data: []T, offset: int = 0) {
+MeshSetInstancesTyped :: proc($T: typeid, mesh: ^Mesh, data: []T, offset: int = 0) {
 	if len(data) <= 0 {
 		return
 	}
-	mesh_set_instances(mesh, raw_data(data), len(data), offset)
+	MeshSetInstances(mesh, raw_data(data), len(data), offset)
 }
 
-mesh_set_indices_typed :: proc($T: typeid, mesh: ^Mesh, data: []T, offset: int = 0) {
+MeshSetIndicesTyped :: proc($T: typeid, mesh: ^Mesh, data: []T, offset: int = 0) {
 	if len(data) <= 0 {
 		return
 	}
-	mesh_set_indices(mesh, raw_data(data), len(data), offset)
+	MeshSetIndices(mesh, raw_data(data), len(data), offset)
 }
 
-vertex_buffer_init_typed :: proc(
+VertexBufferInitTyped :: proc(
 	$T: typeid,
 	vb: ^VertexBuffer,
 	graphics_device: ^GraphicsDevice,
 	name: string = "",
 ) {
-	format := vertex_format_of(T)
-	defer vertex_format_dispose(&format)
+	format := VertexFormatOf(T)
+	defer VertexFormatDispose(&format)
 	vertex_buffer_init_with_format(vb, graphics_device, format, name)
 }
 
-vertex_buffer_upload_typed :: proc($T: typeid, vb: ^VertexBuffer, data: []T, offset: int = 0) {
+VertexBufferUploadTyped :: proc($T: typeid, vb: ^VertexBuffer, data: []T, offset: int = 0) {
 	if len(data) <= 0 {
 		return
 	}
-	vertex_buffer_upload(vb, raw_data(data), len(data), offset)
+	VertexBufferUpload(vb, raw_data(data), len(data), offset)
 }
 
-index_buffer_init_typed :: proc(
+IndexBufferInitTyped :: proc(
 	$T: typeid,
 	ib: ^IndexBuffer,
 	graphics_device: ^GraphicsDevice,
 	name: string = "",
 ) {
-	index_buffer_init(ib, graphics_device, index_format_of(T), name)
+	IndexBufferInit(ib, graphics_device, IndexFormatOf(T), name)
 }
 
-index_buffer_upload_typed :: proc($T: typeid, ib: ^IndexBuffer, data: []T, offset: int = 0) {
+IndexBufferUploadTyped :: proc($T: typeid, ib: ^IndexBuffer, data: []T, offset: int = 0) {
 	if len(data) <= 0 {
 		return
 	}
-	index_buffer_upload(ib, raw_data(data), len(data), offset)
+	IndexBufferUpload(ib, raw_data(data), len(data), offset)
 }
 
-storage_buffer_init_typed :: proc(
+StorageBufferInitTyped :: proc(
 	$T: typeid,
 	sb: ^StorageBuffer,
 	graphics_device: ^GraphicsDevice,
 	name: string = "",
 ) {
-	storage_buffer_init(sb, graphics_device, size_of(T), name)
+	StorageBufferInit(sb, graphics_device, size_of(T), name)
 }
 
-storage_buffer_upload_typed :: proc($T: typeid, sb: ^StorageBuffer, data: []T, offset: int = 0) {
+StorageBufferUploadTyped :: proc($T: typeid, sb: ^StorageBuffer, data: []T, offset: int = 0) {
 	if len(data) <= 0 {
 		return
 	}
-	storage_buffer_upload(sb, raw_data(data), len(data), offset)
+	StorageBufferUpload(sb, raw_data(data), len(data), offset)
 }
 
-MakePosTexColVertex :: make_pos_tex_col_vertex
-MakeBatcherVertex :: make_batcher_vertex
-VertexFormatOf :: vertex_format_of
-IndexFormatOf :: index_format_of
 MeshInitTyped :: proc {
 	mesh_init_typed,
 	mesh_init_typed_indexed,
@@ -4841,15 +4739,6 @@ MeshInitInstancedTyped :: proc {
 	mesh_init_instanced_typed,
 	mesh_init_instanced_typed_indexed,
 }
-MeshSetVerticesTyped :: mesh_set_vertices_typed
-MeshSetInstancesTyped :: mesh_set_instances_typed
-MeshSetIndicesTyped :: mesh_set_indices_typed
-VertexBufferInitTyped :: vertex_buffer_init_typed
-VertexBufferUploadTyped :: vertex_buffer_upload_typed
-IndexBufferInitTyped :: index_buffer_init_typed
-IndexBufferUploadTyped :: index_buffer_upload_typed
-StorageBufferInitTyped :: storage_buffer_init_typed
-StorageBufferUploadTyped :: storage_buffer_upload_typed
 
 // ==============================================================================
 // Graphics / UniformBuffer — Uniform 数据
@@ -4859,7 +4748,7 @@ UniformBuffer :: struct {
 	Data: [dynamic]u8,
 }
 
-uniform_buffer_init :: proc(buffer: ^UniformBuffer, size: int = 0) {
+UniformBufferInit :: proc(buffer: ^UniformBuffer, size: int = 0) {
 	if buffer == nil {
 		return
 	}
@@ -4870,7 +4759,7 @@ uniform_buffer_init :: proc(buffer: ^UniformBuffer, size: int = 0) {
 	}
 }
 
-uniform_buffer_set :: proc(buffer: ^UniformBuffer, data: []u8, offset: int = 0) {
+UniformBufferSet :: proc(buffer: ^UniformBuffer, data: []u8, offset: int = 0) {
 	if buffer == nil || offset < 0 {
 		return
 	}
@@ -4883,41 +4772,34 @@ uniform_buffer_set :: proc(buffer: ^UniformBuffer, data: []u8, offset: int = 0) 
 	}
 }
 
-uniform_buffer_set_value :: proc(buffer: ^UniformBuffer, value: $T, offset: int = 0) {
+UniformBufferSetValue :: proc(buffer: ^UniformBuffer, value: $T, offset: int = 0) {
 	data := make([]u8, size_of(T), context.temp_allocator)
 	copy_value := value
 	mem.copy(raw_data(data), &copy_value, size_of(T))
-	uniform_buffer_set(buffer, data, offset)
+	UniformBufferSet(buffer, data, offset)
 }
 
-uniform_buffer_get :: proc(buffer: ^UniformBuffer) -> []u8 {
+UniformBufferGet :: proc(buffer: ^UniformBuffer) -> []u8 {
 	if buffer == nil {
 		return nil
 	}
 	return buffer.Data[:]
 }
 
-uniform_buffer_clear :: proc(buffer: ^UniformBuffer) {
+UniformBufferClear :: proc(buffer: ^UniformBuffer) {
 	if buffer == nil {
 		return
 	}
 	resize(&buffer.Data, 0)
 }
 
-uniform_buffer_dispose :: proc(buffer: ^UniformBuffer) {
+UniformBufferDispose :: proc(buffer: ^UniformBuffer) {
 	if buffer == nil {
 		return
 	}
 	delete(buffer.Data)
 	buffer.Data = nil
 }
-
-UniformBufferInit :: uniform_buffer_init
-UniformBufferSet :: uniform_buffer_set
-UniformBufferSetValue :: uniform_buffer_set_value
-UniformBufferGet :: uniform_buffer_get
-UniformBufferClear :: uniform_buffer_clear
-UniformBufferDispose :: uniform_buffer_dispose
 
 // ==============================================================================
 // Graphics / Structs / VertexFormat — 顶点布局
@@ -4937,7 +4819,7 @@ VertexType :: enum {
 	UShort4,
 }
 
-vertex_type_size_in_bytes :: proc(t: VertexType) -> int {
+VertexTypeSizeInBytes :: proc(t: VertexType) -> int {
 	#partial switch t {
 	case .Float:
 		return 4
@@ -4958,7 +4840,7 @@ vertex_type_size_in_bytes :: proc(t: VertexType) -> int {
 	return 0
 }
 
-vertex_type_to_sdl :: proc(t: VertexType, normalized: bool) -> SDL.GPUVertexElementFormat {
+VertexTypeToSDL :: proc(t: VertexType, normalized: bool) -> SDL.GPUVertexElementFormat {
 	#partial switch t {
 	case .Float:
 		return .FLOAT
@@ -5019,7 +4901,7 @@ vertex_format_init :: proc(format: ^VertexFormat, elements: []VertexElement, str
 	format.Stride = 0
 	for element in elements {
 		append(&format.Elements, element)
-		format.Stride += vertex_type_size_in_bytes(element.Type)
+		format.Stride += VertexTypeSizeInBytes(element.Type)
 	}
 	if stride != 0 {
 		format.Stride = stride
@@ -5032,14 +4914,14 @@ vertex_format_make :: proc(elements: []VertexElement, stride: int = 0) -> Vertex
 	return format
 }
 
-vertex_format_clone :: proc(format: VertexFormat) -> VertexFormat {
+VertexFormatClone :: proc(format: VertexFormat) -> VertexFormat {
 	clone: VertexFormat
 	clone.Stride = format.Stride
 	append(&clone.Elements, ..format.Elements[:])
 	return clone
 }
 
-vertex_format_dispose :: proc(format: ^VertexFormat) {
+VertexFormatDispose :: proc(format: ^VertexFormat) {
 	if format == nil {
 		return
 	}
@@ -5048,7 +4930,7 @@ vertex_format_dispose :: proc(format: ^VertexFormat) {
 	format.Stride = 0
 }
 
-vertex_format_equals :: proc(a, b: VertexFormat) -> bool {
+VertexFormatEquals :: proc(a, b: VertexFormat) -> bool {
 	if a.Stride != b.Stride || len(a.Elements) != len(b.Elements) {
 		return false
 	}
@@ -5062,7 +4944,7 @@ vertex_format_equals :: proc(a, b: VertexFormat) -> bool {
 	return true
 }
 
-default_batcher_vertex_format :: proc() -> VertexFormat {
+BatcherVertexFormat :: proc() -> VertexFormat {
 	elements := [4]VertexElement {
 		{Index = 0, Type = .Float2, Normalized = false},
 		{Index = 1, Type = .Float2, Normalized = false},
@@ -5072,7 +4954,7 @@ default_batcher_vertex_format :: proc() -> VertexFormat {
 	return vertex_format_make(elements[:], size_of(BatcherVertex))
 }
 
-default_pos_tex_col_vertex_format :: proc() -> VertexFormat {
+PosTexColVertexFormat :: proc() -> VertexFormat {
 	elements := [3]VertexElement {
 		{Index = 0, Type = .Float2, Normalized = false},
 		{Index = 1, Type = .Float2, Normalized = false},
@@ -5081,17 +4963,10 @@ default_pos_tex_col_vertex_format :: proc() -> VertexFormat {
 	return vertex_format_make(elements[:])
 }
 
-VertexTypeSizeInBytes :: vertex_type_size_in_bytes
-VertexTypeToSDL :: vertex_type_to_sdl
 VertexFormatInit :: proc {
 	vertex_format_init,
 	vertex_format_make,
 }
-VertexFormatClone :: vertex_format_clone
-VertexFormatDispose :: vertex_format_dispose
-VertexFormatEquals :: vertex_format_equals
-BatcherVertexFormat :: default_batcher_vertex_format
-PosTexColVertexFormat :: default_pos_tex_col_vertex_format
 
 // ==============================================================================
 // Graphics / Batcher — 二维批处理绘制
@@ -6111,7 +5986,7 @@ batcher_image_sub_justified_scale :: proc(
 		}, Vec2{}, Vec2{scale, scale}, 0, color)
 }
 
-batcher_image_stretch :: proc(b: ^Batcher, sub: Subtexture, rect: Rect, color: Color) {
+BatcherImageStretch :: proc(b: ^Batcher, sub: Subtexture, rect: Rect, color: Color) {
 	if sub.Texture == nil {
 		return
 	}
@@ -6130,7 +6005,7 @@ batcher_image_stretch :: proc(b: ^Batcher, sub: Subtexture, rect: Rect, color: C
 	)
 }
 
-batcher_image_fit :: proc(
+BatcherImageFit :: proc(
 	b: ^Batcher,
 	sub: Subtexture,
 	rect: Rect,
@@ -6169,8 +6044,8 @@ BatcherImage :: proc {
 	batcher_image_sub_transform,
 	batcher_image_sub_justified,
 	batcher_image_sub_justified_scale,
-	batcher_image_stretch,
-	batcher_image_fit,
+	BatcherImageStretch,
+	BatcherImageFit,
 }
 
 BatcherLineDashed :: proc(b: ^Batcher, from, to: Vec2, weight, dash, offset: f32, color: Color) {
@@ -6608,11 +6483,9 @@ BatcherImageJustified :: proc {
 	batcher_image_sub_justified,
 	batcher_image_sub_justified_scale,
 }
-BatcherImageStretch :: batcher_image_stretch
-BatcherImageFit :: batcher_image_fit
 
 TextureFormatIsDepthStencilFormat :: proc(format: TextureFormat) -> bool {
-	return !texture_format_is_color_format(format)
+	return !TextureFormatIsColorFormat(format)
 }
 
 TextureFormatIsSupported :: proc(format: TextureFormat, device: ^GraphicsDevice) -> bool {

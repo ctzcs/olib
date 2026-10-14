@@ -50,7 +50,7 @@ directory_read :: proc(storage: ^Asset_Storage, guid: Guid, allocator: mem.Alloc
 	buf: [37]u8
 	name, ok := guid_filename(guid, buf[:])
 	if !ok do return nil, false
-	data := foster.storage_read_all_bytes(&state.container, name, allocator)
+	data := foster.ReadAllBytes(&state.container, name, allocator)
 	if data == nil do return nil, false
 	return data, true
 }
@@ -61,7 +61,7 @@ directory_exists :: proc(storage: ^Asset_Storage, guid: Guid) -> bool {
 	buf: [37]u8
 	name, ok := guid_filename(guid, buf[:])
 	if !ok do return false
-	return foster.storage_file_exists(&state.container, name)
+	return foster.FileExists(&state.container, name)
 }
 
 // =============================================================================

@@ -53,7 +53,7 @@ debug_draw_init :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bo
 	if !shader3d_debug_line_init(&d.shaders, device) { return false }
 
 	format := debug_line_format()
-	defer foster.vertex_format_dispose(&format)
+	defer foster.VertexFormatDispose(&format)
 	foster.mesh_init_with_format(&d.mesh, device, format, .ThirtyTwo, "Debug lines 3d")
 	foster.material_init_with_shaders(&d.material, &d.shaders.vertex, &d.shaders.fragment)
 	d.has_gpu = true
@@ -255,8 +255,8 @@ debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, came
 	debug_draw_expand(d, camera.position, &expanded)
 	if len(expanded) == 0 { return }
 
-	foster.mesh_set_vertex_count(&d.mesh, len(expanded))
-	foster.mesh_set_vertices(&d.mesh, raw_data(expanded), len(expanded))
+	foster.MeshSetVertexCount(&d.mesh, len(expanded))
+	foster.MeshSetVertices(&d.mesh, raw_data(expanded), len(expanded))
 
 	vp_buf: [64]u8
 	if pack_shadow_matrix_block(vp_buf[:], world.camera3d_view_projection(camera)) {

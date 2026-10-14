@@ -333,8 +333,8 @@ assets_load_path :: proc(m: ^Asset_Manager, rel_path: string) -> (Asset_Handle, 
 	if m.assets_root == "" do return ASSET_HANDLE_NONE, .Not_Supported
 
 	ds: foster.DirectoryStorage
-	foster.directory_storage_init(&ds, m.assets_root, false)
-	guid, err := meta_read(foster.directory_storage_as_container(&ds), rel_path)
+	foster.DirectoryStorageInit(&ds, m.assets_root, false)
+	guid, err := meta_read(foster.DirectoryStorageContainer(&ds), rel_path)
 	if err != .None do return ASSET_HANDLE_NONE, err
 	return assets_load(m, guid)
 }

@@ -104,14 +104,14 @@ storage_join_path :: proc(container: ^StorageContainer, path: string) -> string 
 	return storage_path_clean(joined)
 }
 
-storage_exists :: proc(container: ^StorageContainer, path: string) -> bool {
+Exists :: proc(container: ^StorageContainer, path: string) -> bool {
 	if container.ZipEntries != nil {
-		return storage_file_exists(container, path) || storage_directory_exists(container, path)
+		return FileExists(container, path) || DirectoryExists(container, path)
 	}
 	return storage_os_exists(storage_join_path(container, path))
 }
 
-storage_file_exists :: proc(container: ^StorageContainer, path: string) -> bool {
+FileExists :: proc(container: ^StorageContainer, path: string) -> bool {
 	if container.ZipEntries != nil {
 		_, ok := container.ZipEntries^[storage_zip_path(container, path)]
 		return ok
@@ -120,7 +120,7 @@ storage_file_exists :: proc(container: ^StorageContainer, path: string) -> bool 
 	return storage_os_exists(full) && !storage_os_is_directory(full)
 }
 
-storage_directory_exists :: proc(container: ^StorageContainer, path: string) -> bool {
+DirectoryExists :: proc(container: ^StorageContainer, path: string) -> bool {
 	if container.ZipEntries != nil {
 		name := storage_zip_path(container, path)
 		if name == "" {
@@ -197,7 +197,7 @@ storage_match_pattern :: proc(name, pattern: string) -> bool {
 	return j == len(pattern)
 }
 
-storage_enumerate_directory :: proc(
+EnumerateDirectory :: proc(
 	container: ^StorageContainer,
 	path: string = "",
 	allocator := context.allocator,
@@ -232,7 +232,7 @@ storage_enumerate_filtered :: proc(
 			if path == "" {
 				child = name
 			}
-			if storage_directory_exists(container, child) {
+			if DirectoryExists(container, child) {
 				storage_enumerate_filtered(container, child, relative, pattern, true, result)
 			}
 		}
@@ -240,21 +240,21 @@ storage_enumerate_filtered :: proc(
 	}
 }
 
-storage_create_directory :: proc(container: ^StorageContainer, path: string) -> bool {
+CreateDirectory :: proc(container: ^StorageContainer, path: string) -> bool {
 	if !container.Writable {
 		return false
 	}
 	return storage_os_make_directory_all(storage_join_path(container, path))
 }
 
-storage_remove :: proc(container: ^StorageContainer, path: string) -> bool {
+Remove :: proc(container: ^StorageContainer, path: string) -> bool {
 	if !container.Writable {
 		return false
 	}
 	return storage_os_remove(storage_join_path(container, path))
 }
 
-storage_read_all_bytes :: proc(
+ReadAllBytes :: proc(
 	container: ^StorageContainer,
 	path: string,
 	allocator := context.allocator,
@@ -271,19 +271,19 @@ storage_read_all_bytes :: proc(
 	return storage_os_read_file(storage_join_path(container, path), allocator)
 }
 
-storage_read_all_text :: proc(
+ReadAllText :: proc(
 	container: ^StorageContainer,
 	path: string,
 	allocator := context.allocator,
 ) -> string {
-	data := storage_read_all_bytes(container, path, allocator)
+	data := ReadAllBytes(container, path, allocator)
 	if len(data) == 0 {
 		return ""
 	}
 	return string(data)
 }
 
-storage_write_all_bytes :: proc(container: ^StorageContainer, path: string, data: []byte) -> bool {
+WriteAllBytes :: proc(container: ^StorageContainer, path: string, data: []byte) -> bool {
 	if !container.Writable {
 		return false
 	}
@@ -295,11 +295,11 @@ storage_write_all_bytes :: proc(container: ^StorageContainer, path: string, data
 	return storage_os_write_file(full, data)
 }
 
-storage_write_all_text :: proc(container: ^StorageContainer, path, data: string) -> bool {
-	return storage_write_all_bytes(container, path, transmute([]byte)data)
+WriteAllText :: proc(container: ^StorageContainer, path, data: string) -> bool {
+	return WriteAllBytes(container, path, transmute([]byte)data)
 }
 
-storage_dispose :: proc(container: ^StorageContainer) {
+DisposeStorage :: proc(container: ^StorageContainer) {
 	if container == nil || container.ZipEntries == nil {
 		return
 	}
@@ -434,14 +434,14 @@ storage_dialog_properties :: proc(
 // Storage / DirectoryStorage — 目录后端
 // ==============================================================================
 
-directory_storage_init :: proc(storage: ^DirectoryStorage, root: string, writable := true) {
+DirectoryStorageInit :: proc(storage: ^DirectoryStorage, root: string, writable := true) {
 	storage.Container = StorageContainer {
 		Root     = root,
 		Writable = writable,
 	}
 }
 
-directory_storage_as_container :: proc(storage: ^DirectoryStorage) -> ^StorageContainer {
+DirectoryStorageContainer :: proc(storage: ^DirectoryStorage) -> ^StorageContainer {
 	if storage == nil {
 		return nil
 	}
@@ -452,12 +452,12 @@ directory_storage_as_container :: proc(storage: ^DirectoryStorage) -> ^StorageCo
 // Storage / RelativeStorage — 相对路径视图
 // ==============================================================================
 
-relative_storage_init :: proc(storage: ^RelativeStorage, base: StorageContainer, prefix: string) {
+RelativeStorageInit :: proc(storage: ^RelativeStorage, base: StorageContainer, prefix: string) {
 	storage.Container = base
 	storage.Prefix = prefix
 }
 
-relative_storage_as_container :: proc(storage: ^RelativeStorage) -> StorageContainer {
+RelativeStorageContainer :: proc(storage: ^RelativeStorage) -> StorageContainer {
 	if storage == nil {
 		return {}
 	}
@@ -475,7 +475,7 @@ relative_storage_as_container :: proc(storage: ^RelativeStorage) -> StorageConta
 }
 
 // [olib L-001] 释放 RelativeStorage 持有的拼接路径；不释放借用的 base/prefix。
-relative_storage_dispose :: proc(storage: ^RelativeStorage) {
+RelativeStorageDispose :: proc(storage: ^RelativeStorage) {
 	if storage == nil {
 		return
 	}
@@ -487,14 +487,14 @@ relative_storage_dispose :: proc(storage: ^RelativeStorage) {
 // Storage / ContentStorage — 只读内容
 // ==============================================================================
 
-content_storage_init :: proc(storage: ^ContentStorage, root: string, writable := false) {
+ContentStorageInit :: proc(storage: ^ContentStorage, root: string, writable := false) {
 	storage.Container = StorageContainer {
 		Root     = root,
 		Writable = writable,
 	}
 }
 
-content_storage_as_container :: proc(storage: ^ContentStorage) -> ^StorageContainer {
+ContentStorageContainer :: proc(storage: ^ContentStorage) -> ^StorageContainer {
 	if storage == nil {
 		return nil
 	}
@@ -505,16 +505,16 @@ content_storage_as_container :: proc(storage: ^ContentStorage) -> ^StorageContai
 // Storage / ZipStorage — ZIP 索引、解码与查询
 // ==============================================================================
 
-zip_storage_init :: proc(storage: ^ZipStorage, root: string) {
+ZipStorageInit :: proc(storage: ^ZipStorage, root: string) {
 	data := storage_os_read_file(root, context.temp_allocator)
-	zip_storage_init_bytes(storage, data)
+	ZipStorageInitBytes(storage, data)
 }
 
 // 输入数据在解码时复制；调用方可以在初始化完成后释放原始 ZIP 数据。
 // 出错时释放所有已解码条目，通过 Error 区分损坏或不支持的归档。
 
-zip_storage_init_bytes :: proc(storage: ^ZipStorage, data: []u8) {
-	zip_storage_dispose(storage)
+ZipStorageInitBytes :: proc(storage: ^ZipStorage, data: []u8) {
+	ZipStorageDispose(storage)
 	storage.Container = StorageContainer {
 		Writable   = false,
 		ZipEntries = &storage.Entries,
@@ -522,7 +522,7 @@ zip_storage_init_bytes :: proc(storage: ^ZipStorage, data: []u8) {
 	storage.Entries = make(map[string][dynamic]u8)
 	storage.Error = zip_storage_decode(data, &storage.Entries)
 	if storage.Error != .None {
-		storage_dispose(&storage.Container)
+		DisposeStorage(&storage.Container)
 	}
 }
 
@@ -735,13 +735,13 @@ zip_storage_decode :: proc(data: []u8, entries: ^map[string][dynamic]u8) -> ZipS
 	return .None
 }
 
-zip_storage_init_container :: proc(storage: ^ZipStorage, source: ^StorageContainer, path: string) {
-	data := storage_read_all_bytes(source, path)
+ZipStorageInitContainer :: proc(storage: ^ZipStorage, source: ^StorageContainer, path: string) {
+	data := ReadAllBytes(source, path)
 	defer delete(data)
-	zip_storage_init_bytes(storage, data)
+	ZipStorageInitBytes(storage, data)
 }
 
-zip_storage_as_container :: proc(storage: ^ZipStorage) -> ^StorageContainer {
+ZipStorageContainer :: proc(storage: ^ZipStorage) -> ^StorageContainer {
 	if storage == nil {
 		return nil
 	}
@@ -749,14 +749,14 @@ zip_storage_as_container :: proc(storage: ^ZipStorage) -> ^StorageContainer {
 	return &storage.Container
 }
 
-zip_storage_exists :: proc(storage: ^ZipStorage, path: string) -> bool {
+ZipStorageExists :: proc(storage: ^ZipStorage, path: string) -> bool {
 	if storage == nil || storage.Entries == nil {
 		return false
 	}
-	return storage_exists(zip_storage_as_container(storage), path)
+	return Exists(ZipStorageContainer(storage), path)
 }
 
-zip_storage_read_all_bytes :: proc(
+ZipStorageReadAllBytes :: proc(
 	storage: ^ZipStorage,
 	path: string,
 	allocator := context.allocator,
@@ -764,30 +764,30 @@ zip_storage_read_all_bytes :: proc(
 	if storage == nil || storage.Entries == nil {
 		return nil
 	}
-	return storage_read_all_bytes(zip_storage_as_container(storage), path, allocator)
+	return ReadAllBytes(ZipStorageContainer(storage), path, allocator)
 }
 
-zip_storage_enumerate_directory :: proc(
+ZipStorageEnumerateDirectory :: proc(
 	storage: ^ZipStorage,
 	path: string,
 	allocator := context.allocator,
 ) -> []string {
-	return storage_enumerate_directory(zip_storage_as_container(storage), path, allocator)
+	return EnumerateDirectory(ZipStorageContainer(storage), path, allocator)
 }
 
-zip_storage_dispose :: proc(storage: ^ZipStorage) {
+ZipStorageDispose :: proc(storage: ^ZipStorage) {
 	if storage == nil {
 		return
 	}
 	storage.Container.ZipEntries = &storage.Entries
-	storage_dispose(&storage.Container)
+	DisposeStorage(&storage.Container)
 }
 
 // ==============================================================================
 // Storage / FileSystem — 用户存储、标题存储与对话框
 // ==============================================================================
 
-file_system_init :: proc(fs: ^FileSystem, app: ^App) {
+FileSystemInit :: proc(fs: ^FileSystem, app: ^App) {
 	fs.App = app
 }
 
@@ -807,11 +807,11 @@ FlushStorageFileAsync :: proc(
 		full_path := storage_join_path(container, path)
 		web_storage_flush(full_path, callback)
 	} else {
-		callback(storage_file_exists(container, path))
+		callback(FileExists(container, path))
 	}
 }
 
-file_system_open_user_storage :: proc(fs: ^FileSystem) -> StorageContainer {
+OpenUserStorage :: proc(fs: ^FileSystem) -> StorageContainer {
 	root := ""
 	if fs.App != nil {
 		root = fs.App.UserPath
@@ -831,7 +831,7 @@ file_system_open_user_storage :: proc(fs: ^FileSystem) -> StorageContainer {
 	return StorageContainer{Root = root, Writable = true}
 }
 
-file_system_open_title_storage :: proc(fs: ^FileSystem) -> StorageContainer {
+OpenTitleStorage :: proc(fs: ^FileSystem) -> StorageContainer {
 	when ODIN_OS == .JS {
 		// web: 无基路径概念(资产内嵌 wasm 或走虚拟 FS), 标题存储指向虚拟 FS 根
 		_ = fs
@@ -846,25 +846,25 @@ file_system_open_title_storage :: proc(fs: ^FileSystem) -> StorageContainer {
 	return StorageContainer{Root = root, Writable = false}
 }
 
-file_system_open_user_storage_async :: proc(
+OpenUserStorageAsync :: proc(
 	fs: ^FileSystem,
 	callback: proc(storage: StorageContainer),
 ) {
 	if callback != nil {
-		callback(file_system_open_user_storage(fs))
+		callback(OpenUserStorage(fs))
 	}
 }
 
-file_system_open_title_storage_async :: proc(
+OpenTitleStorageAsync :: proc(
 	fs: ^FileSystem,
 	callback: proc(storage: StorageContainer),
 ) {
 	if callback != nil {
-		callback(file_system_open_title_storage(fs))
+		callback(OpenTitleStorage(fs))
 	}
 }
 
-file_system_open_file_dialog :: proc(
+OpenFileDialog :: proc(
 	fs: ^FileSystem,
 	title: string,
 	filters: []DialogFilter,
@@ -896,7 +896,7 @@ file_system_open_file_dialog :: proc(
 	}
 }
 
-file_system_open_folder_dialog :: proc(
+OpenFolderDialog :: proc(
 	fs: ^FileSystem,
 	title: string,
 	callback: DialogCallbackSingleFile,
@@ -927,7 +927,7 @@ file_system_open_folder_dialog :: proc(
 	}
 }
 
-file_system_save_file_dialog :: proc(
+SaveFileDialog :: proc(
 	fs: ^FileSystem,
 	title: string,
 	filters: []DialogFilter,
@@ -959,55 +959,17 @@ file_system_save_file_dialog :: proc(
 	}
 }
 
-open_user_storage :: file_system_open_user_storage
-open_title_storage :: file_system_open_title_storage
-open_user_storage_async :: file_system_open_user_storage_async
-open_title_storage_async :: file_system_open_title_storage_async
-open_file_dialog :: file_system_open_file_dialog
-open_folder_dialog :: file_system_open_folder_dialog
-save_file_dialog :: file_system_save_file_dialog
-
-FileSystemInit :: file_system_init
-OpenUserStorage :: file_system_open_user_storage
-OpenTitleStorage :: file_system_open_title_storage
-OpenUserStorageAsync :: file_system_open_user_storage_async
-OpenTitleStorageAsync :: file_system_open_title_storage_async
-OpenFileDialog :: file_system_open_file_dialog
-OpenFolderDialog :: file_system_open_folder_dialog
-SaveFileDialog :: file_system_save_file_dialog
+open_user_storage :: OpenUserStorage
+open_title_storage :: OpenTitleStorage
+open_user_storage_async :: OpenUserStorageAsync
+open_title_storage_async :: OpenTitleStorageAsync
+open_file_dialog :: OpenFileDialog
+open_folder_dialog :: OpenFolderDialog
+save_file_dialog :: SaveFileDialog
 
 // ------------------------------------------------------------------------------
 // Storage / Public API — 公共过程别名
 // ------------------------------------------------------------------------------
-
-Exists :: storage_exists
-FileExists :: storage_file_exists
-DirectoryExists :: storage_directory_exists
-EnumerateDirectory :: storage_enumerate_directory
-CreateDirectory :: storage_create_directory
-Remove :: storage_remove
-ReadAllBytes :: storage_read_all_bytes
-ReadAllText :: storage_read_all_text
-WriteAllBytes :: storage_write_all_bytes
-WriteAllText :: storage_write_all_text
-DisposeStorage :: storage_dispose
-
-DirectoryStorageInit :: directory_storage_init
-DirectoryStorageContainer :: directory_storage_as_container
-RelativeStorageInit :: relative_storage_init
-// [olib L-001] RelativeStorage 持有的拼接路径释放入口。
-RelativeStorageDispose :: relative_storage_dispose
-RelativeStorageContainer :: relative_storage_as_container
-ContentStorageInit :: content_storage_init
-ContentStorageContainer :: content_storage_as_container
-ZipStorageInit :: zip_storage_init
-ZipStorageInitBytes :: zip_storage_init_bytes
-ZipStorageInitContainer :: zip_storage_init_container
-ZipStorageContainer :: zip_storage_as_container
-ZipStorageExists :: zip_storage_exists
-ZipStorageReadAllBytes :: zip_storage_read_all_bytes
-ZipStorageEnumerateDirectory :: zip_storage_enumerate_directory
-ZipStorageDispose :: zip_storage_dispose
 
 StorageDebugString :: proc(container: ^StorageContainer) -> string {
 	return fmt.aprintf(
@@ -1094,7 +1056,7 @@ storage_read_stream_proc :: proc(
 	return 0, .Unsupported
 }
 
-storage_open_read :: proc(
+OpenRead :: proc(
 	container: ^StorageContainer,
 	path: string,
 	allocator := context.allocator,
@@ -1102,13 +1064,13 @@ storage_open_read :: proc(
 	io.Stream,
 	io.Error,
 ) {
-	if container == nil || !storage_file_exists(container, path) {
+	if container == nil || !FileExists(container, path) {
 		return {}, .Unknown
 	}
-	data := storage_read_all_bytes(container, path, allocator)
+	data := ReadAllBytes(container, path, allocator)
 	if data == nil && container.ZipEntries == nil {
 		// An empty file can also produce a nil slice. Existence was checked above.
-		if !storage_file_exists(container, path) {
+		if !FileExists(container, path) {
 			return {}, .Unknown
 		}
 	}
@@ -1119,7 +1081,6 @@ storage_open_read :: proc(
 	}
 	return io.Stream{procedure = storage_read_stream_proc, data = state}, .None
 }
-OpenRead :: storage_open_read
 
 // ------------------------------------------------------------------------------
 // Storage / StorageContainer / Streams — 可写创建流
@@ -1238,7 +1199,7 @@ storage_write_stream_proc :: proc(
 
 // Create truncates immediately; Flush/Close/Destroy persist the buffered data.
 
-storage_create :: proc(
+Create :: proc(
 	container: ^StorageContainer,
 	path: string,
 	allocator := context.allocator,
@@ -1249,7 +1210,7 @@ storage_create :: proc(
 	if container == nil || !container.Writable || container.ZipEntries != nil {
 		return {}, .Permission_Denied
 	}
-	if !storage_write_all_bytes(container, path, nil) {
+	if !WriteAllBytes(container, path, nil) {
 		return {}, .Unknown
 	}
 	state := new(StorageWriteStream, allocator)
@@ -1258,4 +1219,3 @@ storage_create :: proc(
 	state.Allocator = allocator
 	return io.Stream{procedure = storage_write_stream_proc, data = state}, .None
 }
-Create :: storage_create

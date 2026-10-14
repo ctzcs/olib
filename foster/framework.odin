@@ -74,7 +74,7 @@ GraphicsDriver :: enum {
 	Metal,
 }
 
-graphics_driver_shader_extension :: proc(driver: GraphicsDriver) -> string {
+GetShaderExtension :: proc(driver: GraphicsDriver) -> string {
 	switch driver {
 	case .None:
 		return ""
@@ -87,8 +87,6 @@ graphics_driver_shader_extension :: proc(driver: GraphicsDriver) -> string {
 	}
 	return ""
 }
-
-GetShaderExtension :: graphics_driver_shader_extension
 
 // ==============================================================================
 // App / Configuration — 应用选项
@@ -140,7 +138,7 @@ fixed_step_fps :: proc(fps: int, wait_for_next_update := true) -> UpdateMode {
 	return fixed_step(coretime.Second / coretime.Duration(fps), 0, wait_for_next_update)
 }
 
-unlocked_step :: proc() -> UpdateMode {
+UnlockedStep :: proc() -> UpdateMode {
 	return UpdateMode {
 		Mode = .Unlocked,
 	}
@@ -150,7 +148,6 @@ FixedStep :: proc {
 	fixed_step,
 	fixed_step_fps,
 }
-UnlockedStep :: unlocked_step
 
 // ==============================================================================
 // Utility / Time — 帧计时
@@ -164,7 +161,7 @@ Time :: struct {
 	RenderFrame: u64,
 }
 
-advance_time :: proc(t: Time, delta: coretime.Duration) -> Time {
+Advance :: proc(t: Time, delta: coretime.Duration) -> Time {
 	return Time {
 		Elapsed     = t.Elapsed + delta,
 		Previous    = t.Elapsed,
@@ -174,14 +171,11 @@ advance_time :: proc(t: Time, delta: coretime.Duration) -> Time {
 	}
 }
 
-advance_render_frame :: proc(t: Time) -> Time {
+AdvanceRenderFrame :: proc(t: Time) -> Time {
 	next := t
 	next.RenderFrame += 1
 	return next
 }
-
-Advance :: advance_time
-AdvanceRenderFrame :: advance_render_frame
 
 // ==============================================================================
 // Graphics / Defaults / DefaultResources — 默认资源状态
@@ -200,16 +194,13 @@ DefaultResources :: struct {
 	Initialized:            bool,
 }
 
-time_seconds_f :: proc(t: Time) -> f32 {
+TimeSecondsF :: proc(t: Time) -> f32 {
 	return f32(coretime.duration_seconds(t.Elapsed))
 }
 
-time_between_interval :: proc(t: Time, interval: f64, offset: f64 = 0) -> bool {
+TimeBetweenInterval :: proc(t: Time, interval: f64, offset: f64 = 0) -> bool {
 	return BetweenIntervalCalc(coretime.duration_seconds(t.Elapsed), interval, offset)
 }
-
-TimeSecondsF :: time_seconds_f
-TimeBetweenInterval :: time_between_interval
 
 // ==============================================================================
 // Graphics / GraphicsDevice — 设备状态
@@ -266,23 +257,23 @@ GraphicsDevice :: struct {
 // Graphics / Defaults / DefaultResources — 生命周期
 // ==============================================================================
 
-default_resources_init :: proc(device: ^GraphicsDevice) {
+DefaultResourcesInit :: proc(device: ^GraphicsDevice) {
 	if device == nil || device.Device == nil || device.Defaults.Initialized {
 		return
 	}
-	init_default_batch_material(
+	InitDefaultBatchMaterial(
 		&device.Defaults.BatchMaterial,
 		&device.Defaults.VertexShader,
 		&device.Defaults.FragmentShader,
 		device,
 	)
-	init_default_textured_material(
+	InitDefaultTexturedMaterial(
 		&device.Defaults.TexturedMaterial,
 		&device.Defaults.TexturedVertexShader,
 		&device.Defaults.TexturedFragmentShader,
 		device,
 	)
-	init_default_msdf_material(
+	InitDefaultMsdfMaterial(
 		&device.Defaults.MsdfMaterial,
 		&device.Defaults.MsdfVertexShader,
 		&device.Defaults.MsdfFragmentShader,
@@ -290,36 +281,34 @@ default_resources_init :: proc(device: ^GraphicsDevice) {
 	)
 	device.Defaults.Initialized = true
 }
-DefaultResourcesInit :: default_resources_init
 
-default_resources_dispose :: proc(device: ^GraphicsDevice) {
+DefaultResourcesDispose :: proc(device: ^GraphicsDevice) {
 	if device == nil || !device.Defaults.Initialized {
 		return
 	}
 	if device.Defaults.BatchMaterial.Vertex.Shader != nil {
-		shader_dispose(device.Defaults.BatchMaterial.Vertex.Shader)
+		ShaderDispose(device.Defaults.BatchMaterial.Vertex.Shader)
 	}
 	if device.Defaults.BatchMaterial.Fragment.Shader != nil {
-		shader_dispose(device.Defaults.BatchMaterial.Fragment.Shader)
+		ShaderDispose(device.Defaults.BatchMaterial.Fragment.Shader)
 	}
 	if device.Defaults.TexturedMaterial.Vertex.Shader != nil {
-		shader_dispose(device.Defaults.TexturedMaterial.Vertex.Shader)
+		ShaderDispose(device.Defaults.TexturedMaterial.Vertex.Shader)
 	}
 	if device.Defaults.TexturedMaterial.Fragment.Shader != nil {
-		shader_dispose(device.Defaults.TexturedMaterial.Fragment.Shader)
+		ShaderDispose(device.Defaults.TexturedMaterial.Fragment.Shader)
 	}
 	if device.Defaults.MsdfMaterial.Vertex.Shader != nil {
-		shader_dispose(device.Defaults.MsdfMaterial.Vertex.Shader)
+		ShaderDispose(device.Defaults.MsdfMaterial.Vertex.Shader)
 	}
 	if device.Defaults.MsdfMaterial.Fragment.Shader != nil {
-		shader_dispose(device.Defaults.MsdfMaterial.Fragment.Shader)
+		ShaderDispose(device.Defaults.MsdfMaterial.Fragment.Shader)
 	}
 	MaterialDispose(&device.Defaults.BatchMaterial)
 	MaterialDispose(&device.Defaults.TexturedMaterial)
 	MaterialDispose(&device.Defaults.MsdfMaterial)
 	device.Defaults = {}
 }
-DefaultResourcesDispose :: default_resources_dispose
 
 // Built-in shaders are vendored with the Odin package so it can be relocated.
 batcher_vertex_spv :: #load("assets/shaders/Batcher.vertex.spv")
@@ -371,7 +360,7 @@ identity_matrix_4x4: [16]f32 = [16]f32 {
 	1,
 }
 
-create_device :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
+GraphicsDeviceCreateDevice :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
 	when ODIN_OS == .JS {
 		// Web: 无 SDL_GPU 设备, Device 用非 nil 占位使现有 nil 守卫成立
 		graphics_device.Device = cast(^SDL.GPUDevice)&web_device_placeholder
@@ -400,7 +389,7 @@ create_device :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
 		driver_name,
 	)
 	if graphics_device.Device == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUDevice"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUDevice"))
 	}
 	graphics_device.Disposed = false
 	graphics_device.VSync = true
@@ -409,19 +398,19 @@ create_device :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
 	if .MultiSampledBackBuffer in flags {
 		if SDL.GPUTextureSupportsSampleCount(
 			graphics_device.Device,
-			texture_format_to_sdl(.Color),
+			TextureFormatToSDL(.Color),
 			._8,
 		) {
 			graphics_device.BackbufferSampleCount = .Eight
 		} else if SDL.GPUTextureSupportsSampleCount(
 			graphics_device.Device,
-			texture_format_to_sdl(.Color),
+			TextureFormatToSDL(.Color),
 			._4,
 		) {
 			graphics_device.BackbufferSampleCount = .Four
 		} else if SDL.GPUTextureSupportsSampleCount(
 			graphics_device.Device,
-			texture_format_to_sdl(.Color),
+			TextureFormatToSDL(.Color),
 			._2,
 		) {
 			graphics_device.BackbufferSampleCount = .Two
@@ -429,7 +418,7 @@ create_device :: proc(graphics_device: ^GraphicsDevice, flags: AppFlags) {
 	}
 }
 
-destroy_device :: proc(graphics_device: ^GraphicsDevice) {
+GraphicsDeviceDestroyDevice :: proc(graphics_device: ^GraphicsDevice) {
 	when ODIN_OS == .JS {
 		graphics_device.Device = nil
 		graphics_device.Disposed = true
@@ -442,7 +431,7 @@ destroy_device :: proc(graphics_device: ^GraphicsDevice) {
 	graphics_device.Disposed = true
 }
 
-startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.Window) {
+GraphicsDeviceStartup :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.Window) {
 	when ODIN_OS == .JS {
 		// Web: GL 上下文由 foster.js 在 canvas 上创建, 无设备声明/交换链参数
 		graphics_device.Window = window // JS 下恒为 nil
@@ -459,7 +448,7 @@ startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.W
 		)
 		graphics_device.HasWindowRenderTarget = true
 
-		default_resources_init(graphics_device)
+		DefaultResourcesInit(graphics_device)
 		return
 	}
 	graphics_device.Window = window
@@ -478,7 +467,7 @@ startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.W
 	}
 
 	if !SDL.ClaimWindowForGPUDevice(graphics_device.Device, window) {
-		panic(create_error_from_sdl("SDL_ClaimWindowForGPUDevice"))
+		panic(CreateExceptionFromSDL("SDL_ClaimWindowForGPUDevice"))
 	}
 	graphics_device.SupportsMailbox = SDL.WindowSupportsGPUPresentMode(
 		graphics_device.Device,
@@ -507,14 +496,14 @@ startup_graphics_device :: proc(graphics_device: ^GraphicsDevice, window: ^SDL.W
 	)
 	graphics_device.HasWindowRenderTarget = true
 
-	default_resources_init(graphics_device)
+	DefaultResourcesInit(graphics_device)
 }
 
-shutdown_graphics_device :: proc(graphics_device: ^GraphicsDevice) {
+GraphicsDeviceShutdown :: proc(graphics_device: ^GraphicsDevice) {
 	when ODIN_OS == .JS {
 		graphics_device_dispose_backbuffer(graphics_device)
 		graphics_device_dispose_caches(graphics_device)
-		default_resources_dispose(graphics_device)
+		DefaultResourcesDispose(graphics_device)
 		graphics_device.Window = nil
 		graphics_device.Driver = .None
 		return
@@ -532,23 +521,23 @@ shutdown_graphics_device :: proc(graphics_device: ^GraphicsDevice) {
 		graphics_device_dispose_debug_draw(graphics_device)
 		SDL.ReleaseWindowFromGPUDevice(graphics_device.Device, graphics_device.Window)
 	}
-	default_resources_dispose(graphics_device)
+	DefaultResourcesDispose(graphics_device)
 	graphics_device.Window = nil
 	graphics_device.Driver = .None
 }
 
-present :: proc(graphics_device: ^GraphicsDevice) {
-	if !begin_frame(graphics_device) {
+Present :: proc(graphics_device: ^GraphicsDevice) {
+	if !GraphicsDeviceBeginFrame(graphics_device) {
 		return
 	}
-	end_frame(graphics_device)
+	GraphicsDeviceEndFrame(graphics_device)
 }
 
 // ==============================================================================
 // Internal / GraphicsDeviceSDL — 帧与交换链
 // ==============================================================================
 
-begin_frame :: proc(graphics_device: ^GraphicsDevice) -> bool {
+GraphicsDeviceBeginFrame :: proc(graphics_device: ^GraphicsDevice) -> bool {
 	when ODIN_OS == .JS {
 		if graphics_device.InFrame {
 			return false
@@ -632,7 +621,7 @@ begin_frame :: proc(graphics_device: ^GraphicsDevice) -> bool {
 	return true
 }
 
-end_frame :: proc(graphics_device: ^GraphicsDevice) {
+GraphicsDeviceEndFrame :: proc(graphics_device: ^GraphicsDevice) {
 	if !graphics_device.InFrame {
 		return
 	}
@@ -651,7 +640,7 @@ end_frame :: proc(graphics_device: ^GraphicsDevice) {
 		graphics_device.HasRenderPassViewport = false
 		graphics_device.HasRenderPassScissor = false
 		fw_end_pass() // 复位 GL 状态(剪刀等)
-		fw_present() // WebGL2: rAF 合成即 present
+		fw_present() // WebGL2: rAF 合成即 Present
 		return
 	}
 
@@ -672,26 +661,19 @@ end_frame :: proc(graphics_device: ^GraphicsDevice) {
 
 	if command_buffer != nil {
 		if !SDL.SubmitGPUCommandBuffer(command_buffer) {
-			panic(create_error_from_sdl("SDL_SubmitGPUCommandBuffer"))
+			panic(CreateExceptionFromSDL("SDL_SubmitGPUCommandBuffer"))
 		}
 	}
 }
 
-GraphicsDeviceCreateDevice :: create_device
-GraphicsDeviceDestroyDevice :: destroy_device
-GraphicsDeviceStartup :: startup_graphics_device
-GraphicsDeviceShutdown :: shutdown_graphics_device
-GraphicsDeviceBeginFrame :: begin_frame
-GraphicsDeviceEndFrame :: end_frame
-Present :: present
-BeginFrame :: begin_frame
-EndFrame :: end_frame
+BeginFrame :: GraphicsDeviceBeginFrame
+EndFrame :: GraphicsDeviceEndFrame
 
 graphics_device_dispose_backbuffer :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device == nil || !graphics_device.HasBackbufferTarget {
 		return
 	}
-	target_dispose(&graphics_device.BackbufferTarget)
+	TargetDispose(&graphics_device.BackbufferTarget)
 	graphics_device.BackbufferTarget = Target{}
 	graphics_device.BackbufferSize = {}
 	graphics_device.HasBackbufferTarget = false
@@ -727,7 +709,7 @@ graphics_device_ensure_backbuffer :: proc(
 	target := &graphics_device.BackbufferTarget
 	if target.Width < size.X || target.Height < size.Y {
 		fmt.println("[bb] recreating backbuffer:", size, " old:", target.Width, "x", target.Height)
-		target_dispose(target)
+		TargetDispose(target)
 		specs := [1]TargetAttachmentSpec {
 			{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount},
 		}
@@ -743,7 +725,7 @@ graphics_device_ensure_backbuffer :: proc(
 		return
 	}
 	if exact && (target.Width > size.X + 128 || target.Height > size.Y + 128) {
-		target_dispose(target)
+		TargetDispose(target)
 		specs := [1]TargetAttachmentSpec {
 			{Format = .Color, SampleCount = graphics_device.BackbufferSampleCount},
 		}
@@ -854,11 +836,11 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 
 	graphics_device.DebugVertexShader = SDL.CreateGPUShader(device, vertex_shader_info)
 	if graphics_device.DebugVertexShader == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUShader", "vertex"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUShader", "vertex"))
 	}
 	graphics_device.DebugFragmentShader = SDL.CreateGPUShader(device, fragment_shader_info)
 	if graphics_device.DebugFragmentShader == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUShader", "fragment"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUShader", "fragment"))
 	}
 
 	vertex_stride := u32(size_of(BatcherVertex))
@@ -954,7 +936,7 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 
 	graphics_device.DebugPipeline = SDL.CreateGPUGraphicsPipeline(device, pipeline_info)
 	if graphics_device.DebugPipeline == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUGraphicsPipeline"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUGraphicsPipeline"))
 	}
 
 	sampler_info := SDL.GPUSamplerCreateInfo {
@@ -975,7 +957,7 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 	graphics_device.DebugSampler = SDL.CreateGPUSampler(device, sampler_info)
 	if graphics_device.DebugSampler == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUSampler"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUSampler"))
 	}
 
 	tex_info := SDL.GPUTextureCreateInfo {
@@ -991,7 +973,7 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 	graphics_device.DebugTexture = SDL.CreateGPUTexture(device, tex_info)
 	if graphics_device.DebugTexture == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUTexture"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUTexture"))
 	}
 
 	vertex_data_size := u32(size_of(BatcherVertex) * 6)
@@ -1002,7 +984,7 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 	graphics_device.DebugVertexBuffer = SDL.CreateGPUBuffer(device, vb_info)
 	if graphics_device.DebugVertexBuffer == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUBuffer"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUBuffer"))
 	}
 
 	transfer_size := u32(512)
@@ -1013,13 +995,13 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	}
 	transfer := SDL.CreateGPUTransferBuffer(device, transfer_info)
 	if transfer == nil {
-		panic(create_error_from_sdl("SDL_CreateGPUTransferBuffer"))
+		panic(CreateExceptionFromSDL("SDL_CreateGPUTransferBuffer"))
 	}
 
 	mapped := SDL.MapGPUTransferBuffer(device, transfer, false)
 	if mapped == nil {
 		SDL.ReleaseGPUTransferBuffer(device, transfer)
-		panic(create_error_from_sdl("SDL_MapGPUTransferBuffer"))
+		panic(CreateExceptionFromSDL("SDL_MapGPUTransferBuffer"))
 	}
 
 	mode := Color{0, 0, 255, 0}
@@ -1086,13 +1068,13 @@ graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	SDL.EndGPUCopyPass(copy_pass)
 	if !SDL.SubmitGPUCommandBuffer(command_buffer) {
 		SDL.ReleaseGPUTransferBuffer(device, transfer)
-		panic(create_error_from_sdl("SDL_SubmitGPUCommandBuffer"))
+		panic(CreateExceptionFromSDL("SDL_SubmitGPUCommandBuffer"))
 	}
 	_ = SDL.WaitForGPUIdle(device)
 	SDL.ReleaseGPUTransferBuffer(device, transfer)
 }
 
-draw_test_triangle :: proc(graphics_device: ^GraphicsDevice) {
+DrawTestTriangle :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device.Device == nil ||
 	   graphics_device.RenderPass == nil ||
 	   graphics_device.CommandBuffer == nil {
@@ -1136,9 +1118,7 @@ draw_test_triangle :: proc(graphics_device: ^GraphicsDevice) {
 	SDL.DrawGPUPrimitives(graphics_device.RenderPass, 3, 1, 0, 0)
 }
 
-DrawTestTriangle :: draw_test_triangle
-
-draw_test_quad :: proc(graphics_device: ^GraphicsDevice) {
+DrawTestQuad :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device.Device == nil ||
 	   graphics_device.RenderPass == nil ||
 	   graphics_device.CommandBuffer == nil {
@@ -1181,8 +1161,6 @@ draw_test_quad :: proc(graphics_device: ^GraphicsDevice) {
 
 	SDL.DrawGPUPrimitives(graphics_device.RenderPass, 6, 1, 0, 0)
 }
-
-DrawTestQuad :: draw_test_quad
 
 WindowCallback :: #type proc(window: ^Window)
 AppCallback :: #type proc(app: ^App)
@@ -1227,7 +1205,7 @@ AppConfig :: struct {
 	Flags:                   AppFlags,
 }
 
-default_app_config :: proc(name: string, width, height: int) -> AppConfig {
+DefaultAppConfig :: proc(name: string, width, height: int) -> AppConfig {
 	return AppConfig {
 		ApplicationName         = name,
 		WindowTitle             = name,
@@ -1239,8 +1217,6 @@ default_app_config :: proc(name: string, width, height: int) -> AppConfig {
 		Flags                   = {},
 	}
 }
-
-DefaultAppConfig :: default_app_config
 
 App :: struct {
 	Config:          AppConfig,
@@ -1277,14 +1253,12 @@ to_cstring :: proc(s: string) -> cstring {
 	return cstr
 }
 
-create_error_from_sdl :: proc(sdl_method: string, foster_info := "") -> string {
+CreateExceptionFromSDL :: proc(sdl_method: string, foster_info := "") -> string {
 	if foster_info != "" {
 		return fmt.aprintf("%s. %s failed: %s", foster_info, sdl_method, string(SDL.GetError()))
 	}
 	return fmt.aprintf("%s failed: %s", sdl_method, string(SDL.GetError()))
 }
-
-CreateExceptionFromSDL :: create_error_from_sdl
 
 // ==============================================================================
 // Window / Lifecycle — 创建、属性与释放
@@ -1327,13 +1301,13 @@ window_init :: proc(
 		flags,
 	)
 	if window.Handle == nil {
-		panic(create_error_from_sdl("SDL_CreateWindow"))
+		panic(CreateExceptionFromSDL("SDL_CreateWindow"))
 	}
 
 	window.ID = SDL.GetWindowID(window.Handle)
 }
 
-window_close :: proc(window: ^Window) {
+Close :: proc(window: ^Window) {
 	when ODIN_OS == .JS {
 		// canvas 生命周期由页面管理
 		_ = window
@@ -1345,7 +1319,7 @@ window_close :: proc(window: ^Window) {
 	}
 }
 
-window_show :: proc(window: ^Window) {
+Show :: proc(window: ^Window) {
 	when ODIN_OS == .JS {
 		_ = window // canvas 始终可见
 		return
@@ -1359,7 +1333,7 @@ window_show :: proc(window: ^Window) {
 	_ = SDL.ShowCursor()
 }
 
-window_hide :: proc(window: ^Window) {
+Hide :: proc(window: ^Window) {
 	when ODIN_OS == .JS {
 		_ = window
 		return
@@ -1369,7 +1343,7 @@ window_hide :: proc(window: ^Window) {
 	}
 }
 
-window_focus :: proc(window: ^Window) {
+Focus :: proc(window: ^Window) {
 	when ODIN_OS == .JS {
 		_ = window
 		return
@@ -1379,7 +1353,7 @@ window_focus :: proc(window: ^Window) {
 	}
 }
 
-window_size :: proc(window: ^Window) -> Point2 {
+Size :: proc(window: ^Window) -> Point2 {
 	when ODIN_OS == .JS {
 		_ = window
 		return web_window_size()
@@ -1395,7 +1369,7 @@ window_size :: proc(window: ^Window) -> Point2 {
 	return Point2{w, h}
 }
 
-window_size_in_pixels :: proc(window: ^Window) -> Point2 {
+SizeInPixels :: proc(window: ^Window) -> Point2 {
 	when ODIN_OS == .JS {
 		_ = window
 		return web_window_size_in_pixels()
@@ -1408,7 +1382,7 @@ window_size_in_pixels :: proc(window: ^Window) -> Point2 {
 	return Point2{int(cw), int(ch)}
 }
 
-window_position :: proc(window: ^Window) -> Point2 {
+Position :: proc(window: ^Window) -> Point2 {
 	if window.Handle == nil {
 		return Point2Zero
 	}
@@ -1423,7 +1397,7 @@ window_set_position :: proc(window: ^Window, value: Point2) {
 	}
 }
 
-window_set_size :: proc(window: ^Window, value: Point2) {
+SetWindowSize :: proc(window: ^Window, value: Point2) {
 	when ODIN_OS == .JS {
 		// Web: canvas 布局由页面控制, 逻辑尺寸跟随视口, 忽略显式设置
 		_ = window
@@ -1435,7 +1409,7 @@ window_set_size :: proc(window: ^Window, value: Point2) {
 	}
 }
 
-window_focused :: proc(window: ^Window) -> bool {
+Focused :: proc(window: ^Window) -> bool {
 	if window.Handle == nil {
 		return false
 	}
@@ -1443,7 +1417,7 @@ window_focused :: proc(window: ^Window) -> bool {
 	return .INPUT_FOCUS in flags || .MOUSE_FOCUS in flags
 }
 
-window_fullscreen :: proc(window: ^Window) -> bool {
+Fullscreen :: proc(window: ^Window) -> bool {
 	when ODIN_OS == .JS {
 		_ = window
 		return fw_is_fullscreen() != 0
@@ -1454,7 +1428,7 @@ window_fullscreen :: proc(window: ^Window) -> bool {
 	return .FULLSCREEN in SDL.GetWindowFlags(window.Handle)
 }
 
-window_set_fullscreen :: proc(window: ^Window, value: bool) {
+SetWindowFullscreen :: proc(window: ^Window, value: bool) {
 	when ODIN_OS == .JS {
 		// 全屏 = 页面 Fullscreen API(需用户手势上下文, 由按键路径调用时自然满足)
 		_ = window
@@ -1466,20 +1440,20 @@ window_set_fullscreen :: proc(window: ^Window, value: bool) {
 	}
 }
 
-window_resizable :: proc(window: ^Window) -> bool {
+Resizable :: proc(window: ^Window) -> bool {
 	if window.Handle == nil {
 		return false
 	}
 	return .RESIZABLE in SDL.GetWindowFlags(window.Handle)
 }
 
-window_set_resizable :: proc(window: ^Window, value: bool) {
+SetWindowResizable :: proc(window: ^Window, value: bool) {
 	if window.Handle != nil {
 		_ = SDL.SetWindowResizable(window.Handle, value)
 	}
 }
 
-window_maximized :: proc(window: ^Window) -> bool {
+Maximized :: proc(window: ^Window) -> bool {
 	if window.Handle == nil {
 		return false
 	}
@@ -1493,7 +1467,7 @@ window_set_title :: proc(window: ^Window, title: string) {
 	}
 }
 
-window_content_scale :: proc(window: ^Window) -> f32 {
+ContentScale :: proc(window: ^Window) -> f32 {
 	if window.Handle == nil {
 		return 1
 	}
@@ -1504,7 +1478,7 @@ window_content_scale :: proc(window: ^Window) -> f32 {
 	return scale
 }
 
-window_display_size :: proc(window: ^Window) -> Point2 {
+DisplaySize :: proc(window: ^Window) -> Point2 {
 	if window.Handle == nil {
 		return Point2Zero
 	}
@@ -1516,7 +1490,7 @@ window_display_size :: proc(window: ^Window) -> Point2 {
 	return Point2{int(mode.w), int(mode.h)}
 }
 
-window_set_mouse_visible :: proc(window: ^Window, enabled: bool) {
+SetMouseVisible :: proc(window: ^Window, enabled: bool) {
 	when ODIN_OS == .JS {
 		fw_cursor_visible(enabled)
 		return
@@ -1532,7 +1506,7 @@ window_set_mouse_visible :: proc(window: ^Window, enabled: bool) {
 	}
 }
 
-window_set_mouse_relative_mode :: proc(window: ^Window, enabled: bool) {
+SetMouseRelativeMode :: proc(window: ^Window, enabled: bool) {
 	when ODIN_OS == .JS {
 		// Pointer Lock API; 锁定时的增量由 movementX/Y 累积成虚拟坐标
 		fw_set_mouse_relative(enabled ? 1 : 0)
@@ -1545,11 +1519,11 @@ window_set_mouse_relative_mode :: proc(window: ^Window, enabled: bool) {
 		return
 	}
 	_ = SDL.SetWindowRelativeMouseMode(window.Handle, enabled)
-	size := window_size(window)
+	size := Size(window)
 	SDL.WarpMouseInWindow(window.Handle, f32(size.X) / 2, f32(size.Y) / 2)
 }
 
-window_set_mouse_position :: proc(window: ^Window, x, y: f32) {
+SetMousePosition :: proc(window: ^Window, x, y: f32) {
 	if window.Handle != nil {
 		SDL.WarpMouseInWindow(window.Handle, x, y)
 	}
@@ -1568,7 +1542,7 @@ AppGetUserData :: proc(app: ^App) -> rawptr {
 	return app.UserData
 }
 
-window_set_mouse_cursor :: proc(window: ^Window, cursor: ^SDL.Cursor) {
+SetMouseCursor :: proc(window: ^Window, cursor: ^SDL.Cursor) {
 	when ODIN_OS == .JS {
 		_ = fw_cursor_set(web_handle_u32(cursor))
 		return
@@ -1581,7 +1555,7 @@ window_set_mouse_cursor :: proc(window: ^Window, cursor: ^SDL.Cursor) {
 	}
 }
 
-window_start_text_input :: proc(window: ^Window) {
+StartTextInput :: proc(window: ^Window) {
 	when ODIN_OS == .JS {
 		fw_text_input(true)
 		return
@@ -1591,7 +1565,7 @@ window_start_text_input :: proc(window: ^Window) {
 	}
 }
 
-window_stop_text_input :: proc(window: ^Window) {
+StopTextInput :: proc(window: ^Window) {
 	when ODIN_OS == .JS {
 		fw_text_input(false)
 		return
@@ -1601,15 +1575,15 @@ window_stop_text_input :: proc(window: ^Window) {
 	}
 }
 
-window_set_text_input :: proc(window: ^Window, enabled: bool) {
+SetTextInput :: proc(window: ^Window, enabled: bool) {
 	if enabled {
-		window_start_text_input(window)
+		StartTextInput(window)
 	} else {
-		window_stop_text_input(window)
+		StopTextInput(window)
 	}
 }
 
-window_on_event :: proc(window: ^Window, event_type: SDL.EventType) {
+OnEvent :: proc(window: ^Window, event_type: SDL.EventType) {
 	#partial switch event_type {
 	case .WINDOW_FOCUS_GAINED:
 		if window.OnFocusGain != nil {
@@ -1655,48 +1629,24 @@ window_on_event :: proc(window: ^Window, event_type: SDL.EventType) {
 		if window.OnCloseRequested != nil {
 			window.OnCloseRequested(window)
 		} else if window.App != nil {
-			exit(window.App)
+			Exit(window.App)
 		}
 	}
 }
 
 Width :: proc(window: ^Window) -> int {
-	return window_size(window).X
+	return Size(window).X
 }
 
 Height :: proc(window: ^Window) -> int {
-	return window_size(window).Y
+	return Size(window).Y
 }
-Size :: window_size
-SizeInPixels :: window_size_in_pixels
-Position :: window_position
-DisplaySize :: window_display_size
-ContentScale :: window_content_scale
-Focused :: window_focused
-Fullscreen :: window_fullscreen
-Resizable :: window_resizable
-Maximized :: window_maximized
-Show :: window_show
-Hide :: window_hide
-Close :: window_close
-Focus :: window_focus
-SetWindowSize :: window_set_size
-SetWindowFullscreen :: window_set_fullscreen
-SetWindowResizable :: window_set_resizable
-SetMouseVisible :: window_set_mouse_visible
-SetMouseRelativeMode :: window_set_mouse_relative_mode
-SetMousePosition :: window_set_mouse_position
-SetMouseCursor :: window_set_mouse_cursor
-StartTextInput :: window_start_text_input
-StopTextInput :: window_stop_text_input
-SetTextInput :: window_set_text_input
-OnEvent :: window_on_event
 
 // ==============================================================================
 // App / Lifecycle — 初始化与释放
 // ==============================================================================
 
-init_app :: proc(app: ^App, config: AppConfig) {
+InitApp :: proc(app: ^App, config: AppConfig) {
 	if config.Width <= 0 || config.Height <= 0 {
 		panic("Width or height is <= 0")
 	}
@@ -1719,18 +1669,18 @@ init_app :: proc(app: ^App, config: AppConfig) {
 
 		init_flags := SDL.INIT_VIDEO + SDL.INIT_EVENTS + SDL.INIT_JOYSTICK + SDL.INIT_GAMEPAD
 		if !SDL.Init(init_flags) {
-			panic(create_error_from_sdl("SDL_Init"))
+			panic(CreateExceptionFromSDL("SDL_Init"))
 		}
 	}
 
-	create_device(&app.GraphicsDevice, config.Flags)
+	GraphicsDeviceCreateDevice(&app.GraphicsDevice, config.Flags)
 	window_init(&app.Window, app, &app.GraphicsDevice, config)
-	startup_graphics_device(&app.GraphicsDevice, app.Window.Handle)
+	GraphicsDeviceStartup(&app.GraphicsDevice, app.Window.Handle)
 	when ODIN_OS != .JS {
 		graphics_device_init_debug_draw(&app.GraphicsDevice)
 	}
-	file_system_init(&app.FileSystem, app)
-	input_init(&app.Input, app)
+	FileSystemInit(&app.FileSystem, app)
+	InputInit(&app.Input, app)
 
 	when ODIN_OS == .JS {
 		app.UserPath = web_user_path(app.Name) // M4: 接虚拟文件系统
@@ -1742,7 +1692,7 @@ init_app :: proc(app: ^App, config: AppConfig) {
 	}
 }
 
-dispose_app :: proc(app: ^App) {
+Dispose :: proc(app: ^App) {
 	if app.Disposed {
 		return
 	}
@@ -1750,30 +1700,30 @@ dispose_app :: proc(app: ^App) {
 		panic("Cannot dispose App while running")
 	}
 
-	shutdown_graphics_device(&app.GraphicsDevice)
+	GraphicsDeviceShutdown(&app.GraphicsDevice)
 	input_close_devices(&app.Input)
 	when ODIN_OS == .JS {
 		web_storage_shutdown()
 		delete(web_clipboard_callbacks)
 		web_clipboard_callbacks = nil
 	}
-	window_close(&app.Window)
-	destroy_device(&app.GraphicsDevice)
+	Close(&app.Window)
+	GraphicsDeviceDestroyDevice(&app.GraphicsDevice)
 	when ODIN_OS != .JS {
 		SDL.Quit()
 	}
 	app.Disposed = true
 }
 
-is_main_thread :: proc(app: ^App) -> bool {
+IsMainThread :: proc(app: ^App) -> bool {
 	return platform_current_thread_id() == app.main_thread_id
 }
 
-run_on_main_thread :: proc(app: ^App, action: AppCallback) {
+RunOnMainThread :: proc(app: ^App, action: AppCallback) {
 	if action == nil {
 		return
 	}
-	if app.Running && is_main_thread(app) {
+	if app.Running && IsMainThread(app) {
 		action(app)
 		return
 	}
@@ -1794,10 +1744,10 @@ drain_main_thread_queue :: proc(app: ^App) {
 // App / Events — 原生与 Web 事件分发
 // ==============================================================================
 
-poll_events :: proc(app: ^App) {
+PollEvents :: proc(app: ^App) {
 	when ODIN_OS == .JS {
 		// 事件来源替换为 foster.js 的 DOM 事件队列; 窗口事件映射为 SDL.EventType
-		// 枚举值复用 window_on_event(纯枚举分派, 无 SDL 调用); 输入事件直接派发
+		// 枚举值复用 OnEvent(纯枚举分派, 无 SDL 调用); 输入事件直接派发
 		// 到现有 input_* 入口(Keys 值与 SDL scancode 一致, 无需伪造 SDL.Event)
 		web_event: WebEvent
 		for fw_poll_event(&web_event) {
@@ -1807,22 +1757,22 @@ poll_events :: proc(app: ^App) {
 					if app.OnExitRequested != nil {
 						app.OnExitRequested(app)
 					} else {
-						exit(app)
+						Exit(app)
 					}
 				}
 			case .WindowResized:
-				window_on_event(&app.Window, .WINDOW_RESIZED)
+				OnEvent(&app.Window, .WINDOW_RESIZED)
 			case .WindowFocusGained:
-				window_on_event(&app.Window, .WINDOW_FOCUS_GAINED)
+				OnEvent(&app.Window, .WINDOW_FOCUS_GAINED)
 			case .WindowFocusLost:
-				window_on_event(&app.Window, .WINDOW_FOCUS_LOST)
+				OnEvent(&app.Window, .WINDOW_FOCUS_LOST)
 			case .KeyDown:
 				if web_event.B == 0 {
-					input_key(&app.Input, cast(Keys)web_event.A, true, app.Time.Elapsed)
+					InputKey(&app.Input, cast(Keys)web_event.A, true, app.Time.Elapsed)
 				}
 			case .KeyUp:
 				if web_event.B == 0 {
-					input_key(&app.Input, cast(Keys)web_event.A, false, app.Time.Elapsed)
+					InputKey(&app.Input, cast(Keys)web_event.A, false, app.Time.Elapsed)
 				}
 			case .MouseMove:
 				position := Vec2f{web_event.F, web_event.G}
@@ -1835,30 +1785,30 @@ poll_events :: proc(app: ^App) {
 				   delta.X != 0 ||
 				   delta.Y != 0 {
 					app.Input.last_mouse = position
-					input_mouse_move(&app.Input, position, delta, app.Time.Elapsed)
+					InputMouseMove(&app.Input, position, delta, app.Time.Elapsed)
 				}
 			case .MouseButtonDown:
 				// 桌面靠 input_update 轮询坐标; Web 禁用轮询, 按事件自带坐标更新位置
 				position := Vec2f{web_event.F, web_event.G}
 				app.Input.last_mouse = position
-				input_mouse_move(&app.Input, position, Vec2f{0, 0}, app.Time.Elapsed)
-				input_mouse_button(
+				InputMouseMove(&app.Input, position, Vec2f{0, 0}, app.Time.Elapsed)
+				InputMouseButton(
 					&app.Input,
 					cast(MouseButtons)web_event.A,
 					true,
 					app.Time.Elapsed,
 				)
 			case .MouseButtonUp:
-				input_mouse_button(
+				InputMouseButton(
 					&app.Input,
 					cast(MouseButtons)web_event.A,
 					false,
 					app.Time.Elapsed,
 				)
 			case .MouseWheel:
-				input_mouse_wheel(&app.Input, Vec2f{web_event.F, web_event.G})
+				InputMouseWheel(&app.Input, Vec2f{web_event.F, web_event.G})
 			case .TextInput:
-				input_text(&app.Input, web_event_text(), &app.Window)
+				InputText(&app.Input, web_event_text(), &app.Window)
 			case .ControllerConnected:
 				name := web_event_text(context.allocator)
 				append(&app.Input.owned_controller_names, name)
@@ -1877,7 +1827,7 @@ poll_events :: proc(app: ^App) {
 			case .ControllerDisconnected:
 				input_disconnect_controller(&app.Input, ControllerID(web_event.A))
 			case .ControllerButtonDown, .ControllerButtonUp:
-				input_controller_button(
+				InputControllerButton(
 					&app.Input,
 					ControllerID(web_event.A),
 					int(web_event.B),
@@ -1885,7 +1835,7 @@ poll_events :: proc(app: ^App) {
 					app.Time.Elapsed,
 				)
 			case .ControllerAxis:
-				input_controller_axis(
+				InputControllerAxis(
 					&app.Input,
 					ControllerID(web_event.A),
 					int(web_event.B),
@@ -1913,7 +1863,7 @@ poll_events :: proc(app: ^App) {
 				if app.OnExitRequested != nil {
 					app.OnExitRequested(app)
 				} else {
-					exit(app)
+					Exit(app)
 				}
 			}
 		case .WINDOW_FOCUS_GAINED,
@@ -1928,7 +1878,7 @@ poll_events :: proc(app: ^App) {
 		     .WINDOW_LEAVE_FULLSCREEN,
 		     .WINDOW_CLOSE_REQUESTED:
 			if event.window.windowID == app.Window.ID {
-				window_on_event(&app.Window, event.type)
+				OnEvent(&app.Window, event.type)
 			}
 		case .MOUSE_BUTTON_DOWN,
 		     .MOUSE_BUTTON_UP,
@@ -1952,10 +1902,10 @@ poll_events :: proc(app: ^App) {
 }
 
 step_app :: proc(app: ^App, delta: coretime.Duration) {
-	app.Time = advance_time(app.Time, delta)
+	app.Time = Advance(app.Time, delta)
 
 	when ODIN_OS != .JS {
-		if SDL.GetWindowRelativeMouseMode(app.Window.Handle) && window_focused(&app.Window) {
+		if SDL.GetWindowRelativeMouseMode(app.Window.Handle) && Focused(&app.Window) {
 			SDL.WarpMouseInWindow(
 				app.Window.Handle,
 				f32(Width(&app.Window)) / 2,
@@ -1964,9 +1914,9 @@ step_app :: proc(app: ^App, delta: coretime.Duration) {
 		}
 	}
 
-	input_step(&app.Input, app.Time)
+	InputStep(&app.Input, app.Time)
 	input_update(&app.Input, &app.Window, app.Time.Elapsed)
-	poll_events(app)
+	PollEvents(app)
 	drain_main_thread_queue(app)
 
 	if app.UpdateProc != nil {
@@ -1974,7 +1924,7 @@ step_app :: proc(app: ^App, delta: coretime.Duration) {
 	}
 }
 
-tick_app :: proc(app: ^App) {
+Tick :: proc(app: ^App) {
 	delta_time: coretime.Duration
 	when ODIN_OS == .JS {
 		// 帧步长来自 foster.js 的 rAF 时间差(见 web.odin 的 foster_step)
@@ -2017,17 +1967,17 @@ tick_app :: proc(app: ^App) {
 		step_app(app, delta_time)
 	}
 
-	app.Time = advance_render_frame(app.Time)
-	if begin_frame(&app.GraphicsDevice) {
+	app.Time = AdvanceRenderFrame(app.Time)
+	if GraphicsDeviceBeginFrame(&app.GraphicsDevice) {
 		if app.RenderProc != nil {
 			app.RenderProc(app)
 		}
-		end_frame(&app.GraphicsDevice)
+		GraphicsDeviceEndFrame(&app.GraphicsDevice)
 	} else if app.RenderProc != nil {
 		app.RenderProc(app)
 	}
 	// [olib L-001] 每帧末尾清空临时分配器：Update/Render 中的临时分配到下一帧失效。
-	// Startup 中的临时分配在第一帧结束时失效；清理在 RenderProc 和 end_frame 之后执行。
+	// Startup 中的临时分配在第一帧结束时失效；清理在 RenderProc 和 GraphicsDeviceEndFrame 之后执行。
 	free_all(context.temp_allocator)
 }
 
@@ -2035,7 +1985,7 @@ tick_app :: proc(app: ^App) {
 // App / MainLoop — 更新、渲染与退出
 // ==============================================================================
 
-run :: proc(app: ^App) {
+Run :: proc(app: ^App) {
 	when ODIN_OS == .JS {
 		// 尽早把 App 搬到堆上: StartupProc 里初始化的游戏对象(Batcher 等)
 		// 会持有 &app.GraphicsDevice, 栈上 main 返回后即失效
@@ -2065,9 +2015,9 @@ run_impl :: proc(app: ^App) {
 		coretime.stopwatch_start(&app.timer)
 	}
 
-	poll_events(app)
-	input_step(&app.Input, app.Time)
-	window_show(&app.Window)
+	PollEvents(app)
+	InputStep(&app.Input, app.Time)
+	Show(&app.Window)
 
 	if app.StartupProc != nil {
 		app.StartupProc(app)
@@ -2081,7 +2031,7 @@ run_impl :: proc(app: ^App) {
 	}
 
 	for !app.Exiting {
-		tick_app(app)
+		Tick(app)
 	}
 	run_finish(app)
 }
@@ -2093,12 +2043,12 @@ run_finish :: proc(app: ^App) {
 		app.ShutdownProc(app)
 	}
 
-	window_hide(&app.Window)
+	Hide(&app.Window)
 	app.Running = false
 	app.Exiting = false
 }
 
-exit :: proc(app: ^App) {
+Exit :: proc(app: ^App) {
 	if app.Running {
 		app.Exiting = true
 	}
@@ -2107,12 +2057,3 @@ exit :: proc(app: ^App) {
 Now :: proc(app: ^App) -> coretime.Duration {
 	return coretime.stopwatch_duration(app.timer)
 }
-
-InitApp :: init_app
-Dispose :: dispose_app
-IsMainThread :: is_main_thread
-RunOnMainThread :: run_on_main_thread
-PollEvents :: poll_events
-Tick :: tick_app
-Run :: run
-Exit :: exit

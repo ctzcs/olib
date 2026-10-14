@@ -142,13 +142,13 @@ import_all :: proc(assets_root: string, library_root: string) -> (Import_Stats, 
 	stats: Import_Stats
 
 	assets_ds: foster.DirectoryStorage
-	foster.directory_storage_init(&assets_ds, assets_root, true)
-	assets := foster.directory_storage_as_container(&assets_ds)
+	foster.DirectoryStorageInit(&assets_ds, assets_root, true)
+	assets := foster.DirectoryStorageContainer(&assets_ds)
 
 	library_ds: foster.DirectoryStorage
-	foster.directory_storage_init(&library_ds, library_root, true)
-	library := foster.directory_storage_as_container(&library_ds)
-	_ = foster.storage_create_directory(library, "")
+	foster.DirectoryStorageInit(&library_ds, library_root, true)
+	library := foster.DirectoryStorageContainer(&library_ds)
+	_ = foster.CreateDirectory(library, "")
 
 	// 收集源文件与 .meta 的相对路径（context 分配，末尾统一释放）
 	sources: [dynamic]string
@@ -172,7 +172,7 @@ import_all :: proc(assets_root: string, library_root: string) -> (Import_Stats, 
 
 	for rel in sources {
 		meta_rel := strings.join({rel, META_EXT}, "")
-		had_meta := foster.storage_file_exists(assets, meta_rel)
+		had_meta := foster.FileExists(assets, meta_rel)
 		delete(meta_rel)
 
 		guid, err := meta_ensure(assets, rel)
@@ -214,7 +214,7 @@ import_all :: proc(assets_root: string, library_root: string) -> (Import_Stats, 
 			}
 		}
 
-		source := foster.storage_read_all_bytes(assets, rel)
+		source := foster.ReadAllBytes(assets, rel)
 		if source == nil {
 			fmt.eprintf("asset: 读不到源文件 %s\n", rel)
 			return stats, .File_Not_Found
@@ -244,7 +244,7 @@ import_all :: proc(assets_root: string, library_root: string) -> (Import_Stats, 
 
 		name_buf: [37]u8
 		name, _ := guid_filename(guid, name_buf[:])
-		written := foster.storage_write_all_bytes(library, name, blob)
+		written := foster.WriteAllBytes(library, name, blob)
 		delete(blob)
 		if !written {
 			fmt.eprintf("asset: 写 blob 失败 %s\n", rel)
@@ -293,7 +293,7 @@ collect_sources :: proc(
 	sources: ^[dynamic]string,
 	metas:   ^[dynamic]string,
 ) {
-	names := foster.storage_enumerate_directory(assets, rel_dir, context.allocator)
+	names := foster.EnumerateDirectory(assets, rel_dir, context.allocator)
 	for name in names {
 		rel := name
 		if rel_dir != "" {
@@ -302,7 +302,7 @@ collect_sources :: proc(
 			cloned, cerr := strings.clone(name, context.allocator)
 			if cerr == .None do rel = cloned
 		}
-		if foster.storage_directory_exists(assets, rel) {
+		if foster.DirectoryExists(assets, rel) {
 			collect_sources(assets, rel, sources, metas)
 			delete(rel)
 		} else if has_meta_ext(rel) {

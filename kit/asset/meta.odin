@@ -29,7 +29,7 @@ meta_read :: proc(assets: ^foster.StorageContainer, rel_path: string) -> (Guid, 
 	meta_rel := strings.join({rel_path, META_EXT}, "")
 	defer delete(meta_rel)
 
-	if !foster.storage_file_exists(assets, meta_rel) {
+	if !foster.FileExists(assets, meta_rel) {
 		return GUID_NONE, .Meta_Missing
 	}
 

@@ -32,11 +32,11 @@ material_render_state_dispatch :: proc(t: ^testing.T) {
 @(test)
 mesh3d_format_strides :: proc(t: ^testing.T) {
 	static := mesh3d_static_format()
-	defer foster.vertex_format_dispose(&static)
+	defer foster.VertexFormatDispose(&static)
 	testing.expect(t, static.Stride == 48 && len(static.Elements) == 4)
 
 	skin := mesh3d_skin_format()
-	defer foster.vertex_format_dispose(&skin)
+	defer foster.VertexFormatDispose(&skin)
 	testing.expect(t, skin.Stride == 68 && len(skin.Elements) == 6)
 }
 

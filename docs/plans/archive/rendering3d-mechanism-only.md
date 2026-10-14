@@ -1,5 +1,8 @@
 # Plan：kit/rendering3d 只保留机制，Standard 管线移到示例
 
+> **状态：已完成（2026-10-14）** · 提交 `96e58b7`..`ed8b155`（olib_sample：`9092518`）
+> 偏离：① 步骤顺序改为“队列泛型化 → check.ps1 → 删 kit 管线 → shadercross → 示例提交”：kit 队列原先绑着 kit 的材质类型，示例无法先复制；示例着色器又必须先修正、重编才能跑通。② 计划外修复了原管线从未跑过而暴露的问题：`queue_view_depth` 忽略 world 矩阵且符号相反；着色器 `mul(M, v)` 与 world 行向量约定相反（kit DebugLine3D 与示例 Standard 一并改为 `mul(v, M)`）；`BlendMode.Mask` 零值关闭颜色写入（调试线与半透明都画不出）；光照块 80→112B、阴影块 160→320B、采样器 6→9 与 HLSL 不一致；蒙皮两块 palette 共用同一 scratch 内存。③ 换 shadercross 后不做字节比对，以 D3D12 / Vulkan 截图一致为准；Metal 只确认 `.msl` 生成与 `#load` 编译通过，未实测。④ `shader3d_debug_line_dispose` 未新增（`debug_draw_dispose` 已直接释放）。
+
 ## 背景
 
 `kit/rendering3d` 现在包含两类性质不同的东西：

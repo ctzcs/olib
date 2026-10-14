@@ -11,7 +11,7 @@
 
 ## 提交前
 
-- 在仓库根目录运行 `powershell -File check.ps1`，全部通过才提交（包含全部包的 `-vet`、单元测试、foster 回归程序与示例编译）。
+- 运行 `odin run tools/check`（任意目录均可，跨平台），全部通过才提交（包含全部包的 `-vet`、单元测试、foster 回归程序、LOCAL_CHANGES 校验与示例编译）。
 - 结果如实汇报：失败就贴输出，跳过的步骤要写明。
 
 ## 计划（docs/plans）

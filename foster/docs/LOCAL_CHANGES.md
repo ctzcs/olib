@@ -13,7 +13,7 @@
 3. **优先新增、少改原文件**：纯新增能力放在 `olib_ext.odin`（或按主题的 `olib_*.odin`），
    移植文件尽量保持与 C# 一一对应；只有新增无法实现时才改移植代码。
 4. **提交前缀**：本地修改用 `foster(local): L-001 简述`；同步上游用 `foster(port): sync Foster vX.Y.Z`。
-5. **检查**：提交前运行 `powershell -File foster/tests/check_local_changes.ps1`，
+5. **检查**：提交前运行 `odin run tools/check -- -only:local`（全量检查也包含），
    代码标记与本表编号必须一一对应。
 
 字段说明：

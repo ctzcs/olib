@@ -2,8 +2,8 @@
 //
 // foster.ShaderInit 按驱动决定格式（Vulkan→SPIRV、D3D12→DXIL、Metal→MSL），
 // 调用方只需交给它对应格式的字节码：shader3d_pick_code 负责这一步。
-// 字节码由 shaders/build_shaders.ps1（SDL_shadercross）编译后入库、#load 内嵌；游戏自己的着色器
-// 用同一个脚本（-Dir 指向自己的目录）编译，再用 shader3d_pick_code 选择。
+// 字节码由 olib 根目录的 tools/shaders（SDL_shadercross）编译后入库、#load 内嵌；
+// 游戏自己的着色器用同一个工具（-dir: 指向自己的目录）编译，再用 shader3d_pick_code 选择。
 // Web 后端走 WebGL + 手写 GLSL，不在这里。
 package rendering3d
 

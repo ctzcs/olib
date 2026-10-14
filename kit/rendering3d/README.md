@@ -10,7 +10,7 @@
 | `uniforms3d.odin` | `std140_write_matrix` / `std140_write_vec4`、WVP + World 顶点矩阵块、骨骼 palette 打包 |
 | `debug_draw3d.odin` | 立即模式调试线（线、盒、球、视锥、网格、骨架） |
 | `lod3d.odin` | 按屏幕高度选 LOD |
-| `shaders/build_shaders.ps1` | 用 SDL_shadercross 把 HLSL 编译成 spv / dxil / msl |
+| `shaders/` | DebugLine3D 的 HLSL 与编译产物；编译工具是 olib 根目录的 `tools/shaders` |
 
 光照模型、材质、阴影、后处理都**不在这里**，由游戏自己写。参考实现是同级仓库
 olib_sample 里的 `src/forward3d`（Standard PBR 前向渲染器：方向光、点光、聚光、半透明排序），
@@ -58,7 +58,7 @@ float4 fragment_main(VsOutput i) : SV_Target0
 需要 [SDL_shadercross](https://github.com/libsdl-org/SDL_shadercross)（PATH 上的 `shadercross`）。在游戏根目录：
 
 ```bash
-powershell -File ../olib/kit/rendering3d/shaders/build_shaders.ps1 -Dir src/shaders
+odin run ../olib/tools/shaders -- -dir:src/shaders
 ```
 
 产物写到 `src/shaders/Compiled/`：`Toon.vertex.{spv,dxil,msl}`、`Toon.fragment.{spv,dxil,msl}`。

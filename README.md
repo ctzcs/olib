@@ -103,11 +103,13 @@ main :: proc() {
 
 ## 测试
 
-提交前在仓库根目录运行一键验证（任何一项失败即以非零退出码结束）：
+提交前运行一键验证（任何一项失败即以非零退出码结束）。工具用 Odin 写成，只依赖 `core:*`，
+Windows / macOS / Linux 通用，可在任意目录运行：
 
-```powershell
-powershell -File check.ps1             # 全部检查
-powershell -File check.ps1 -NoSamples  # 跳过同级 olib_sample 示例编译
+```bash
+odin run tools/check                    # 全部检查
+odin run tools/check -- -no-samples     # 跳过同级 olib_sample 示例的编译与测试
+odin run tools/check -- -only:kit/ui    # 只运行名称含该子串的检查项
 ```
 
 它会自动发现并运行 `core/`、`kit/` 下所有含 `@(test)` 的包，检查 `foster` 包、编译 foster 自带回归程序与

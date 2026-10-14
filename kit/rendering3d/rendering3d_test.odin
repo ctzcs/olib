@@ -40,42 +40,40 @@ mesh3d_format_strides :: proc(t: ^testing.T) {
 	testing.expect(t, skin.Stride == 68 && len(skin.Elements) == 6)
 }
 
-@(private)
-make_item :: proc(depth: f32, transparent: bool) -> Render_Item {
-	item: Render_Item
-	item.view_depth = depth
-	item.material.state.transparent = transparent
-	item.world = world.MATRIX4_IDENTITY
-	return item
-}
-
 @(test)
 queue_sort_buckets_and_depth :: proc(t: ^testing.T) {
-	q: Render_Queue
+	q: Render_Queue(int)
 	defer queue_dispose(&q)
 
-	// 提交乱序：透明(5)、不透明(10)、透明(1)、不透明(2)
-	queue_submit(&q, nil, material_of(make_item(5, true)), world.MATRIX4_IDENTITY, 5)
-	queue_submit(&q, nil, material_of(make_item(10, false)), world.MATRIX4_IDENTITY, 10)
-	queue_submit(&q, nil, material_of(make_item(1, true)), world.MATRIX4_IDENTITY, 1)
-	queue_submit(&q, nil, material_of(make_item(2, false)), world.MATRIX4_IDENTITY, 2)
+	// 提交乱序：透明(5)、不透明(10)、透明(1)、不透明(2)；payload 记提交序
+	queue_submit(&q, 0, 5, true)
+	queue_submit(&q, 1, 10, false)
+	queue_submit(&q, 2, 1, true)
+	queue_submit(&q, 3, 2, false)
 
 	queue_sort(&q)
 
 	// 不透明在前（前到后 2,10），透明在后（后到前 5,1）
 	testing.expect(t, len(q.items) == 4)
-	testing.expectf(t, !q.items[0].material.state.transparent && q.items[0].view_depth == 2, "0")
-	testing.expectf(t, !q.items[1].material.state.transparent && q.items[1].view_depth == 10, "1")
-	testing.expectf(t, q.items[2].material.state.transparent && q.items[2].view_depth == 5, "2")
-	testing.expectf(t, q.items[3].material.state.transparent && q.items[3].view_depth == 1, "3")
+	order := [4]int{q.items[0].payload, q.items[1].payload, q.items[2].payload, q.items[3].payload}
+	testing.expectf(t, order == [4]int{3, 1, 0, 2}, "排序结果 %v", order)
+	testing.expect(t, !q.items[0].transparent && q.items[3].transparent)
 
 	queue_clear(&q)
 	testing.expect(t, len(q.items) == 0)
 }
 
-@(private)
-material_of :: proc(item: Render_Item) -> Standard_Material_3D {
-	return item.material
+@(test)
+queue_view_depth_uses_object_position :: proc(t: ^testing.T) {
+	camera: world.Camera3D
+	world.camera3d_init(&camera, 1280, 720)
+	world.camera3d_set_position(&camera, {0, 0, 10})
+	world.camera3d_set_target(&camera, {0, 0, 0})
+
+	near := queue_view_depth(&camera, world.matrix4_translation(0, 0, 5))
+	far := queue_view_depth(&camera, world.matrix4_translation(0, 0, -5))
+	testing.expectf(t, math.abs(near - 5) < 1e-4, "近处物体距离 5: %v", near)
+	testing.expectf(t, math.abs(far - 15) < 1e-4, "远处物体距离 15: %v", far)
 }
 
 // ---------------------------------------------------------------------------

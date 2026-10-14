@@ -12,7 +12,7 @@ import world "olib:kit/world"
 // 分区：
 //   顶点槽 —— 矩阵块（槽 0）/ 阴影矩阵（槽 1）/ 骨骼 palette（槽 2、3）
 //   片元槽 —— 光照（槽 0）/ 材质（槽 1）/ 阴影（槽 2）/ 点光（槽 3）
-//   打包辅助 —— 矩阵/vec4 写入
+//   std140 写入 —— 矩阵/vec4（公开，供游戏打包自己的 cbuffer）
 
 // ------------------------------------------------------------------------------
 // 顶点槽 —— 矩阵块（槽 0）/ 阴影矩阵（槽 1）
@@ -30,15 +30,15 @@ SHADOW_MATRIX_BLOCK_SIZE :: 64 // 单矩阵
 // 打包槽 0（WVP/World）。buf 长度不足返回 false。
 pack_vertex_matrix_block :: proc(buf: []u8, wvp, world_matrix: world.Matrix4) -> bool {
 	if len(buf) < VERTEX_MATRIX_BLOCK_SIZE { return false }
-	write_matrix(buf, 0, wvp)
-	write_matrix(buf, 64, world_matrix)
+	std140_write_matrix(buf, 0, wvp)
+	std140_write_matrix(buf, 64, world_matrix)
 	return true
 }
 
 // 打包槽 1（阴影 LightViewProjection，单矩阵 64B）。
 pack_shadow_matrix_block :: proc(buf: []u8, light_view_projection: world.Matrix4) -> bool {
 	if len(buf) < SHADOW_MATRIX_BLOCK_SIZE { return false }
-	write_matrix(buf, 0, light_view_projection)
+	std140_write_matrix(buf, 0, light_view_projection)
 	return true
 }
 
@@ -56,14 +56,14 @@ pack_joint_palette :: proc(
 
 	for i in 0..<64 {
 		if i < len(palette) {
-			write_matrix(buf0, i * 64, palette[i])
+			std140_write_matrix(buf0, i * 64, palette[i])
 		} else {
-			write_matrix(buf0, i * 64, world.MATRIX4_IDENTITY)
+			std140_write_matrix(buf0, i * 64, world.MATRIX4_IDENTITY)
 		}
 		if i + 64 < len(palette) {
-			write_matrix(buf1, i * 64, palette[i + 64])
+			std140_write_matrix(buf1, i * 64, palette[i + 64])
 		} else {
-			write_matrix(buf1, i * 64, world.MATRIX4_IDENTITY)
+			std140_write_matrix(buf1, i * 64, world.MATRIX4_IDENTITY)
 		}
 	}
 	return true
@@ -88,11 +88,11 @@ LIGHT_BLOCK_SIZE :: 80
 
 pack_light_block :: proc(buf: []u8, light: ^Light_Block) -> bool {
 	if len(buf) < LIGHT_BLOCK_SIZE { return false }
-	write_vec4(buf, 0, light.light_direction)
-	write_vec4(buf, 16, light.ambient)
-	write_vec4(buf, 32, light.diffuse)
-	write_vec4(buf, 48, light.camera_position)
-	write_vec4(buf, 64, light.color_pipeline)
+	std140_write_vec4(buf, 0, light.light_direction)
+	std140_write_vec4(buf, 16, light.ambient)
+	std140_write_vec4(buf, 32, light.diffuse)
+	std140_write_vec4(buf, 48, light.camera_position)
+	std140_write_vec4(buf, 64, light.color_pipeline)
 	return true
 }
 
@@ -125,12 +125,12 @@ MATERIAL_BLOCK_SIZE :: 96
 
 pack_material_block :: proc(buf: []u8, m: ^Material_Block) -> bool {
 	if len(buf) < MATERIAL_BLOCK_SIZE { return false }
-	write_vec4(buf, 0, m.base_color)
-	write_vec4(buf, 16, m.flags)
-	write_vec4(buf, 32, m.alpha)
-	write_vec4(buf, 48, m.pbr)
-	write_vec4(buf, 64, m.textures)
-	write_vec4(buf, 80, m.emissive)
+	std140_write_vec4(buf, 0, m.base_color)
+	std140_write_vec4(buf, 16, m.flags)
+	std140_write_vec4(buf, 32, m.alpha)
+	std140_write_vec4(buf, 48, m.pbr)
+	std140_write_vec4(buf, 64, m.textures)
+	std140_write_vec4(buf, 80, m.emissive)
 	return true
 }
 
@@ -190,22 +190,22 @@ pack_point_light_block :: proc(buf: []u8, lights: []Point_Light, spot_lights: []
 	if len(buf) < POINT_LIGHT_BLOCK_SIZE { return false }
 
 	count := min(len(lights), MAX_POINT_LIGHTS)
-	write_vec4(buf, 0, {f32(count), 0, 0, 0})
+	std140_write_vec4(buf, 0, {f32(count), 0, 0, 0})
 	for i in 0..<MAX_POINT_LIGHTS {
 		if i < count {
 			l := lights[i]
-			write_vec4(buf, 16 + i*16, {l.position[0], l.position[1], l.position[2], l.range})
-			write_vec4(buf, 16 + (MAX_POINT_LIGHTS + i)*16, {l.color[0], l.color[1], l.color[2], l.intensity})
+			std140_write_vec4(buf, 16 + i*16, {l.position[0], l.position[1], l.position[2], l.range})
+			std140_write_vec4(buf, 16 + (MAX_POINT_LIGHTS + i)*16, {l.color[0], l.color[1], l.color[2], l.intensity})
 		} else {
-			write_vec4(buf, 16 + i*16, {0, 0, 0, 0})
-			write_vec4(buf, 16 + (MAX_POINT_LIGHTS + i)*16, {0, 0, 0, 0})
+			std140_write_vec4(buf, 16 + i*16, {0, 0, 0, 0})
+			std140_write_vec4(buf, 16 + (MAX_POINT_LIGHTS + i)*16, {0, 0, 0, 0})
 		}
 	}
 
 	// 聚光：meta 在 33 号 vec4，其后 4 组各 16
 	base := 33 * 16
 	spot_count := min(len(spot_lights), MAX_POINT_LIGHTS)
-	write_vec4(buf, base, {f32(spot_count), 0, 0, 0})
+	std140_write_vec4(buf, base, {f32(spot_count), 0, 0, 0})
 	for i in 0..<MAX_POINT_LIGHTS {
 		if i < spot_count {
 			l := spot_lights[i]
@@ -222,13 +222,13 @@ pack_point_light_block :: proc(buf: []u8, lights: []Point_Light, spot_lights: []
 			color := [3]f32{
 				max(l.color[0], 0), max(l.color[1], 0), max(l.color[2], 0),
 			}
-			write_vec4(buf, base + 16 + i*16, {l.position[0], l.position[1], l.position[2], max(l.range, 0)})
-			write_vec4(buf, base + 16 + (16 + i)*16, {color[0], color[1], color[2], max(l.intensity, 0)})
-			write_vec4(buf, base + 16 + (32 + i)*16, {dx, dy, dz, math.cos(outer)})
-			write_vec4(buf, base + 16 + (48 + i)*16, {math.cos(inner), 0, 0, 0})
+			std140_write_vec4(buf, base + 16 + i*16, {l.position[0], l.position[1], l.position[2], max(l.range, 0)})
+			std140_write_vec4(buf, base + 16 + (16 + i)*16, {color[0], color[1], color[2], max(l.intensity, 0)})
+			std140_write_vec4(buf, base + 16 + (32 + i)*16, {dx, dy, dz, math.cos(outer)})
+			std140_write_vec4(buf, base + 16 + (48 + i)*16, {math.cos(inner), 0, 0, 0})
 		} else {
 			for g in 0..<4 {
-				write_vec4(buf, base + 16 + (g*16 + i)*16, {0, 0, 0, 0})
+				std140_write_vec4(buf, base + 16 + (g*16 + i)*16, {0, 0, 0, 0})
 			}
 		}
 	}
@@ -236,19 +236,19 @@ pack_point_light_block :: proc(buf: []u8, lights: []Point_Light, spot_lights: []
 }
 
 // ------------------------------------------------------------------------------
-// 打包辅助 —— 矩阵/vec4 写入（小端，按 f32 位型直写）
+// std140 写入 —— 矩阵/vec4（小端，按 f32 位型直写）
 // ------------------------------------------------------------------------------
 
-@(private)
-write_matrix :: proc(buf: []u8, offset: int, m: world.Matrix4) {
-	write_vec4(buf, offset, m.c0)
-	write_vec4(buf, offset + 16, m.c1)
-	write_vec4(buf, offset + 32, m.c2)
-	write_vec4(buf, offset + 48, m.c3)
+// 在 offset 处写一个 Matrix4（4 列 × 16B = 64B，列主序）。越界的列跳过。
+std140_write_matrix :: proc(buf: []u8, offset: int, m: world.Matrix4) {
+	std140_write_vec4(buf, offset, m.c0)
+	std140_write_vec4(buf, offset + 16, m.c1)
+	std140_write_vec4(buf, offset + 32, m.c2)
+	std140_write_vec4(buf, offset + 48, m.c3)
 }
 
-@(private)
-write_vec4 :: proc(buf: []u8, offset: int, v: [4]f32) {
+// 在 offset 处写一个 vec4（16B）。越界时不写。
+std140_write_vec4 :: proc(buf: []u8, offset: int, v: [4]f32) {
 	if offset + 16 > len(buf) { return }
 	for i in 0..<4 {
 		bits := transmute(u32)v[i]

@@ -28,6 +28,14 @@ Renderer3D :: struct {
 	scratch: [dynamic]u8, // uniform 打包临时
 }
 
+// Standard 管线的渲染项 payload（经 Render_Queue(Standard_Draw) 排序）。
+Standard_Draw :: struct {
+	mesh:     ^foster.Mesh, // Foster Mesh（上传于 mesh3d_upload）
+	material: Standard_Material_3D,
+	world:    world.Matrix4,
+	skinned:  bool, // 蒙皮走 palette 槽的材质变体
+}
+
 renderer3d_init :: proc(r: ^Renderer3D, device: ^foster.GraphicsDevice) -> bool {
 	if device == nil { return false }
 	r.device = device
@@ -59,7 +67,7 @@ renderer3d_render :: proc(
 	point_lights: []Point_Light,
 	spot_lights: []Spot_Light,
 	target:      foster.DrawableTarget,
-	queue:       ^Render_Queue,
+	queue:       ^Render_Queue(Standard_Draw),
 	palette:     []world.Matrix4,
 ) -> int {
 	if r.device == nil { return 0 }
@@ -85,7 +93,8 @@ renderer3d_render :: proc(
 	view_projection := world.camera3d_view_projection(camera)
 
 	drawn := 0
-	for &item in queue.items {
+	for &queued in queue.items {
+		item := &queued.payload
 		mesh := item.mesh
 		if mesh == nil { continue }
 		skinned := item.skinned

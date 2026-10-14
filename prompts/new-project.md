@@ -66,7 +66,6 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 ├─ .gitignore
 ├─ ols.json                      OLS 语言服务器配置（olib 与 game 两个 collection）
 ├─ play.bat                      构建并运行开发版（参数透传给游戏）
-├─ check.ps1                     全部测试 + 层间依赖检查 + 编译
 ├─ publish.bat                   Windows Release 发布入口
 ├─ publish_web.bat               可选，Web 发布入口，支持 serve
 ├─ src/                          collection `game`
@@ -86,7 +85,8 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 │  └─ audio/                     按需添加音频
 ├─ shaders/                      可选，Shader 源码
 │  └─ compiled/                  运行所需的预编译产物（随仓库提交，`#load` 嵌入）
-├─ tools/                        构建、资源处理和检查脚本（如 check_layers.ps1）
+├─ tools/                        构建期工具，每个一个 Odin package main
+│  └─ check/                     一键检查（odin run tools/check）：全部测试 + 层间依赖检查 + 编译
 ├─ docs/
 │  ├─ README.md                  文档索引
 │  ├─ gameplay/  design/  tech/  records/  archive/
@@ -150,7 +150,7 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 
 ```powershell
 .\play.bat
-.\check.ps1
+odin run tools/check
 .\publish.bat
 .\publish_web.bat
 .\publish_web.bat serve
@@ -161,7 +161,7 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 先按五层职责确定代码所在的包，再在层内按功能拆文件或子包。五层的职责与 import 规则只在 olib 的 `prompts/dod-guidelines.md` 第 2 节维护（包括 `view` 如何拿到查询结果、可选的 `ids` 包），创建项目前先读该节，按其中的表建立包结构和层间检查。以下只列创建项目时额外要做的事：
 
 - `logic` 不依赖 foster，才能在 `odin test` 里无窗口运行；向量用 `[2]f32` 或 `core:math/linalg`，需要和 foster 类型互转的地方放在 `game` 或 `view`。
-- 写 `tools/check_layers.ps1`：解析每个包的 `import` 行，按 dod-guidelines 的表验证，`*_test.odin` 按测试规则单独检查；Odin 的 import 只能写在文件顶部且必须是字符串字面量，按行解析是可靠的。把它接进 `check.ps1`。
+- 在 `tools/check` 里写层间依赖检查（如 `tools/check/layers.odin`）：解析每个包的 `import` 行，按 dod-guidelines 的表验证，`*_test.odin` 按测试规则单独检查；Odin 的 import 只能写在文件顶部且必须是字符串字面量，按行解析是可靠的。
 - 不为每个功能增加“接口”或回调注册表来规避依赖方向；没有实际复用需求时，显式传参即可。
 
 ### 状态和规则如何写
@@ -435,7 +435,7 @@ shutdown :: proc(app: ^foster.App) {
 5. 目标平台包含 Web 时，按“桌面与 Web 发布入口”的约束拆出平台文件，核对资源内嵌、用户存储和 HTTP 预览，不直接复制桌面文件系统假设。
 6. 实现 `publish.bat`（和需要时的 `publish_web.bat`），验证实际产物；不能以开发构建能启动代替发布包可运行。
 7. 为 `logic` 及实际创建的子包写 `*_test.odin`（`#+test` + `@(test)`），用 `odin test` 无窗口运行；画面与输入用游戏 exe 的 `shot` / `smoke` 参数验证（参考 olib_sample 的 game_ui：注入点击、渲染一帧、写 PNG 后退出）。
-8. 编写 `check.ps1`：自动发现并运行所有含 `@(test)` 的包、运行 `tools/check_layers.ps1`、编译游戏；任何一项失败返回非零退出码（可参考 olib 根目录的 `check.ps1`）。
+8. 编写 `tools/check`（Odin package main，只依赖 `core:*`，用 `odin run tools/check` 运行，跨平台）：自动发现并运行所有含 `@(test)` 的包、运行层间依赖检查、编译游戏；任何一项失败返回非零退出码（可参考 olib 根目录的 `tools/check`）。
 9. 完成 README、`src/` 分层说明和简短 AGENTS.md。README 写明脚本用法、输出目录及依赖；新文档加入 `docs/README.md`，说明真实实现与尚未实现的内容。AGENTS.md 写明编码风格与注释遵循 olib 的 `docs/CODE_STYLE.md` 第 2～5 节，数据布局与分层遵循 olib 的 `prompts/dod-guidelines.md`（写出 olib 的相对路径），并写入计划归档规则：多步改动计划放 `docs/plans/`，完成并验收后由执行者 `git mv` 到 `docs/plans/archive/`、在标题下写完成日期、commit 范围与偏离，单独提交（规则原文见 olib 的 `docs/plans/README.md`）。
 
 至少验证以下内容：
@@ -443,7 +443,7 @@ shutdown :: proc(app: ^foster.App) {
 - 构建成功，游戏能够启动，默认场景可以操作并重开。
 - `logic` 可无窗口测试，覆盖正常路径及关键拒绝条件；涉及缓存或句柄时验证失效和复用。
 - 层间依赖检查覆盖 dod-guidelines 第 2 节表中的禁止导入（尤其 `logic` 不得 import foster/kit/view，模拟各层的非测试文件不得 import `ids`），以及任何代码不得 import `olib:foster/internal`。
-- 游戏用 `-vet` 编译通过，检查游戏及其可达依赖；olib 的 `check.ps1` 已对所有第一方包启用 vet。
+- 游戏用 `-vet` 编译通过，检查游戏及其可达依赖；olib 的 `tools/check` 已对所有第一方包启用 vet。
 - UI 的文字、按钮和输入命中正确，点击不会穿透；文字在各缩放下锐利，窗口缩放和语言切换不会导致明显溢出。
 - 配置出错能定位原因；涉及保存时，写入和重新读取的内容一致。
 - 开发构建用 Tracking_Allocator 运行一局并退出，没有未释放的分配。
@@ -455,7 +455,7 @@ shutdown :: proc(app: ^foster.App) {
 
 ```powershell
 .\play.bat
-.\check.ps1
+odin run tools/check
 odin test src/logic -collection:olib=..\olib -collection:game=src
 .\play.bat shot
 ```
@@ -476,7 +476,7 @@ odin test src/logic -collection:olib=..\olib -collection:game=src
 
 | 主题 | 库内入口 |
 | --- | --- |
-| 仓库结构、使用方式与一键验证 | [README](../README.md)、[check.ps1](../check.ps1) |
+| 仓库结构、使用方式与一键验证 | [README](../README.md)、[tools/check](../tools/check/main.odin) |
 | 编码规范与 foster/kit 边界 | [CODE_STYLE.md](../docs/CODE_STYLE.md) |
 | 已有能力与后续计划 | [ROADMAP.md](../docs/ROADMAP.md) |
 | 运行时（App、窗口、输入、图形、存储） | [foster README](../foster/README.md)、[移植映射与 API 差异](../foster/docs/PORTING_MAP.md) |

@@ -1,7 +1,7 @@
 # olib 路线图
 
 以 DragonLib（C#/Foster，`Libs/Engine` 为主）为参照体：已移植了什么、还剩什么、哪些明确不做。
-规范见 [CODE_STYLE.md](CODE_STYLE.md)；验证统一用根目录 `check.ps1`。
+规范见 [CODE_STYLE.md](CODE_STYLE.md)；验证统一用 `odin run tools/check`。
 
 ## 现状（2026-10）
 
@@ -58,8 +58,8 @@ DragonLib JobScheduler 的主要价值（区间分批 `ScheduleParallel`、每�
 ### 工具链（构建期，随 3D 需求一起看）
 
 FbxToGltf、QoaEncode、msdf-atlas-gen（需要尖角质量时再做）、DataConfig。
-ShaderCompiler 的编译部分已由 `kit/rendering3d/shaders/build_shaders.ps1` 覆盖（SDL_shadercross，HLSL → spv/dxil/msl，
-`-Dir` 指定任意目录）；哈希清单需要增量编译时再加。
+ShaderCompiler 的编译部分已由 `tools/shaders` 覆盖（`odin run tools/shaders`，SDL_shadercross，HLSL → spv/dxil/msl，
+`-dir:` 指定任意目录）；哈希清单需要增量编译时再加。
 
 ## 明确不做
 

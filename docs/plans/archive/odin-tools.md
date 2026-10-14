@@ -1,5 +1,8 @@
 # Plan：仓库工具脚本改用 Odin 编写
 
+> **状态：已完成（2026-10-14）** · 提交 `d0a2626`..`ff11dc7`（olib_sample：`146369b`）
+> 偏离：① `-only` / `-dir` 额外接受被拆开的写法（`-only: x`、`-only x`）：PowerShell 会把 `-only:x` 拆成两个参数传给原生程序。② LOCAL_CHANGES 的成功汇总行（“本地修改标记一致：N 条记录”）与其他检查项一样只在失败时打印，条数未单独核对；三种故障注入的输出与 ps1 逐字一致。③ 重新编译的 18 个着色器产物按 git 规范化后的 blob 比对（MSL 是文本，工作区换行符随 autocrlf 不同），全部一致。④ 执行第 4 步时，我的 Python 脚本先截断了 olib_sample 的 README.md 才断言失败，导致用户未提交的 book_ui 段落丢失；已从本机会话记录恢复，恢复结果的 git 哈希与原工作区版本（`a04ad7f`）一致。
+
 ## 背景
 
 olib 的开发工具目前都是 PowerShell 脚本，并且都用 `powershell -File ...` 调用：

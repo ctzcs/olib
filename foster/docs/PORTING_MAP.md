@@ -419,4 +419,4 @@ foster 对外 API 只用上游 Foster 的 PascalCase，每个函数一个名字�
 3. 按本表把每个改动的 C# 文件映射到对应 Odin 文件并移植。
 4. 跑 `tests/webtest`（native + `js_wasm32`）与 `tests/graphics_regression`，以及
    `build/glade-regression` 与 `build/exhaustive-format-check`（若适用）。
-5. 运行 `tests/check_local_changes.ps1`；更新 `README.md` 的 baseline、`framework.odin` 的版本号和本表。
+5. 运行 `odin run tools/check -- -only:local`（olib 根目录的 `tools/check`）；更新 `README.md` 的 baseline、`framework.odin` 的版本号和本表。

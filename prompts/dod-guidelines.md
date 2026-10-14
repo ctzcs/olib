@@ -55,7 +55,7 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 - 依赖当前输入、又需要规则判断的预览（光标处能否放置、路径预览、升级后的数值）由 `game` 在 `RenderProc` 中调用 `logic` 的只读查询，填入 `view` 定义的输入结构（如 `view.Place_Preview`）后传给 `view`。执行命令的 logic proc 复用同一个检查（`place_building` 先调用 `place_check`），预览和结果不会分歧；`view` 只按结果显示、翻译拒绝原因，不自行判断合法性。开销大的查询（如寻路）由 `game` 缓存上次结果，输入变化时才重算。
 - 只读查询多到 `game` 难以维护时，可拆出 `logic/query` 子包并允许 `view` import；执行命令的 logic 也 import 它复用检查。Odin 没有只读指针，“查询不修改数据”靠约定与测试保证。查询只有少数几个时不拆。
 - 同一功能在对应层中使用一致的名称，例如 `def/units.odin`、`data/units.odin`、`logic/units.odin`、`view/units.odin`。文件装载按需独立为 `content` 或工具入口，不强制额外创建 `authoring` 包；装载器依赖 `def`，模拟各层不反向依赖装载器。
-- 不用转发 proc、包级别名或“桥接包”掩盖跨层引用。层界由 `tools/check_layers.ps1` 解析各包的 `import` 行验证（Odin 的 import 是文件顶部的字符串字面量，按行解析可靠）。检查只能看到 import，看不到引用了哪个符号，所以要禁止的符号必须放在单独的包里（如 `ids`）。`*_test.odin` 文件按测试规则单独检查，允许 import `ids`。
+- 不用转发 proc、包级别名或“桥接包”掩盖跨层引用。层界由游戏 `tools/check` 里的层间依赖检查解析各包的 `import` 行验证（Odin 的 import 是文件顶部的字符串字面量，按行解析可靠）。检查只能看到 import，看不到引用了哪个符号，所以要禁止的符号必须放在单独的包里（如 `ids`）。`*_test.odin` 文件按测试规则单独检查，允许 import `ids`。
 
 ### 3. 数据驱动的内容目录
 
@@ -117,7 +117,7 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 3. 新的权威状态放入 `data` 的对应模拟实例；表现状态放入 `view`。派生量注明来源、失效条件和所有者，不另建共享的可变全局量。
 4. 新缓存写明来源、失效条件和所有者。
 5. 热点路径不引入逐实体分配、proc 指针分发、反射或 `map` 迭代。
-6. 改完运行 `check.ps1` 和相关冒烟；修改默认数值时，同时更新代码默认值、JSON 和生成的 Schema。
+6. 改完运行 `odin run tools/check` 和相关冒烟；修改默认数值时，同时更新代码默认值、JSON 和生成的 Schema。
 
 ## 提示词结束
 

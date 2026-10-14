@@ -196,13 +196,14 @@ CircleBounds :: proc(circle: Circle) -> Rect {
 }
 
 CircleContains :: proc(circle: Circle, point: Vec2) -> bool {
-	return vec2_length_squared(vec2_sub(circle.Position, point)) < circle.Radius * circle.Radius
+	return Vec2LengthSquared(vec2_sub(circle.Position, point)) < circle.Radius * circle.Radius
 }
 
+@(private)
 circle_overlaps_circle :: proc(circle, other: Circle) -> (overlaps: bool, pushout: Vec2) {
 	combined := circle.Radius + other.Radius
 	delta := vec2_sub(circle.Position, other.Position)
-	distance_squared := vec2_length_squared(delta)
+	distance_squared := Vec2LengthSquared(delta)
 	if distance_squared >= combined * combined {
 		return false, Vec2{}
 	}
@@ -216,7 +217,7 @@ circle_overlaps_circle :: proc(circle, other: Circle) -> (overlaps: bool, pushou
 CircleOverlapsCenter :: proc(circle: Circle, center: Vec2, radius: f32) -> bool {
 	delta := vec2_sub(circle.Position, center)
 	combined := circle.Radius + radius
-	return vec2_length_squared(delta) < combined * combined
+	return Vec2LengthSquared(delta) < combined * combined
 }
 CircleOverlaps :: proc {
 	circle_overlaps_circle,
@@ -228,7 +229,7 @@ CircleOverlapsLine :: proc(circle: Circle, line: Line) -> bool {
 }
 
 CircleProject :: proc(circle: Circle, axis: Vec2) -> (min, max: f32) {
-	unit := vec2_normalized(axis)
+	unit := Vec2Normalized(axis)
 	center := vec2_dot(circle.Position, unit)
 	return center - circle.Radius, center + circle.Radius
 }
@@ -431,42 +432,37 @@ AxisOverlaps :: proc(min_a, max_a, min_b, max_b: f32) -> (overlaps: bool, amount
 // ==============================================================================
 Vec2 :: [2]f32
 
+@(private)
 vec2_add :: proc(a, b: Vec2) -> Vec2 {
 	return Vec2{a[0] + b[0], a[1] + b[1]}
 }
 
+@(private)
 vec2_sub :: proc(a, b: Vec2) -> Vec2 {
 	return Vec2{a[0] - b[0], a[1] - b[1]}
 }
 
+@(private)
 vec2_scale :: proc(v: Vec2, scalar: f32) -> Vec2 {
 	return Vec2{v[0] * scalar, v[1] * scalar}
 }
 
+@(private)
 vec2_dot :: proc(a, b: Vec2) -> f32 {
 	return a[0] * b[0] + a[1] * b[1]
 }
 
-vec2_length_squared :: proc(v: Vec2) -> f32 {
-	return vec2_dot(v, v)
-}
-
+@(private)
 vec2_length :: proc(v: Vec2) -> f32 {
-	return math.sqrt(vec2_length_squared(v))
+	return math.sqrt(Vec2LengthSquared(v))
 }
 
-vec2_normalized :: proc(v: Vec2) -> Vec2 {
-	length := vec2_length(v)
-	if length == 0 {
-		return Vec2{}
-	}
-	return vec2_scale(v, 1 / length)
-}
-
+@(private)
 vec2_lerp :: proc(a, b: Vec2, t: f32) -> Vec2 {
 	return vec2_add(a, vec2_scale(vec2_sub(b, a), t))
 }
 
+@(private)
 clamp01 :: proc(value: f32) -> f32 {
 	return math.clamp(value, 0, 1)
 }
@@ -493,7 +489,7 @@ LineCenter :: proc(line: Line) -> Vec2 {
 }
 
 LineLengthSquared :: proc(line: Line) -> f32 {
-	return vec2_length_squared(vec2_sub(line.To, line.From))
+	return Vec2LengthSquared(vec2_sub(line.To, line.From))
 }
 
 LineLength :: proc(line: Line) -> f32 {
@@ -501,7 +497,7 @@ LineLength :: proc(line: Line) -> f32 {
 }
 
 LineNormal :: proc(line: Line) -> Vec2 {
-	return vec2_normalized(vec2_sub(line.To, line.From))
+	return Vec2Normalized(vec2_sub(line.To, line.From))
 }
 
 LineBounds :: proc(line: Line) -> Rect {
@@ -542,7 +538,7 @@ LineProject :: proc(line: Line, axis: Vec2) -> (min, max: f32) {
 
 LineClosestTUnclamped :: proc(line: Line, point: Vec2) -> f32 {
 	delta := vec2_sub(line.To, line.From)
-	denominator := vec2_length_squared(delta)
+	denominator := Vec2LengthSquared(delta)
 	if denominator == 0 {
 		return 0
 	}
@@ -558,7 +554,7 @@ LineClosestPoint :: proc(line: Line, point: Vec2) -> Vec2 {
 }
 
 LineDistanceSquared :: proc(line: Line, point: Vec2) -> f32 {
-	return vec2_length_squared(vec2_sub(LineClosestPoint(line, point), point))
+	return Vec2LengthSquared(vec2_sub(LineClosestPoint(line, point), point))
 }
 
 LineDistance :: proc(line: Line, point: Vec2) -> f32 {
@@ -595,7 +591,7 @@ LineClosestDistance :: proc(line, other: Line) -> f32 {
 
 LineClosestDistanceSquared :: proc(line, other: Line) -> f32 {
 	a, b := LineClosestPoints(line, other)
-	return vec2_length_squared(vec2_sub(a, b))
+	return Vec2LengthSquared(vec2_sub(a, b))
 }
 
 LinePoints :: proc(line: Line) -> int {
@@ -1395,6 +1391,7 @@ RectIntValue :: proc(rect: Rect) -> RectInt {
 	return RectInt{int(rect.X), int(rect.Y), int(rect.Width), int(rect.Height)}
 }
 
+@(private)
 rect_at_vec :: proc(rect: Rect, position: Vec2) -> Rect {
 	return Rect{position[0], position[1], rect.Width, rect.Height}
 }
@@ -1423,6 +1420,7 @@ RectTranslateXY :: proc(rect: Rect, x, y: f32) -> Rect {
 	return Rect{rect.X + x, rect.Y + y, rect.Width, rect.Height}
 }
 
+@(private)
 rect_inflate :: proc(rect: Rect, by: f32) -> Rect {
 	return Rect{rect.X - by, rect.Y - by, rect.Width + by * 2, rect.Height + by * 2}
 }
@@ -1448,6 +1446,7 @@ RectInflate :: proc {
 	RectInflateLTRB,
 }
 
+@(private)
 rect_scale :: proc(rect: Rect, by: f32) -> Rect {
 	return RectValidateSize(Rect{rect.X * by, rect.Y * by, rect.Width * by, rect.Height * by})
 }
@@ -1726,6 +1725,7 @@ RectIntBottomCenterF :: proc(rect: RectInt) -> Vec2 {
 	return Vec2{RectIntCenterXF(rect), f32(RectIntBottom(rect))}
 }
 
+@(private)
 rect_int_contains_point :: proc(rect: RectInt, point: Point2) -> bool {
 	return(
 		point.X >= rect.X &&
@@ -1758,6 +1758,7 @@ RectIntContainsRect :: proc(rect, other: RectInt) -> bool {
 	)
 }
 
+@(private)
 rect_int_overlaps_rectint :: proc(rect, other: RectInt) -> bool {
 	return(
 		RectIntRight(rect) > RectIntLeft(other) &&
@@ -1783,6 +1784,7 @@ RectIntConflatePoint :: proc(rect: RectInt, other: Point2) -> RectInt {
 	)
 }
 
+@(private)
 rect_int_conflate_rect :: proc(rect, other: RectInt) -> RectInt {
 	min_x := math.min(RectIntLeft(rect), RectIntLeft(other))
 	min_y := math.min(RectIntTop(rect), RectIntTop(other))
@@ -1857,6 +1859,7 @@ RectIntTranslateXY :: proc(rect: RectInt, x, y: int) -> RectInt {
 	return RectInt{rect.X + x, rect.Y + y, rect.Width, rect.Height}
 }
 
+@(private)
 rect_int_scale :: proc(rect: RectInt, by: int) -> RectInt {
 	return RectIntValidateSize(
 		RectInt{rect.X * by, rect.Y * by, rect.Width * by, rect.Height * by},
@@ -1873,14 +1876,17 @@ RectIntScalePoint :: proc(rect: RectInt, by: Point2) -> RectInt {
 	return RectIntScaleXY(rect, by.X, by.Y)
 }
 
+@(private)
 rect_int_scale_x :: proc(rect: RectInt, by: int) -> RectInt {
 	return RectIntValidateSize(RectInt{rect.X * by, rect.Y, rect.Width * by, rect.Height})
 }
 
+@(private)
 rect_int_scale_y :: proc(rect: RectInt, by: int) -> RectInt {
 	return RectIntValidateSize(RectInt{rect.X, rect.Y * by, rect.Width, rect.Height * by})
 }
 
+@(private)
 rect_int_scale_float :: proc(rect: RectInt, by: f32) -> Rect {
 	return RectValidateSize(
 		Rect{f32(rect.X) * by, f32(rect.Y) * by, f32(rect.Width) * by, f32(rect.Height) * by},
@@ -1948,6 +1954,7 @@ RectIntScale :: proc {
 	RectIntScaleVec,
 }
 
+@(private)
 rect_int_inflate :: proc(rect: RectInt, by: int) -> RectInt {
 	return RectInt{rect.X - by, rect.Y - by, rect.Width + by * 2, rect.Height + by * 2}
 }
@@ -1960,10 +1967,12 @@ RectIntInflatePoint :: proc(rect: RectInt, by: Point2) -> RectInt {
 	return RectIntInflateXY(rect, by.X, by.Y)
 }
 
+@(private)
 rect_int_inflate_x :: proc(rect: RectInt, by: int) -> RectInt {
 	return RectInt{rect.X - by, rect.Y, rect.Width + by * 2, rect.Height}
 }
 
+@(private)
 rect_int_inflate_y :: proc(rect: RectInt, by: int) -> RectInt {
 	return RectInt{rect.X, rect.Y - by, rect.Width, rect.Height + by * 2}
 }
@@ -1977,6 +1986,7 @@ RectIntInflateLTRB :: proc(rect: RectInt, left, top, right, bottom: int) -> Rect
 	}
 }
 
+@(private)
 rect_int_inflate_float :: proc(rect: RectInt, by: f32) -> Rect {
 	return Rect {
 		f32(rect.X) - by,
@@ -2128,6 +2138,7 @@ RectIntEdges :: proc(rect: RectInt) -> [4]LineInt {
 	}
 }
 
+@(private)
 rect_int_rotate_left_origin :: proc(rect: RectInt, origin: Point2) -> RectInt {
 	points := [4]Point2 {
 		RectIntTopLeft(rect),
@@ -2146,6 +2157,7 @@ rect_int_rotate_left_origin :: proc(rect: RectInt, origin: Point2) -> RectInt {
 	return RectInt{min_p.X, min_p.Y, max_p.X - min_p.X, max_p.Y - min_p.Y}
 }
 
+@(private)
 rect_int_rotate_right_origin :: proc(rect: RectInt, origin: Point2) -> RectInt {
 	points := [4]Point2 {
 		RectIntTopLeft(rect),
@@ -2164,10 +2176,12 @@ rect_int_rotate_right_origin :: proc(rect: RectInt, origin: Point2) -> RectInt {
 	return RectInt{min_p.X, min_p.Y, max_p.X - min_p.X, max_p.Y - min_p.Y}
 }
 
+@(private)
 rect_int_rotate_left :: proc(rect: RectInt) -> RectInt {
 	return rect_int_rotate_left_origin(rect, Point2Zero)
 }
 
+@(private)
 rect_int_rotate_left_count :: proc(rect: RectInt, count: int) -> RectInt {
 	r := rect
 	for i := 0; i < count; i += 1 {
@@ -2176,6 +2190,7 @@ rect_int_rotate_left_count :: proc(rect: RectInt, count: int) -> RectInt {
 	return r
 }
 
+@(private)
 rect_int_rotate_left_origin_count :: proc(rect: RectInt, origin: Point2, count: int) -> RectInt {
 	r := rect
 	for i := 0; i < count; i += 1 {
@@ -2184,10 +2199,12 @@ rect_int_rotate_left_origin_count :: proc(rect: RectInt, origin: Point2, count: 
 	return r
 }
 
+@(private)
 rect_int_rotate_right :: proc(rect: RectInt) -> RectInt {
 	return rect_int_rotate_right_origin(rect, Point2Zero)
 }
 
+@(private)
 rect_int_rotate_right_count :: proc(rect: RectInt, count: int) -> RectInt {
 	r := rect
 	for i := 0; i < count; i += 1 {
@@ -2196,6 +2213,7 @@ rect_int_rotate_right_count :: proc(rect: RectInt, count: int) -> RectInt {
 	return r
 }
 
+@(private)
 rect_int_rotate_right_origin_count :: proc(rect: RectInt, origin: Point2, count: int) -> RectInt {
 	r := rect
 	for i := 0; i < count; i += 1 {
@@ -2453,6 +2471,7 @@ TransformCreateMatrix :: proc(position, origin, scale: Vec2, rotation: f32) -> M
 	return m
 }
 
+@(private)
 transform_dirty :: proc(transform: ^Transform) {
 	transform.TransformIndex += 1
 	transform.matrix_dirty = true
@@ -2558,6 +2577,7 @@ TriangleAverage :: proc(t: Triangle) -> Vec2 {
 	return vec2_scale(vec2_add(vec2_add(t.A, t.B), t.C), 1.0 / 3.0)
 }
 
+@(private)
 triangle_cross :: proc(a, b: Vec2) -> f32 {
 	return a[0] * b[1] - a[1] * b[0]
 }

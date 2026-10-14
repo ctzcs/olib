@@ -127,6 +127,7 @@ AbsDotSq :: proc(a, b: Vec2) -> f32 {
 	return d * d
 }
 
+@(private)
 spatial_vec2_dot :: proc(a, b: Vec2) -> f32 {
 	return a[0] * b[0] + a[1] * b[1]
 }
@@ -254,6 +255,7 @@ AngleReflectOnY :: proc(angle: f32) -> f32 {
 	return AngleWrap(HalfPI - (angle - HalfPI))
 }
 
+@(private)
 spatial_vec2_length :: proc(v: Vec2) -> f32 {
 	return math.sqrt(v[0] * v[0] + v[1] * v[1])
 }
@@ -864,6 +866,7 @@ SmoothDamp :: proc(
 	return output
 }
 
+@(private)
 tri_area :: proc(vertices: []Vec2) -> f32 {
 	area: f32 = 0
 	if len(vertices) < 3 {
@@ -877,6 +880,7 @@ tri_area :: proc(vertices: []Vec2) -> f32 {
 	return area * 0.5
 }
 
+@(private)
 tri_inside :: proc(a, b, c, p: Vec2) -> bool {
 	p0 := c - b
 	p1 := a - c
@@ -998,6 +1002,7 @@ IntVectorToString :: proc(values: []int) -> string {
 // Utility / Converters / Read & Write — JSON 分量读写
 // ------------------------------------------------------------------------------
 
+@(private)
 vector_json_number :: proc(value: json.Value, $T: typeid) -> (T, bool) {
 	number: f64
 	#partial switch v in value {
@@ -1016,6 +1021,7 @@ vector_json_number :: proc(value: json.Value, $T: typeid) -> (T, bool) {
 	return T(number), true
 }
 
+@(private)
 vector_json_read :: proc(text: string, components: [][]string, values: []$T) -> bool {
 	for i in 0 ..< len(values) {
 		values[i] = {}
@@ -1059,6 +1065,7 @@ vector_json_read :: proc(text: string, components: [][]string, values: []$T) -> 
 	return true
 }
 
+@(private)
 vector_json_write :: proc(components: [][]string, values: []$T) -> string {
 	object := make(map[string]T)
 	defer delete(object)
@@ -1404,6 +1411,7 @@ LogState :: struct {
 	OnError:   proc(msg: string),
 }
 
+@(private)
 log_append :: proc(state: ^LogState, message: string) {
 	append(&state.History, message)
 }
@@ -1666,10 +1674,12 @@ RngAngle :: proc(r: ^Rng) -> f32 {
 	return RngFloatMax(r, f32(math.TAU))
 }
 
+@(private)
 rng_spread_around :: proc(r: ^Rng, angle, spread: f32) -> f32 {
 	return angle + RngFloatRange(r, -spread, spread)
 }
 
+@(private)
 rng_spread_width :: proc(r: ^Rng, spread: f32) -> f32 {
 	return RngFloat(r) * spread - spread / 2
 }
@@ -1980,6 +1990,7 @@ QuaternionConjugated :: proc(q: Quaternion) -> Quaternion {
 	return Quaternion{-q.X, -q.Y, -q.Z, q.W}
 }
 
+@(private)
 quaternion_from_basis :: proc(right, up, forward: Vec3) -> Quaternion {
 	// Convert an orthonormal 3x3 basis to a quaternion (trace-stable form).
 	trace := right[0] + up[1] + forward[2]
@@ -2382,6 +2393,7 @@ RngChooseAndRemove :: proc(rng: ^Rng, values: ^[dynamic]$T) -> T {
 	return result
 }
 
+@(private)
 rng_randomized_copy :: proc(rng: ^Rng, values: []$T) -> [dynamic]T {
 	result := make([dynamic]T, 0, len(values))
 	append(&result, ..values)
@@ -2389,6 +2401,7 @@ rng_randomized_copy :: proc(rng: ^Rng, values: []$T) -> [dynamic]T {
 	return result
 }
 
+@(private)
 rng_randomized_make :: proc() -> Rng {
 	return RngMake(u64(coretime.to_unix_nanoseconds(coretime.now())))
 }

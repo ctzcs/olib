@@ -117,6 +117,7 @@ UpdateMode :: struct {
 	FixedWaitEnabled: bool,
 }
 
+@(private)
 fixed_step :: proc(
 	target_time_per_frame: coretime.Duration,
 	max_time_per_frame := coretime.Duration(0),
@@ -134,6 +135,7 @@ fixed_step :: proc(
 	}
 }
 
+@(private)
 fixed_step_fps :: proc(fps: int, wait_for_next_update := true) -> UpdateMode {
 	return fixed_step(coretime.Second / coretime.Duration(fps), 0, wait_for_next_update)
 }
@@ -669,6 +671,7 @@ GraphicsDeviceEndFrame :: proc(graphics_device: ^GraphicsDevice) {
 BeginFrame :: GraphicsDeviceBeginFrame
 EndFrame :: GraphicsDeviceEndFrame
 
+@(private)
 graphics_device_dispose_backbuffer :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device == nil || !graphics_device.HasBackbufferTarget {
 		return
@@ -679,6 +682,7 @@ graphics_device_dispose_backbuffer :: proc(graphics_device: ^GraphicsDevice) {
 	graphics_device.HasBackbufferTarget = false
 }
 
+@(private)
 graphics_device_ensure_backbuffer :: proc(
 	graphics_device: ^GraphicsDevice,
 	size: Point2,
@@ -741,6 +745,7 @@ graphics_device_ensure_backbuffer :: proc(
 	}
 }
 
+@(private)
 graphics_device_dispose_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device.Device == nil {
 		return
@@ -778,6 +783,7 @@ graphics_device_dispose_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 // Internal / GraphicsDeviceSDL / DebugDraw — 默认绘制资源
 // ------------------------------------------------------------------------------
 
+@(private)
 graphics_device_init_debug_draw :: proc(graphics_device: ^GraphicsDevice) {
 	if graphics_device.Device == nil || graphics_device.Window == nil {
 		return
@@ -1248,6 +1254,7 @@ App :: struct {
 	fixed_accumulator: coretime.Duration,
 }
 
+@(private)
 to_cstring :: proc(s: string) -> cstring {
 	cstr, _ := strings.clone_to_cstring(s, context.temp_allocator)
 	return cstr
@@ -1264,6 +1271,7 @@ CreateExceptionFromSDL :: proc(sdl_method: string, foster_info := "") -> string 
 // Window / Lifecycle — 创建、属性与释放
 // ==============================================================================
 
+@(private)
 window_init :: proc(
 	window: ^Window,
 	app: ^App,
@@ -1391,6 +1399,7 @@ Position :: proc(window: ^Window) -> Point2 {
 	return Point2{int(cx), int(cy)}
 }
 
+@(private)
 window_set_position :: proc(window: ^Window, value: Point2) {
 	if window.Handle != nil {
 		_ = SDL.SetWindowPosition(window.Handle, c.int(value.X), c.int(value.Y))
@@ -1460,6 +1469,7 @@ Maximized :: proc(window: ^Window) -> bool {
 	return .MAXIMIZED in SDL.GetWindowFlags(window.Handle)
 }
 
+@(private)
 window_set_title :: proc(window: ^Window, title: string) {
 	window.Title = title
 	if window.Handle != nil {
@@ -1730,6 +1740,7 @@ RunOnMainThread :: proc(app: ^App, action: AppCallback) {
 	append(&app.main_thread_queue, action)
 }
 
+@(private)
 drain_main_thread_queue :: proc(app: ^App) {
 	for len(app.main_thread_queue) > 0 {
 		action := app.main_thread_queue[0]
@@ -1901,6 +1912,7 @@ PollEvents :: proc(app: ^App) {
 	}
 }
 
+@(private)
 step_app :: proc(app: ^App, delta: coretime.Duration) {
 	app.Time = Advance(app.Time, delta)
 
@@ -1995,6 +2007,7 @@ Run :: proc(app: ^App) {
 	}
 }
 
+@(private)
 run_impl :: proc(app: ^App) {
 	if app.Disposed {
 		panic("Application is disposed")
@@ -2036,6 +2049,7 @@ run_impl :: proc(app: ^App) {
 	run_finish(app)
 }
 
+@(private)
 run_finish :: proc(app: ^App) {
 	drain_main_thread_queue(app)
 

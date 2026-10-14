@@ -137,6 +137,7 @@ DirectoryExists :: proc(container: ^StorageContainer, path: string) -> bool {
 	return storage_os_is_directory(StorageJoinPath(container, path))
 }
 
+@(private)
 storage_enumerate_immediate :: proc(
 	container: ^StorageContainer,
 	path: string,
@@ -170,6 +171,7 @@ storage_enumerate_immediate :: proc(
 	return storage_os_enumerate(StorageJoinPath(container, path), allocator)
 }
 
+@(private)
 storage_match_pattern :: proc(name, pattern: string) -> bool {
 	if pattern == "" || pattern == "*" {
 		return true
@@ -212,6 +214,7 @@ EnumerateDirectory :: proc(
 	return result[:]
 }
 
+@(private)
 storage_enumerate_filtered :: proc(
 	container: ^StorageContainer,
 	path, prefix, pattern: string,
@@ -311,6 +314,7 @@ DisposeStorage :: proc(container: ^StorageContainer) {
 	container.ZipEntries^ = nil
 }
 
+@(private)
 storage_zip_path :: proc(container: ^StorageContainer, path: string) -> string {
 	name := StorageJoinPath(container, path)
 	name, _ = strings.replace_all(name, "\\", "/", context.temp_allocator)
@@ -338,6 +342,7 @@ DialogRequest :: struct {
 	Allocator:      runtime.Allocator,
 }
 
+@(private)
 storage_dialog_callback :: proc "c" (userdata: rawptr, filelist: [^]cstring, filter: c.int) {
 	context = runtime.default_context()
 	request := cast(^DialogRequest)userdata
@@ -389,6 +394,7 @@ StorageDialogFilters :: proc(filters: []DialogFilter) -> [dynamic]SDL.DialogFile
 	return result
 }
 
+@(private)
 storage_dialog_properties :: proc(
 	fs: ^FileSystem,
 	title: string,
@@ -526,6 +532,7 @@ ZipStorageInitBytes :: proc(storage: ^ZipStorage, data: []u8) {
 	}
 }
 
+@(private)
 zip_storage_decode :: proc(data: []u8, entries: ^map[string][dynamic]u8) -> ZipStorageError {
 	read16 := proc(data: []u8, at: int) -> u16 {
 		return u16(data[at]) | u16(data[at + 1]) << 8
@@ -990,6 +997,7 @@ StorageReadStream :: struct {
 	Allocator: runtime.Allocator,
 }
 
+@(private)
 storage_read_stream_proc :: proc(
 	data: rawptr,
 	mode: io.Stream_Mode,
@@ -1094,6 +1102,7 @@ StorageWriteStream :: struct {
 	Allocator:     runtime.Allocator,
 }
 
+@(private)
 storage_write_stream_flush :: proc(state: ^StorageWriteStream) -> io.Error {
 	if !state.Dirty {
 		return .None
@@ -1105,6 +1114,7 @@ storage_write_stream_flush :: proc(state: ^StorageWriteStream) -> io.Error {
 	return .None
 }
 
+@(private)
 storage_write_stream_proc :: proc(
 	data: rawptr,
 	mode: io.Stream_Mode,

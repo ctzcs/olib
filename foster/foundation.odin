@@ -195,10 +195,12 @@ Point2Negate :: proc(p: Point2) -> Point2 {
 	return Point2{-p.X, -p.Y}
 }
 
+@(private)
 point2_scale_int :: proc(p: Point2, scalar: int) -> Point2 {
 	return Point2{p.X * scalar, p.Y * scalar}
 }
 
+@(private)
 point2_div_int :: proc(p: Point2, scalar: int) -> Point2 {
 	if scalar == 0 {
 		return Point2{}
@@ -206,6 +208,7 @@ point2_div_int :: proc(p: Point2, scalar: int) -> Point2 {
 	return Point2{p.X / scalar, p.Y / scalar}
 }
 
+@(private)
 point2_mod_int :: proc(p: Point2, scalar: int) -> Point2 {
 	if scalar == 0 {
 		return Point2{}
@@ -213,10 +216,12 @@ point2_mod_int :: proc(p: Point2, scalar: int) -> Point2 {
 	return Point2{p.X % scalar, p.Y % scalar}
 }
 
+@(private)
 point2_scale_float :: proc(p: Point2, scalar: f32) -> [2]f32 {
 	return [2]f32{f32(p.X) * scalar, f32(p.Y) * scalar}
 }
 
+@(private)
 point2_div_float :: proc(p: Point2, scalar: f32) -> [2]f32 {
 	if scalar == 0 {
 		return [2]f32{}
@@ -224,6 +229,7 @@ point2_div_float :: proc(p: Point2, scalar: f32) -> [2]f32 {
 	return [2]f32{f32(p.X) / scalar, f32(p.Y) / scalar}
 }
 
+@(private)
 point2_floor_to :: proc(p: Point2, interval: int) -> Point2 {
 	return Point2 {
 		(p.X / interval) * interval,
@@ -231,6 +237,7 @@ point2_floor_to :: proc(p: Point2, interval: int) -> Point2 {
 	}
 }
 
+@(private)
 point2_floor_to_point :: proc(p, intervals: Point2) -> Point2 {
 	return Point2 {
 		(p.X / intervals.X) * intervals.X,
@@ -238,6 +245,7 @@ point2_floor_to_point :: proc(p, intervals: Point2) -> Point2 {
 	}
 }
 
+@(private)
 point2_round_to :: proc(p: Point2, interval: int) -> Point2 {
 	return Point2 {
 		Round(f32(p.X) / f32(interval)) * interval,
@@ -245,6 +253,7 @@ point2_round_to :: proc(p: Point2, interval: int) -> Point2 {
 	}
 }
 
+@(private)
 point2_round_to_point :: proc(p, intervals: Point2) -> Point2 {
 	return Point2 {
 		Round(f32(p.X) / f32(intervals.X)) * intervals.X,
@@ -276,10 +285,12 @@ Point2Abs :: proc(p: Point2) -> Point2 {
 	return Point2{math.abs(p.X), math.abs(p.Y)}
 }
 
+@(private)
 point2_clamp :: proc(p, min_p, max_p: Point2) -> Point2 {
 	return Point2{Clamp(p.X, min_p.X, max_p.X), Clamp(p.Y, min_p.Y, max_p.Y)}
 }
 
+@(private)
 point2_clamp_rect :: proc(p: Point2, bounds: RectInt) -> Point2 {
 	return point2_clamp(p, RectIntTopLeft(bounds), RectIntBottomRight(bounds))
 }
@@ -288,26 +299,32 @@ Point2ManhattanDist :: proc(a, b: Point2) -> int {
 	return math.abs(a.X - b.X) + math.abs(a.Y - b.Y)
 }
 
+@(private)
 point2_min :: proc(a, b: Point2) -> Point2 {
 	return Point2{Min(a.X, b.X), Min(a.Y, b.Y)}
 }
 
+@(private)
 point2_min3 :: proc(a, b, c: Point2) -> Point2 {
 	return Point2{Min3(a.X, b.X, c.X), Min3(a.Y, b.Y, c.Y)}
 }
 
+@(private)
 point2_min4 :: proc(a, b, c, d: Point2) -> Point2 {
 	return Point2{Min4(a.X, b.X, c.X, d.X), Min4(a.Y, b.Y, c.Y, d.Y)}
 }
 
+@(private)
 point2_max :: proc(a, b: Point2) -> Point2 {
 	return Point2{Max(a.X, b.X), Max(a.Y, b.Y)}
 }
 
+@(private)
 point2_max3 :: proc(a, b, c: Point2) -> Point2 {
 	return Point2{Max3(a.X, b.X, c.X), Max3(a.Y, b.Y, c.Y)}
 }
 
+@(private)
 point2_max4 :: proc(a, b, c, d: Point2) -> Point2 {
 	return Point2{Max4(a.X, b.X, c.X, d.X), Max4(a.Y, b.Y, c.Y, d.Y)}
 }
@@ -373,14 +390,17 @@ Color :: struct {
 	A: u8,
 }
 
+@(private)
 color_rgb :: proc(rgb: int, alpha: u8 = 255) -> Color {
 	return Color{u8(rgb >> 16), u8(rgb >> 8), u8(rgb), alpha}
 }
 
+@(private)
 color_rgba_u32 :: proc(rgba: u32) -> Color {
 	return Color{u8(rgba >> 24), u8(rgba >> 16), u8(rgba >> 8), u8(rgba)}
 }
 
+@(private)
 color_f32 :: proc(r, g, b, a: f32) -> Color {
 	return Color {
 		u8(Clamp01(r) * 255),
@@ -567,6 +587,7 @@ TextureSampler :: struct {
 	WrapY:  TextureWrap,
 }
 
+@(private)
 texture_sampler_make :: proc(
 	filter: TextureFilter,
 	wrap_x, wrap_y: TextureWrap,
@@ -574,6 +595,7 @@ texture_sampler_make :: proc(
 	return TextureSampler{filter, wrap_x, wrap_y}
 }
 
+@(private)
 texture_sampler_make_uniform :: proc(
 	filter: TextureFilter,
 	wrap_xy: TextureWrap,

@@ -26,6 +26,7 @@ import "core:strings"
 // 路径为虚拟绝对路径(如 /foster/<app>/settings.txt)。目录标记和文件前缀
 // 支持空目录、子项枚举及递归删除；每个文件的 base64 载荷保持二进制安全。
 
+@(private)
 storage_os_exists :: proc(path: string) -> bool {
 	if len(path) == 0 {
 		return false
@@ -34,11 +35,13 @@ storage_os_exists :: proc(path: string) -> bool {
 	return fw_fs_exists(ptr, length) != 0
 }
 
+@(private)
 storage_os_is_directory :: proc(path: string) -> bool {
 	ptr, length := web_string_bytes(path)
 	return fw_fs_is_directory(ptr, length)
 }
 
+@(private)
 storage_os_enumerate :: proc(path: string, allocator := context.allocator) -> []string {
 	ptr, length := web_string_bytes(path)
 	size := fw_fs_enumerate(ptr, length, nil, 0)
@@ -57,11 +60,13 @@ storage_os_enumerate :: proc(path: string, allocator := context.allocator) -> []
 	return result
 }
 
+@(private)
 storage_os_make_directory_all :: proc(path: string) -> bool {
 	ptr, length := web_string_bytes(path)
 	return fw_fs_make_directory(ptr, length)
 }
 
+@(private)
 storage_os_remove :: proc(path: string) -> bool {
 	if len(path) == 0 {
 		return false
@@ -70,6 +75,7 @@ storage_os_remove :: proc(path: string) -> bool {
 	return fw_fs_remove(ptr, length) != 0
 }
 
+@(private)
 storage_os_read_file :: proc(path: string, allocator := context.allocator) -> []byte {
 	if len(path) == 0 {
 		return nil
@@ -90,6 +96,7 @@ storage_os_read_file :: proc(path: string, allocator := context.allocator) -> []
 	return data
 }
 
+@(private)
 storage_os_write_file :: proc(path: string, data: []byte) -> bool {
 	if len(path) == 0 {
 		return false
@@ -101,6 +108,7 @@ storage_os_write_file :: proc(path: string, data: []byte) -> bool {
 	return fw_fs_write(path_ptr, path_len, &data[0], i32(len(data))) != 0
 }
 
+@(private)
 storage_os_working_directory :: proc(allocator := context.allocator) -> string {
 	_ = allocator
 	return ""
@@ -112,14 +120,17 @@ storage_os_working_directory :: proc(allocator := context.allocator) -> string {
 // 存储层 Web 路径后端: 用 core:path/slashpath 的纯斜杠实现。
 // Web 侧根路径都是虚拟路径("/foster/<app>/"), 斜杠语义正确。
 
+@(private)
 storage_path_clean :: proc(path: string, allocator := context.temp_allocator) -> string {
 	return slashpath.clean(path, allocator)
 }
 
+@(private)
 storage_path_join :: proc(parts: []string, allocator := context.temp_allocator) -> string {
 	return slashpath.join(parts, allocator)
 }
 
+@(private)
 storage_path_split :: proc(path: string) -> (dir, file: string) {
 	return slashpath.split(path)
 }
@@ -129,6 +140,7 @@ storage_path_split :: proc(path: string) -> (dir, file: string) {
 // ==============================================================================
 // Web 平台的线程 ID: wasm 无并发(Phase 1 无线程), 恒为主线程
 
+@(private)
 platform_current_thread_id :: proc() -> int {
 	return 1
 }

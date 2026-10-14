@@ -27,14 +27,17 @@ import filepath "core:path/filepath"
 // 存储层本机文件后端: 所有 core:os 调用收口在这里(core:os 在 js 目标不可用,
 // storage_runtime.odin 通过本层间接使用)。Web 对应实现在 storage_os_web.odin。
 
+@(private)
 storage_os_exists :: proc(path: string) -> bool {
 	return os.exists(path)
 }
 
+@(private)
 storage_os_is_directory :: proc(path: string) -> bool {
 	return os.is_directory(path)
 }
 
+@(private)
 storage_os_enumerate :: proc(path: string, allocator := context.allocator) -> []string {
 	infos, err := os.read_all_directory_by_path(path, allocator)
 	if err != nil {
@@ -53,10 +56,12 @@ storage_os_enumerate :: proc(path: string, allocator := context.allocator) -> []
 	return result[:]
 }
 
+@(private)
 storage_os_make_directory_all :: proc(path: string) -> bool {
 	return os.make_directory_all(path) == nil
 }
 
+@(private)
 storage_os_remove :: proc(path: string) -> bool {
 	if os.is_directory(path) {
 		return os.remove_all(path) == nil
@@ -64,6 +69,7 @@ storage_os_remove :: proc(path: string) -> bool {
 	return os.remove(path) == nil
 }
 
+@(private)
 storage_os_read_file :: proc(path: string, allocator := context.allocator) -> []byte {
 	data, err := os.read_entire_file(path, allocator)
 	if err != nil {
@@ -72,10 +78,12 @@ storage_os_read_file :: proc(path: string, allocator := context.allocator) -> []
 	return data
 }
 
+@(private)
 storage_os_write_file :: proc(path: string, data: []byte) -> bool {
 	return os.write_entire_file(path, data) == nil
 }
 
+@(private)
 storage_os_working_directory :: proc(allocator := context.allocator) -> string {
 	dir, err := os.get_working_directory(allocator)
 	if err != nil {
@@ -91,16 +99,19 @@ storage_os_working_directory :: proc(allocator := context.allocator) -> string {
 // js 目标不可用, 故收口到本层; Web 对应实现在 storage_path_web.odin)。
 // 行为与原先直接调用 core:path/filepath 完全一致(平台分隔符语义)。
 
+@(private)
 storage_path_clean :: proc(path: string, allocator := context.temp_allocator) -> string {
 	cleaned, _ := filepath.clean(path, allocator)
 	return cleaned
 }
 
+@(private)
 storage_path_join :: proc(parts: []string, allocator := context.temp_allocator) -> string {
 	joined, _ := filepath.join(parts, allocator)
 	return joined
 }
 
+@(private)
 storage_path_split :: proc(path: string) -> (dir, file: string) {
 	return filepath.split(path)
 }
@@ -110,6 +121,7 @@ storage_path_split :: proc(path: string) -> (dir, file: string) {
 // ==============================================================================
 // 桌面/本机平台的线程 ID(core:os 在 js 目标不可用, 见 platform_thread_web.odin)
 
+@(private)
 platform_current_thread_id :: proc() -> int {
 	return os.get_current_thread_id()
 }

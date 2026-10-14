@@ -331,10 +331,12 @@ PackerMake :: proc() -> Packer {
 	return Packer{Trim = true, MaxSize = 8192, Padding = 1}
 }
 
+@(private)
 packer_alpha :: proc(i: ^Image, x, y: int) -> u8 {
 	return ImageGetPixel(i, x, y).A
 }
 
+@(private)
 packer_same :: proc(a, b: Image) -> bool {
 	if a.Width != b.Width || a.Height != b.Height {
 		return false
@@ -430,6 +432,7 @@ PackerOutputDispose :: proc(output: ^PackerOutput) {
 	output^ = {}
 }
 
+@(private)
 packer_next_pow2 :: proc(v: int) -> int {
 	n := 1
 	for n < v {
@@ -438,6 +441,7 @@ packer_next_pow2 :: proc(v: int) -> int {
 	return n
 }
 
+@(private)
 packer_flush :: proc(p: ^Packer, out: ^PackerOutput, page: ^Image, used_w, used_h: int) {
 	if used_w <= 0 || used_h <= 0 {
 		return
@@ -710,16 +714,19 @@ Aseprite :: struct {
 	UserData:      AsepriteUserDataValues,
 }
 
+@(private)
 ase_u16 :: proc(data: []u8, at: ^int) -> u16 {
 	v := u16(data[at^]) | u16(data[at^ + 1]) << 8
 	at^ += 2
 	return v
 }
 
+@(private)
 ase_s16 :: proc(data: []u8, at: ^int) -> i16 {
 	return i16(ase_u16(data, at))
 }
 
+@(private)
 ase_u32 :: proc(data: []u8, at: ^int) -> u32 {
 	v :=
 		u32(data[at^]) |
@@ -730,10 +737,12 @@ ase_u32 :: proc(data: []u8, at: ^int) -> u32 {
 	return v
 }
 
+@(private)
 ase_s32 :: proc(data: []u8, at: ^int) -> i32 {
 	return i32(ase_u32(data, at))
 }
 
+@(private)
 ase_string :: proc(data: []u8, at: ^int) -> string {
 	n := int(ase_u16(data, at))
 	if n <= 0 || at^ + n > len(data) {
@@ -744,6 +753,7 @@ ase_string :: proc(data: []u8, at: ^int) -> string {
 	return s
 }
 
+@(private)
 ase_pixels :: proc(
 	raw: []u8,
 	format: AsepriteFormat,
@@ -1119,6 +1129,7 @@ AsepriteLoadFile :: proc(path: string) -> Aseprite {
 	return AsepriteLoad(data)
 }
 
+@(private)
 ase_effective_opacity :: proc(a: ^Aseprite, layer_index: int, cel_opacity: u8) -> f32 {
 	if layer_index < 0 || layer_index >= len(a.Layers) {
 		return 0
@@ -1142,6 +1153,7 @@ ase_effective_opacity :: proc(a: ^Aseprite, layer_index: int, cel_opacity: u8) -
 	return value
 }
 
+@(private)
 ase_blend_channel :: proc(mode: AsepriteBlendMode, base, blend: f32) -> f32 {
 	#partial switch mode {
 	case .Multiply:
@@ -1189,6 +1201,7 @@ ase_blend_channel :: proc(mode: AsepriteBlendMode, base, blend: f32) -> f32 {
 	}
 }
 
+@(private)
 ase_rgb_to_hsl :: proc(r, g, b: f32) -> [3]f32 {
 	maxv := math.max(r, math.max(g, b))
 	minv := math.min(r, math.min(g, b))
@@ -1212,6 +1225,7 @@ ase_rgb_to_hsl :: proc(r, g, b: f32) -> [3]f32 {
 	return [3]f32{h / 6, s, l}
 }
 
+@(private)
 ase_hue_to_rgb :: proc(p, q, t: f32) -> f32 {
 	x := t
 	if x < 0 {
@@ -1232,6 +1246,7 @@ ase_hue_to_rgb :: proc(p, q, t: f32) -> f32 {
 	return p
 }
 
+@(private)
 ase_hsl_to_rgb :: proc(h, s, l: f32) -> [3]f32 {
 	if s <= 0 {
 		return [3]f32{l, l, l}
@@ -1248,6 +1263,7 @@ ase_hsl_to_rgb :: proc(h, s, l: f32) -> [3]f32 {
 	}
 }
 
+@(private)
 ase_blend_pixel :: proc(dst, src: Color, mode: AsepriteBlendMode, opacity: f32) -> Color {
 	sa := f32(src.A) / 255 * opacity
 	if sa <= 0 {
@@ -1483,6 +1499,7 @@ MsdfFont :: struct {
 	Kerning:                                                           [dynamic]MsdfKerning,
 }
 
+@(private)
 msdf_num :: proc(v: json.Value) -> f32 {
 	#partial switch x in v {
 	case json.Float:
@@ -1493,6 +1510,7 @@ msdf_num :: proc(v: json.Value) -> f32 {
 	return 0
 }
 
+@(private)
 msdf_obj :: proc(v: json.Value) -> json.Object {
 	#partial switch x in v {
 	case json.Object:
@@ -1501,6 +1519,7 @@ msdf_obj :: proc(v: json.Value) -> json.Object {
 	return nil
 }
 
+@(private)
 msdf_array :: proc(v: json.Value) -> json.Array {
 	#partial switch x in v {
 	case json.Array:
@@ -1509,6 +1528,7 @@ msdf_array :: proc(v: json.Value) -> json.Array {
 	return nil
 }
 
+@(private)
 msdf_string :: proc(v: json.Value) -> string {
 	#partial switch x in v {
 	case json.String:
@@ -1517,6 +1537,7 @@ msdf_string :: proc(v: json.Value) -> string {
 	return ""
 }
 
+@(private)
 msdf_bounds :: proc(v: json.Value) -> MsdfBounds {
 	o := msdf_obj(v)
 	return MsdfBounds {
@@ -1571,6 +1592,7 @@ MsdfFontMake :: proc(atlas: Image, data: []u8) -> MsdfFont {
 	return f
 }
 
+@(private)
 math_abs :: proc(v: f32) -> f32 {
 	if v < 0 {
 		return -v
@@ -2096,6 +2118,7 @@ SpriteFontTryGetCharacterRune :: proc(font: ^SpriteFont, r: rune) -> (SpriteFont
 	return SpriteFontFindCharacter(font, int(r))
 }
 
+@(private)
 sprite_font_is_newline :: proc(font: ^SpriteFont, r: rune) -> bool {
 	if font == nil {
 		return r == '\n'
@@ -2108,6 +2131,7 @@ sprite_font_is_newline :: proc(font: ^SpriteFont, r: rune) -> bool {
 	return false
 }
 
+@(private)
 sprite_font_is_wordbreak :: proc(font: ^SpriteFont, r: rune) -> bool {
 	if font == nil {
 		return r == '\n' || r == ' '
@@ -2316,6 +2340,7 @@ SpriteFontHeight :: proc(font: ^SpriteFont) -> f32 {
 }
 SpriteFontMeasure :: SpriteFontSizeOf
 
+@(private)
 sprite_font_draw_impl :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2416,6 +2441,7 @@ SpriteFontDrawSineWave :: proc(
 	)
 }
 
+@(private)
 sprite_font_draw_simple :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2426,6 +2452,7 @@ sprite_font_draw_simple :: proc(
 	sprite_font_draw_impl(batch, font, text, position, {}, font.Size, color)
 }
 
+@(private)
 sprite_font_draw_sized :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2437,6 +2464,7 @@ sprite_font_draw_sized :: proc(
 	sprite_font_draw_impl(batch, font, text, position, {}, size, color)
 }
 
+@(private)
 sprite_font_draw_justified :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2447,6 +2475,7 @@ sprite_font_draw_justified :: proc(
 	sprite_font_draw_impl(batch, font, text, position, justify, font.Size, color)
 }
 
+@(private)
 sprite_font_draw_justified_sized :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2562,6 +2591,7 @@ SpriteFontWrapText :: proc(
 	return result
 }
 
+@(private)
 sprite_font_draw_wrapped_impl :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2594,6 +2624,7 @@ sprite_font_draw_wrapped_impl :: proc(
 	}
 }
 
+@(private)
 sprite_font_draw_wrapped_simple :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2605,6 +2636,7 @@ sprite_font_draw_wrapped_simple :: proc(
 	sprite_font_draw_wrapped_impl(batch, font, text, position, {}, max_width, font.Size, color)
 }
 
+@(private)
 sprite_font_draw_wrapped_justified :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2625,6 +2657,7 @@ sprite_font_draw_wrapped_justified :: proc(
 	)
 }
 
+@(private)
 sprite_font_draw_wrapped_sized :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,
@@ -2636,6 +2669,7 @@ sprite_font_draw_wrapped_sized :: proc(
 	sprite_font_draw_wrapped_impl(batch, font, text, position, {}, max_width, size, color)
 }
 
+@(private)
 sprite_font_draw_wrapped_justified_sized :: proc(
 	batch: ^Batcher,
 	font: ^SpriteFont,

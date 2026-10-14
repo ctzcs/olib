@@ -278,6 +278,7 @@ BlendMode :: struct {
 	Color:            Color,
 }
 
+@(private)
 blend_mode_make :: proc(operation: BlendOp, source, destination: BlendFactor) -> BlendMode {
 	return BlendMode {
 		ColorOperation   = operation,
@@ -291,6 +292,7 @@ blend_mode_make :: proc(operation: BlendOp, source, destination: BlendFactor) ->
 	}
 }
 
+@(private)
 blend_mode_make_full :: proc(
 	color_operation: BlendOp,
 	color_source, color_destination: BlendFactor,
@@ -480,6 +482,7 @@ DrawFailure :: enum {
 	RenderPass,
 }
 
+@(private)
 report_draw_failure :: proc(
 	device: ^GraphicsDevice,
 	failure: DrawFailure,
@@ -569,6 +572,7 @@ Target :: struct {
 	Disposed:       bool,
 }
 
+@(private)
 target_init_with_attachments :: proc(
 	target: ^Target,
 	graphics_device: ^GraphicsDevice,
@@ -621,6 +625,7 @@ target_init_with_attachments :: proc(
 	}
 }
 
+@(private)
 target_init :: proc(
 	target: ^Target,
 	graphics_device: ^GraphicsDevice,
@@ -849,6 +854,7 @@ MaterialInitWithShaders :: proc(
 	MaterialStageSetShader(&material.Fragment, fragment_shader)
 }
 
+@(private)
 material_init :: proc(material: ^Material) {
 	MaterialInitWithShaders(material, nil, nil)
 }
@@ -930,6 +936,7 @@ MeshInitWithFormat :: proc(
 	mesh.HasInstanceBuffer = false
 }
 
+@(private)
 mesh_init :: proc(
 	mesh: ^Mesh,
 	graphics_device: ^GraphicsDevice,
@@ -946,6 +953,7 @@ mesh_init :: proc(
 	)
 }
 
+@(private)
 mesh_init_instanced_with_format :: proc(
 	mesh: ^Mesh,
 	graphics_device: ^GraphicsDevice,
@@ -968,6 +976,7 @@ mesh_init_instanced_with_format :: proc(
 	mesh.HasInstanceBuffer = true
 }
 
+@(private)
 mesh_init_instanced :: proc(
 	mesh: ^Mesh,
 	graphics_device: ^GraphicsDevice,
@@ -1197,6 +1206,7 @@ DrawCommandDispose :: proc(command: ^DrawCommand) {
 	command.FragmentStorageBuffers = nil
 }
 
+@(private)
 drawable_target_matches :: proc(a, b: DrawableTarget) -> bool {
 	if a.GraphicsDevice != b.GraphicsDevice || a.IsWindow != b.IsWindow {
 		return false
@@ -1207,6 +1217,7 @@ drawable_target_matches :: proc(a, b: DrawableTarget) -> bool {
 	return a.Surface == b.Surface
 }
 
+@(private)
 resolve_drawable_target :: proc(
 	graphics_device: ^GraphicsDevice,
 	target: DrawableTarget,
@@ -1246,6 +1257,7 @@ resolve_drawable_target :: proc(
 	return target
 }
 
+@(private)
 drawable_target_backing_target :: proc(
 	graphics_device: ^GraphicsDevice,
 	target: DrawableTarget,
@@ -1294,6 +1306,7 @@ GraphicsDeviceEndRenderPass :: proc(graphics_device: ^GraphicsDevice) {
 	graphics_device.HasRenderPassScissor = false
 }
 
+@(private)
 begin_render_pass_ex :: proc(
 	graphics_device: ^GraphicsDevice,
 	target: DrawableTarget,
@@ -1467,10 +1480,12 @@ begin_render_pass_ex :: proc(
 	return true
 }
 
+@(private)
 begin_render_pass :: proc(graphics_device: ^GraphicsDevice, target: DrawableTarget) -> bool {
 	return begin_render_pass_ex(graphics_device, target, nil, false, 0, false, 0)
 }
 
+@(private)
 blend_factor_to_sdl :: proc(factor: BlendFactor) -> SDL.GPUBlendFactor {
 	#partial switch factor {
 	case .Zero:
@@ -1503,6 +1518,7 @@ blend_factor_to_sdl :: proc(factor: BlendFactor) -> SDL.GPUBlendFactor {
 	return .ONE
 }
 
+@(private)
 blend_op_to_sdl :: proc(op: BlendOp) -> SDL.GPUBlendOp {
 	#partial switch op {
 	case .Add:
@@ -1519,6 +1535,7 @@ blend_op_to_sdl :: proc(op: BlendOp) -> SDL.GPUBlendOp {
 	return .ADD
 }
 
+@(private)
 blend_mask_to_sdl :: proc(mask: BlendMask) -> SDL.GPUColorComponentFlags {
 	flags: SDL.GPUColorComponentFlags = {}
 	mask_bits := u8(mask)
@@ -1537,6 +1554,7 @@ blend_mask_to_sdl :: proc(mask: BlendMask) -> SDL.GPUColorComponentFlags {
 	return flags
 }
 
+@(private)
 cull_mode_to_sdl :: proc(mode: CullMode) -> SDL.GPUCullMode {
 	#partial switch mode {
 	case .None:
@@ -1549,6 +1567,7 @@ cull_mode_to_sdl :: proc(mode: CullMode) -> SDL.GPUCullMode {
 	return .NONE
 }
 
+@(private)
 fill_mode_to_sdl :: proc(mode: FillMode) -> SDL.GPUFillMode {
 	#partial switch mode {
 	case .Fill:
@@ -1559,6 +1578,7 @@ fill_mode_to_sdl :: proc(mode: FillMode) -> SDL.GPUFillMode {
 	return .FILL
 }
 
+@(private)
 stencil_op_to_sdl :: proc(op: StencilOp) -> SDL.GPUStencilOp {
 	#partial switch op {
 	case .Keep:
@@ -1583,6 +1603,7 @@ stencil_op_to_sdl :: proc(op: StencilOp) -> SDL.GPUStencilOp {
 	return .KEEP
 }
 
+@(private)
 stencil_state_to_sdl :: proc(state: StencilState) -> SDL.GPUStencilOpState {
 	return SDL.GPUStencilOpState {
 		fail_op       = stencil_op_to_sdl(state.FailOp),
@@ -1592,6 +1613,7 @@ stencil_state_to_sdl :: proc(state: StencilState) -> SDL.GPUStencilOpState {
 	}
 }
 
+@(private)
 depth_compare_to_sdl :: proc(compare: DepthCompare) -> SDL.GPUCompareOp {
 	#partial switch compare {
 	case .Always:
@@ -1614,6 +1636,7 @@ depth_compare_to_sdl :: proc(compare: DepthCompare) -> SDL.GPUCompareOp {
 	return .ALWAYS
 }
 
+@(private)
 texture_filter_to_sdl :: proc(filter: TextureFilter) -> SDL.GPUFilter {
 	#partial switch filter {
 	case .Nearest:
@@ -1624,6 +1647,7 @@ texture_filter_to_sdl :: proc(filter: TextureFilter) -> SDL.GPUFilter {
 	return .LINEAR
 }
 
+@(private)
 texture_wrap_to_sdl :: proc(wrap: TextureWrap) -> SDL.GPUSamplerAddressMode {
 	#partial switch wrap {
 	case .Repeat:
@@ -1636,6 +1660,7 @@ texture_wrap_to_sdl :: proc(wrap: TextureWrap) -> SDL.GPUSamplerAddressMode {
 	return .CLAMP_TO_EDGE
 }
 
+@(private)
 create_sampler_from_texture_sampler :: proc(
 	graphics_device: ^GraphicsDevice,
 	sampler: TextureSampler,
@@ -1685,16 +1710,19 @@ create_sampler_from_texture_sampler :: proc(
 	return created
 }
 
+@(private)
 hash_mix_u64 :: proc(h, v: u64) -> u64 {
 	x := h ~ v
 	x *= 1099511628211
 	return x
 }
 
+@(private)
 hash_color_u32 :: proc(c: Color) -> u32 {
 	return u32(c.R) | (u32(c.G) << 8) | (u32(c.B) << 16) | (u32(c.A) << 24)
 }
 
+@(private)
 hash_blend_mode :: proc(seed: u64, bm: BlendMode) -> u64 {
 	h := seed
 	h = hash_mix_u64(h, u64(bm.ColorOperation))
@@ -1708,6 +1736,7 @@ hash_blend_mode :: proc(seed: u64, bm: BlendMode) -> u64 {
 	return h
 }
 
+@(private)
 shader_register_pipeline_hash :: proc(shader: ^Shader, hash: u64) {
 	if shader == nil {
 		return
@@ -1720,6 +1749,7 @@ shader_register_pipeline_hash :: proc(shader: ^Shader, hash: u64) {
 	append(&shader.PipelineHashes, hash)
 }
 
+@(private)
 graphics_device_release_pipeline_hashes :: proc(
 	graphics_device: ^GraphicsDevice,
 	hashes: ^[dynamic]u64,
@@ -1785,6 +1815,7 @@ GraphicsDeviceDisposeCaches :: proc(graphics_device: ^GraphicsDevice) {
 // Graphics / GraphicsDevice / Pipeline — 管线缓存与创建
 // ------------------------------------------------------------------------------
 
+@(private)
 create_pipeline_for_draw_command :: proc(
 	graphics_device: ^GraphicsDevice,
 	command: ^DrawCommand,
@@ -2620,6 +2651,7 @@ GraphicsDeviceOriginBottomLeft :: proc(device: ^GraphicsDevice) -> bool {
 	return false
 }
 
+@(private)
 graphics_device_clear_mask :: proc(
 	graphics_device: ^GraphicsDevice,
 	target: DrawableTarget,
@@ -2652,6 +2684,7 @@ graphics_device_clear_mask :: proc(
 	)
 }
 
+@(private)
 graphics_device_clear_color :: proc(
 	graphics_device: ^GraphicsDevice,
 	target: DrawableTarget,
@@ -3942,6 +3975,7 @@ GraphicsBufferInit :: proc(
 	buf.Disposed = false
 }
 
+@(private)
 graphics_buffer_ensure_size :: proc(buf: ^GraphicsBuffer, required_bytes: int) {
 	if buf == nil ||
 	   buf.Disposed ||
@@ -4121,6 +4155,7 @@ VertexBuffer :: struct {
 	Format: VertexFormat,
 }
 
+@(private)
 vertex_buffer_init_with_format :: proc(
 	vb: ^VertexBuffer,
 	graphics_device: ^GraphicsDevice,
@@ -4132,6 +4167,7 @@ vertex_buffer_init_with_format :: proc(
 	GraphicsBufferInit(&vb.Base, graphics_device, format.Stride, .Vertex, .Sixteen, name)
 }
 
+@(private)
 vertex_buffer_init :: proc(
 	vb: ^VertexBuffer,
 	graphics_device: ^GraphicsDevice,
@@ -4602,6 +4638,7 @@ IndexFormatOf :: proc($T: typeid) -> IndexFormat {
 	}
 }
 
+@(private)
 mesh_init_typed :: proc(
 	$TVertex: typeid,
 	mesh: ^Mesh,
@@ -4614,6 +4651,7 @@ mesh_init_typed :: proc(
 	MeshInitWithFormat(mesh, graphics_device, format, index_format, name)
 }
 
+@(private)
 mesh_init_instanced_typed :: proc(
 	$TVertex, $TInstance: typeid,
 	mesh: ^Mesh,
@@ -4635,6 +4673,7 @@ mesh_init_instanced_typed :: proc(
 	)
 }
 
+@(private)
 mesh_init_typed_indexed :: proc(
 	$TVertex, $TIndex: typeid,
 	mesh: ^Mesh,
@@ -4644,6 +4683,7 @@ mesh_init_typed_indexed :: proc(
 	mesh_init_typed(TVertex, mesh, graphics_device, IndexFormatOf(TIndex), name)
 }
 
+@(private)
 mesh_init_instanced_typed_indexed :: proc(
 	$TVertex, $TInstance, $TIndex: typeid,
 	mesh: ^Mesh,
@@ -4896,6 +4936,7 @@ VertexFormat :: struct {
 	Stride:   int,
 }
 
+@(private)
 vertex_format_init :: proc(format: ^VertexFormat, elements: []VertexElement, stride: int = 0) {
 	format.Elements = nil
 	format.Stride = 0
@@ -5010,6 +5051,7 @@ BatcherPopStencil :: proc(b: ^Batcher) {
 	}
 }
 
+@(private)
 batcher_apply_stencil :: proc(command: ^DrawCommand, stencil: BatcherStencil) {
 	command.StencilTestEnabled = stencil.Enabled
 	command.FrontStencilState = stencil.State
@@ -5070,6 +5112,7 @@ Batcher :: struct {
 // Graphics / Batcher / Batches — 顶点构建与批次管理
 // ------------------------------------------------------------------------------
 
+@(private)
 batcher_identity :: proc() -> [16]f32 {
 	return [16]f32{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}
 }
@@ -5084,11 +5127,13 @@ BatcherMake :: proc() -> Batcher {
 	}
 }
 
+@(private)
 batcher_transform :: proc(b: ^Batcher, p: Vec2) -> Vec2 {
 	m := b.Matrix
 	return Vec2{p[0] * m[0] + p[1] * m[4] + m[12], p[0] * m[1] + p[1] * m[5] + m[13]}
 }
 
+@(private)
 batcher_mode_color :: proc(mode: BatcherMode) -> Color {
 	switch mode {
 	case .Normal:
@@ -5101,6 +5146,7 @@ batcher_mode_color :: proc(mode: BatcherMode) -> Color {
 	return Color{255, 0, 0, 0}
 }
 
+@(private)
 batcher_clone_material :: proc(source: ^Material) -> ^Material {
 	if source == nil {
 		return nil
@@ -5111,6 +5157,7 @@ batcher_clone_material :: proc(source: ^Material) -> ^Material {
 	return result
 }
 
+@(private)
 batcher_free_material :: proc(material: ^Material) {
 	if material == nil {
 		return
@@ -5119,12 +5166,14 @@ batcher_free_material :: proc(material: ^Material) {
 	free(material)
 }
 
+@(private)
 batcher_free_batches :: proc(b: ^Batcher) {
 	for batch in b.Batches {
 		batcher_free_material(batch.Material)
 	}
 }
 
+@(private)
 batcher_ensure_batch :: proc(b: ^Batcher) {
 	start := len(b.Indices)
 	if len(b.Batches) > 0 {
@@ -5155,6 +5204,7 @@ batcher_ensure_batch :: proc(b: ^Batcher) {
 	})
 }
 
+@(private)
 batcher_push_vertex :: proc(b: ^Batcher, p: Vec2, uv: [2]f32, color: Color) {
 	batcher_ensure_batch(b)
 	append(
@@ -5163,6 +5213,7 @@ batcher_push_vertex :: proc(b: ^Batcher, p: Vec2, uv: [2]f32, color: Color) {
 	)
 }
 
+@(private)
 batcher_push_tri :: proc(b: ^Batcher, a, bp, c: Vec2, color: Color, uv0, uv1, uv2: [2]f32) {
 	base := len(b.Vertices)
 	batcher_push_vertex(b, a, uv0, color)
@@ -5278,6 +5329,7 @@ BatcherUpload :: proc(b: ^Batcher) {
 	delete(indices)
 }
 
+@(private)
 batcher_sort_batches :: proc(b: ^Batcher) {
 	for i := 1; i < len(b.Batches); i += 1 {
 		current := b.Batches[i]
@@ -5290,6 +5342,7 @@ batcher_sort_batches :: proc(b: ^Batcher) {
 	}
 }
 
+@(private)
 batcher_render_with_matrix :: proc(b: ^Batcher, target: DrawableTarget, matrix_arg: [16]f32) {
 	if !b.HasGPU || b.GraphicsDevice == nil || len(b.Indices) == 0 {
 		return
@@ -5337,6 +5390,7 @@ batcher_render_with_matrix :: proc(b: ^Batcher, target: DrawableTarget, matrix_a
 	}
 }
 
+@(private)
 batcher_render_default :: proc(b: ^Batcher, target: DrawableTarget) {
 	w := f32(target.WidthInPixels)
 	h := f32(target.HeightInPixels)
@@ -5347,6 +5401,7 @@ batcher_render_default :: proc(b: ^Batcher, target: DrawableTarget) {
 	batcher_render_with_matrix(b, target, m)
 }
 
+@(private)
 batcher_render_options :: proc(b: ^Batcher, target: DrawableTarget, viewport, scissor: RectInt) {
 	if !b.HasGPU || b.GraphicsDevice == nil || len(b.Indices) == 0 {
 		return
@@ -5409,10 +5464,12 @@ BatcherRender :: proc {
 // Graphics / Batcher / Primitives — 图元绘制
 // ------------------------------------------------------------------------------
 
+@(private)
 batcher_triangle_solid :: proc(b: ^Batcher, a, bp, c: Vec2, color: Color) {
 	batcher_push_tri(b, a, bp, c, color, {}, {}, {})
 }
 
+@(private)
 batcher_triangle_gradient :: proc(b: ^Batcher, a, bp, c: Vec2, c0, c1, c2: Color) {
 	base := len(b.Vertices)
 	batcher_push_vertex(b, a, {}, c0)
@@ -5425,6 +5482,7 @@ BatcherTriangle :: proc {
 	batcher_triangle_gradient,
 }
 
+@(private)
 batcher_triangle_texture_solid :: proc(
 	b: ^Batcher,
 	texture: ^Texture,
@@ -5436,6 +5494,7 @@ batcher_triangle_texture_solid :: proc(
 	batcher_push_tri(b, a, bp, c, color, uv0, uv1, uv2)
 }
 
+@(private)
 batcher_triangle_texture_gradient :: proc(
 	b: ^Batcher,
 	texture: ^Texture,
@@ -5455,6 +5514,7 @@ BatcherTriangleTexture :: proc {
 	batcher_triangle_texture_gradient,
 }
 
+@(private)
 batcher_quad_points_solid :: proc(b: ^Batcher, a, bp, c, d: Vec2, color: Color) {
 	base := len(b.Vertices)
 	batcher_push_vertex(b, a, {}, color)
@@ -5464,6 +5524,7 @@ batcher_quad_points_solid :: proc(b: ^Batcher, a, bp, c, d: Vec2, color: Color) 
 	append(&b.Indices, base, base + 1, base + 2, base, base + 2, base + 3)
 }
 
+@(private)
 batcher_quad_points_gradient :: proc(b: ^Batcher, a, bp, c, d: Vec2, c0, c1, c2, c3: Color) {
 	base := len(b.Vertices)
 	batcher_push_vertex(b, a, {}, c0)
@@ -5477,6 +5538,7 @@ BatcherQuadPoints :: proc {
 	batcher_quad_points_gradient,
 }
 
+@(private)
 batcher_quad_rect_solid :: proc(b: ^Batcher, rect: Rect, color: Color) {
 	batcher_quad_points_solid(
 		b,
@@ -5488,10 +5550,12 @@ batcher_quad_rect_solid :: proc(b: ^Batcher, rect: Rect, color: Color) {
 	)
 }
 
+@(private)
 batcher_quad_shape_solid :: proc(b: ^Batcher, quad: Quad, color: Color) {
 	batcher_quad_points_solid(b, quad.A, quad.B, quad.C, quad.D, color)
 }
 
+@(private)
 batcher_quad_rect_gradient :: proc(b: ^Batcher, rect: Rect, c0, c1, c2, c3: Color) {
 	batcher_quad_points_gradient(
 		b,
@@ -5506,6 +5570,7 @@ batcher_quad_rect_gradient :: proc(b: ^Batcher, rect: Rect, c0, c1, c2, c3: Colo
 	)
 }
 
+@(private)
 batcher_quad_shape_gradient :: proc(b: ^Batcher, quad: Quad, c0, c1, c2, c3: Color) {
 	batcher_quad_points_gradient(b, quad.A, quad.B, quad.C, quad.D, c0, c1, c2, c3)
 }
@@ -5516,6 +5581,7 @@ BatcherQuad :: proc {
 	batcher_quad_shape_gradient,
 }
 
+@(private)
 batcher_quad_texture_solid :: proc(
 	b: ^Batcher,
 	texture: ^Texture,
@@ -5532,6 +5598,7 @@ batcher_quad_texture_solid :: proc(
 	append(&b.Indices, base, base + 1, base + 2, base, base + 2, base + 3)
 }
 
+@(private)
 batcher_quad_texture_gradient :: proc(
 	b: ^Batcher,
 	texture: ^Texture,
@@ -5552,6 +5619,7 @@ BatcherQuadTexture :: proc {
 	batcher_quad_texture_gradient,
 }
 
+@(private)
 batcher_line_solid :: proc(b: ^Batcher, from, to: Vec2, thickness: f32, color: Color) {
 	d := Vec2{to[0] - from[0], to[1] - from[1]}
 	l := math.sqrt(d[0] * d[0] + d[1] * d[1])
@@ -5569,6 +5637,7 @@ batcher_line_solid :: proc(b: ^Batcher, from, to: Vec2, thickness: f32, color: C
 	)
 }
 
+@(private)
 batcher_line_gradient :: proc(
 	b: ^Batcher,
 	from, to: Vec2,
@@ -5598,10 +5667,12 @@ BatcherLine :: proc {
 	batcher_line_gradient,
 }
 
+@(private)
 batcher_rect_solid :: proc(b: ^Batcher, rect: Rect, color: Color) {
 	batcher_quad_rect_solid(b, rect, color)
 }
 
+@(private)
 batcher_rect_gradient :: proc(b: ^Batcher, rect: Rect, c0, c1, c2, c3: Color) {
 	batcher_quad_rect_gradient(b, rect, c0, c1, c2, c3)
 }
@@ -5617,6 +5688,7 @@ BatcherRectLine :: proc(b: ^Batcher, rect: Rect, thickness: f32, color: Color) {
 	BatcherLine(b, RectBottomLeft(rect), RectTopLeft(rect), thickness, color)
 }
 
+@(private)
 batcher_circle_solid :: proc(b: ^Batcher, center: Vec2, radius: f32, steps: int, color: Color) {
 	if steps < 3 {
 		return
@@ -5634,6 +5706,7 @@ batcher_circle_solid :: proc(b: ^Batcher, center: Vec2, radius: f32, steps: int,
 	}
 }
 
+@(private)
 batcher_circle_gradient :: proc(
 	b: ^Batcher,
 	center: Vec2,
@@ -5689,7 +5762,7 @@ BatcherCircleLine :: proc(
 	}
 }
 
-batcher_push_matrix_raw :: proc(
+BatcherPushMatrixRaw :: proc(
 	b: ^Batcher,
 	matrix_arg: [16]f32,
 	relative: bool = true,
@@ -5716,16 +5789,13 @@ batcher_push_matrix_raw :: proc(
 	return b.Matrix
 }
 
+@(private)
 batcher_matrix_from_3x2 :: proc(m: Matrix3x2) -> [16]f32 {
 	return [16]f32{m.M11, m.M12, 0, 0, m.M21, m.M22, 0, 0, 0, 0, 1, 0, m.M31, m.M32, 0, 1}
 }
 
-BatcherPushMatrixRaw :: proc(b: ^Batcher, matrix_arg: [16]f32, relative: bool = true) -> [16]f32 {
-	return batcher_push_matrix_raw(b, matrix_arg, relative)
-}
-
 BatcherPushMatrixPosition :: proc(b: ^Batcher, position: Vec2, relative: bool = true) -> [16]f32 {
-	return batcher_push_matrix_raw(
+	return BatcherPushMatrixRaw(
 		b,
 		batcher_matrix_from_3x2(Matrix3x2{1, 0, 0, 1, position[0], position[1]}),
 		relative,
@@ -5738,7 +5808,7 @@ BatcherPushMatrixTransform :: proc(
 	relative: bool = true,
 ) -> [16]f32 {
 	t := transform
-	return batcher_push_matrix_raw(b, batcher_matrix_from_3x2(TransformMatrix(&t)), relative)
+	return BatcherPushMatrixRaw(b, batcher_matrix_from_3x2(TransformMatrix(&t)), relative)
 }
 
 BatcherPushMatrixTRS :: proc(
@@ -5747,7 +5817,7 @@ BatcherPushMatrixTRS :: proc(
 	rotation: f32,
 	relative: bool = true,
 ) -> [16]f32 {
-	return batcher_push_matrix_raw(
+	return BatcherPushMatrixRaw(
 		b,
 		batcher_matrix_from_3x2(TransformCreateMatrix(position, {}, scale, rotation)),
 		relative,
@@ -5760,7 +5830,7 @@ BatcherPushMatrixOrigin :: proc(
 	rotation: f32,
 	relative: bool = true,
 ) -> [16]f32 {
-	return batcher_push_matrix_raw(
+	return BatcherPushMatrixRaw(
 		b,
 		batcher_matrix_from_3x2(TransformCreateMatrix(position, origin, scale, rotation)),
 		relative,
@@ -5907,6 +5977,7 @@ BatcherPopMatrixStack :: proc(b: ^Batcher) -> [16]f32 {
 	return BatcherPopMatrix(b)
 }
 
+@(private)
 batcher_image_sub_pos :: proc(b: ^Batcher, sub: Subtexture, position: Vec2, color: Color = White) {
 	if sub.Texture == nil {
 		return
@@ -5928,10 +5999,12 @@ batcher_image_sub_pos :: proc(b: ^Batcher, sub: Subtexture, position: Vec2, colo
 	)
 }
 
+@(private)
 batcher_image_sub_color :: proc(b: ^Batcher, sub: Subtexture, color: Color) {
 	batcher_image_sub_pos(b, sub, {}, color)
 }
 
+@(private)
 batcher_image_texture_color :: proc(b: ^Batcher, texture: ^Texture, color: Color) {
 	if texture == nil {
 		return
@@ -5939,6 +6012,7 @@ batcher_image_texture_color :: proc(b: ^Batcher, texture: ^Texture, color: Color
 	batcher_image_sub_color(b, SubtextureFromTexture(texture), color)
 }
 
+@(private)
 batcher_image_texture_pos :: proc(b: ^Batcher, texture: ^Texture, position: Vec2, color: Color) {
 	if texture == nil {
 		return
@@ -5946,6 +6020,7 @@ batcher_image_texture_pos :: proc(b: ^Batcher, texture: ^Texture, position: Vec2
 	batcher_image_sub_pos(b, SubtextureFromTexture(texture), position, color)
 }
 
+@(private)
 batcher_image_sub_transform :: proc(
 	b: ^Batcher,
 	sub: Subtexture,
@@ -5961,6 +6036,7 @@ batcher_image_sub_transform :: proc(
 	BatcherPopMatrixStack(b)
 }
 
+@(private)
 batcher_image_sub_justified :: proc(
 	b: ^Batcher,
 	sub: Subtexture,
@@ -5973,6 +6049,7 @@ batcher_image_sub_justified :: proc(
 		}, color)
 }
 
+@(private)
 batcher_image_sub_justified_scale :: proc(
 	b: ^Batcher,
 	sub: Subtexture,
@@ -6093,6 +6170,7 @@ BatcherRectDashed :: proc(b: ^Batcher, r: Rect, weight, dash, offset: f32, color
 	BatcherLineDashed(b, RectBottomLeft(r), RectTopLeft(r), weight, dash, offset, color)
 }
 
+@(private)
 batcher_rounded_points :: proc(r: Rect, radius: f32, segments: int) -> [dynamic]Vec2 {
 	points: [dynamic]Vec2 = {}
 	if segments < 1 {
@@ -6122,6 +6200,7 @@ batcher_rounded_points :: proc(r: Rect, radius: f32, segments: int) -> [dynamic]
 	return points
 }
 
+@(private)
 batcher_rect_rounded_uniform :: proc(b: ^Batcher, r: Rect, radius: f32, color: Color) {
 	points := batcher_rounded_points(r, radius, 8)
 	defer delete(points)
@@ -6134,6 +6213,7 @@ batcher_rect_rounded_uniform :: proc(b: ^Batcher, r: Rect, radius: f32, color: C
 	}
 }
 
+@(private)
 batcher_rect_rounded_corners :: proc(b: ^Batcher, r: Rect, r0, r1, r2, r3: f32, color: Color) {
 	radii := [4]f32{r0, r1, r2, r3}
 	max_radius := math.min(math.abs(r.Width), math.abs(r.Height)) * 0.5
@@ -6168,6 +6248,7 @@ BatcherRectRounded :: proc {
 	batcher_rect_rounded_corners,
 }
 
+@(private)
 batcher_rect_rounded_line_uniform :: proc(
 	b: ^Batcher,
 	r: Rect,
@@ -6184,6 +6265,7 @@ batcher_rect_rounded_line_uniform :: proc(
 	}
 }
 
+@(private)
 batcher_rect_rounded_line_corners :: proc(
 	b: ^Batcher,
 	r: Rect,
@@ -6222,6 +6304,7 @@ BatcherRectRoundedLine :: proc {
 	batcher_rect_rounded_line_corners,
 }
 
+@(private)
 batcher_semi_circle_solid :: proc(
 	b: ^Batcher,
 	center: Vec2,
@@ -6245,6 +6328,7 @@ batcher_semi_circle_solid :: proc(
 	}
 }
 
+@(private)
 batcher_semi_circle_gradient :: proc(
 	b: ^Batcher,
 	center: Vec2,

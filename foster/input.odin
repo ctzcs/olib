@@ -255,6 +255,7 @@ GamepadTypes :: enum int {
 	NintendoSwitchJoyconPair,
 }
 
+@(private)
 provider :: proc(t: GamepadTypes) -> GamepadProviders {
 	#partial switch t {
 	case .Standard, .Xbox360, .XboxOne:
@@ -424,10 +425,12 @@ Input :: struct {
 	owned_controller_names:   [dynamic]string,
 }
 
+@(private)
 time_seconds :: proc(d: coretime.Duration) -> f64 {
 	return coretime.duration_seconds(d)
 }
 
+@(private)
 trigger_repeat :: proc(time: Time, stamp: coretime.Duration, delay, interval: f32) -> bool {
 	elapsed := time_seconds(time.Elapsed)
 	previous := time_seconds(time.Previous)
@@ -444,6 +447,7 @@ trigger_repeat :: proc(time: Time, stamp: coretime.Duration, delay, interval: f3
 // Input / KeyboardState — 状态操作
 // ------------------------------------------------------------------------------
 
+@(private)
 keyboard_clear :: proc(k: ^KeyboardState) {
 	clear(&k.text_storage)
 	k.Text = ""
@@ -456,6 +460,7 @@ keyboard_clear :: proc(k: ^KeyboardState) {
 	}
 }
 
+@(private)
 keyboard_copy :: proc(dst: ^KeyboardState, src: KeyboardState) {
 	clear(&dst.text_storage)
 	append(&dst.text_storage, ..transmute([]u8)src.Text)
@@ -468,6 +473,7 @@ keyboard_copy :: proc(dst: ^KeyboardState, src: KeyboardState) {
 	dst.timestamp = src.timestamp
 }
 
+@(private)
 keyboard_step :: proc(k: ^KeyboardState, time: Time) {
 	k.time = time
 	clear(&k.text_storage)
@@ -478,6 +484,7 @@ keyboard_step :: proc(k: ^KeyboardState, time: Time) {
 	}
 }
 
+@(private)
 keyboard_on_key :: proc(
 	k: ^KeyboardState,
 	key_index: int,
@@ -502,6 +509,7 @@ keyboard_on_key :: proc(
 // Input / MouseState — 状态操作
 // ------------------------------------------------------------------------------
 
+@(private)
 mouse_clear :: proc(m: ^MouseState) {
 	m.InputTimestamp = 0
 	m.Position = {}
@@ -516,6 +524,7 @@ mouse_clear :: proc(m: ^MouseState) {
 	}
 }
 
+@(private)
 mouse_copy :: proc(dst: ^MouseState, src: MouseState) {
 	dst.InputTimestamp = src.InputTimestamp
 	dst.Position = src.Position
@@ -529,6 +538,7 @@ mouse_copy :: proc(dst: ^MouseState, src: MouseState) {
 	dst.timestamp = src.timestamp
 }
 
+@(private)
 mouse_step :: proc(m: ^MouseState, time: Time) {
 	m.time = time
 	m.Delta = {}
@@ -539,6 +549,7 @@ mouse_step :: proc(m: ^MouseState, time: Time) {
 	}
 }
 
+@(private)
 mouse_on_button :: proc(
 	m: ^MouseState,
 	button_index: int,
@@ -559,6 +570,7 @@ mouse_on_button :: proc(
 	}
 }
 
+@(private)
 mouse_on_motion :: proc(m: ^MouseState, position, delta: Vec2f, stamp: coretime.Duration) {
 	m.Position = position
 	m.Delta = delta
@@ -566,6 +578,7 @@ mouse_on_motion :: proc(m: ^MouseState, position, delta: Vec2f, stamp: coretime.
 	m.InputTimestamp = stamp
 }
 
+@(private)
 mouse_on_wheel :: proc(m: ^MouseState, wheel: Vec2f) {
 	m.Wheel = wheel
 }
@@ -574,6 +587,7 @@ mouse_on_wheel :: proc(m: ^MouseState, wheel: Vec2f) {
 // Input / States / ControllerState — 状态操作
 // ------------------------------------------------------------------------------
 
+@(private)
 controller_clear_state :: proc(c: ^ControllerState) {
 	c.InputTimestamp = 0
 	for i in 0 ..< ControllerMaxButtons {
@@ -588,6 +602,7 @@ controller_clear_state :: proc(c: ^ControllerState) {
 	}
 }
 
+@(private)
 controller_disconnect :: proc(c: ^ControllerState) {
 	c.ID = ControllerID(0)
 	c.Name = "Unknown"
@@ -602,6 +617,7 @@ controller_disconnect :: proc(c: ^ControllerState) {
 	controller_clear_state(c)
 }
 
+@(private)
 controller_copy :: proc(dst: ^ControllerState, src: ControllerState) {
 	dst.Index = src.Index
 	dst.ID = src.ID
@@ -624,6 +640,7 @@ controller_copy :: proc(dst: ^ControllerState, src: ControllerState) {
 	dst.axis_timestamp = src.axis_timestamp
 }
 
+@(private)
 controller_step :: proc(c: ^ControllerState, time: Time) {
 	c.time = time
 	for i in 0 ..< ControllerMaxButtons {
@@ -632,6 +649,7 @@ controller_step :: proc(c: ^ControllerState, time: Time) {
 	}
 }
 
+@(private)
 controller_connect :: proc(
 	c: ^ControllerState,
 	id: ControllerID,
@@ -653,6 +671,7 @@ controller_connect :: proc(
 	c.Version = version
 }
 
+@(private)
 controller_on_button :: proc(
 	c: ^ControllerState,
 	button_index: int,
@@ -673,6 +692,7 @@ controller_on_button :: proc(
 	}
 }
 
+@(private)
 controller_on_axis :: proc(
 	c: ^ControllerState,
 	axis_index: int,
@@ -689,6 +709,7 @@ controller_on_axis :: proc(
 	}
 }
 
+@(private)
 input_state_init :: proc(state: ^InputState) {
 	keyboard_clear(&state.Keyboard)
 	mouse_clear(&state.Mouse)
@@ -698,6 +719,7 @@ input_state_init :: proc(state: ^InputState) {
 	}
 }
 
+@(private)
 input_state_copy :: proc(dst: ^InputState, src: InputState) {
 	keyboard_copy(&dst.Keyboard, src.Keyboard)
 	mouse_copy(&dst.Mouse, src.Mouse)
@@ -706,6 +728,7 @@ input_state_copy :: proc(dst: ^InputState, src: InputState) {
 	}
 }
 
+@(private)
 input_state_step :: proc(state: ^InputState, time: Time) {
 	keyboard_step(&state.Keyboard, time)
 	mouse_step(&state.Mouse, time)
@@ -743,6 +766,7 @@ GetController :: proc(input: ^Input, id: ControllerID) -> ^ControllerState {
 	return nil
 }
 
+@(private)
 get_next_controller :: proc(input: ^Input, id: ControllerID) -> ^ControllerState {
 	for i in 0 ..< InputMaxControllers {
 		if input.NextState.Controllers[i].ID == id {
@@ -752,6 +776,7 @@ get_next_controller :: proc(input: ^Input, id: ControllerID) -> ^ControllerState
 	return nil
 }
 
+@(private)
 input_connect_controller :: proc(
 	input: ^Input,
 	id: ControllerID,
@@ -784,6 +809,7 @@ input_connect_controller :: proc(
 	}
 }
 
+@(private)
 input_disconnect_controller :: proc(input: ^Input, id: ControllerID) {
 	for i in 0 ..< InputMaxControllers {
 		if input.NextState.Controllers[i].ID != id {
@@ -873,6 +899,7 @@ InputControllerAxis :: proc(
 	}
 }
 
+@(private)
 input_update :: proc(input: ^Input, window: ^Window, stamp: coretime.Duration) {
 	when ODIN_OS == .JS {
 		// Web: 鼠标状态由 DOM 事件驱动(foster.js 队列), 无逐帧轮询; M3 接入
@@ -1006,6 +1033,7 @@ Rumble :: proc(
 	}
 }
 
+@(private)
 input_close_devices :: proc(input: ^Input) {
 	if input == nil {
 		return
@@ -1057,6 +1085,7 @@ InputDispose :: proc(input: ^Input) {
 	}
 }
 
+@(private)
 gamepad_name :: proc(ptr: ^SDL.Gamepad, fallback_id: SDL.JoystickID) -> string {
 	if ptr != nil {
 		return string(SDL.GetGamepadName(ptr))
@@ -1064,6 +1093,7 @@ gamepad_name :: proc(ptr: ^SDL.Gamepad, fallback_id: SDL.JoystickID) -> string {
 	return string(SDL.GetGamepadNameForID(fallback_id))
 }
 
+@(private)
 joystick_name :: proc(ptr: ^SDL.Joystick, fallback_id: SDL.JoystickID) -> string {
 	if ptr != nil {
 		return string(SDL.GetJoystickName(ptr))
@@ -1071,6 +1101,7 @@ joystick_name :: proc(ptr: ^SDL.Joystick, fallback_id: SDL.JoystickID) -> string
 	return string(SDL.GetJoystickNameForID(fallback_id))
 }
 
+@(private)
 normalize_axis :: proc(value: i16) -> f32 {
 	if value >= 0 {
 		return f32(value) / 32767.0
@@ -1078,6 +1109,7 @@ normalize_axis :: proc(value: i16) -> f32 {
 	return f32(value) / 32768.0
 }
 
+@(private)
 input_on_event :: proc(
 	input: ^Input,
 	window: ^Window,
@@ -1660,6 +1692,7 @@ BindingDescriptor :: proc(binding: Binding) -> string {
 	return "Binding"
 }
 
+@(private)
 binding_motion_value :: proc(binding: Binding, mouse: ^MouseState) -> f32 {
 	if binding.Max <= binding.Min {
 		return 0
@@ -1670,6 +1703,7 @@ binding_motion_value :: proc(binding: Binding, mouse: ^MouseState) -> f32 {
 	return Clamp((value - binding.Min) / (binding.Max - binding.Min), f32(0), f32(1))
 }
 
+@(private)
 binding_axis_value :: proc(binding: Binding, state: InputState, device: int) -> f32 {
 	if device < 0 || device >= InputMaxControllers {
 		return 0
@@ -2713,6 +2747,7 @@ Cursor :: struct {
 	Disposed:   bool,
 }
 
+@(private)
 cursor_sdl_system :: proc(kind: CursorSystemType) -> SDL.SystemCursor {
 	return SDL.SystemCursor(kind)
 }

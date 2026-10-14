@@ -159,6 +159,7 @@ msdf_fragment_glsl :: #load("assets/shaders/Msdf.fragment.glsl")
 // Platform / Web / Graphics — 图形句柄与枚举转换
 // ==============================================================================
 
+@(private)
 web_handle_ptr :: proc(h: u32) -> rawptr {
 	if h == 0 {
 		return nil
@@ -166,6 +167,7 @@ web_handle_ptr :: proc(h: u32) -> rawptr {
 	return rawptr(uintptr(h))
 }
 
+@(private)
 web_handle_u32 :: proc(p: rawptr) -> u32 {
 	if p == nil {
 		return 0
@@ -179,34 +181,42 @@ web_renderpass_placeholder: u64
 
 // 枚举 → 序号(JS 侧按序号映射 GL 常量)。序号与各 enum 声明顺序一致。
 
+@(private)
 web_blend_factor :: proc(f: BlendFactor) -> u32 {
 	return u32(f)
 }
 
+@(private)
 web_blend_op :: proc(op: BlendOp) -> u32 {
 	return u32(op)
 }
 
+@(private)
 web_cull_mode :: proc(m: CullMode) -> u32 {
 	return u32(m)
 }
 
+@(private)
 web_fill_mode :: proc(m: FillMode) -> u32 {
 	return u32(m)
 }
 
+@(private)
 web_texture_filter :: proc(f: TextureFilter) -> u32 {
 	return u32(f)
 }
 
+@(private)
 web_texture_wrap :: proc(w: TextureWrap) -> u32 {
 	return u32(w)
 }
 
+@(private)
 web_shader_stage :: proc(s: ShaderStage) -> u32 {
 	return u32(s)
 }
 
+@(private)
 web_index_type :: proc(f: IndexFormat) -> u32 {
 	// 0 = UNSIGNED_SHORT, 1 = UNSIGNED_INT
 	switch f {
@@ -218,6 +228,7 @@ web_index_type :: proc(f: IndexFormat) -> u32 {
 	return 1
 }
 
+@(private)
 web_index_type_size :: proc(f: IndexFormat) -> i32 {
 	switch f {
 	case .Sixteen:
@@ -228,6 +239,7 @@ web_index_type_size :: proc(f: IndexFormat) -> i32 {
 	return 4
 }
 
+@(private)
 web_vertex_type :: proc(t: VertexType) -> u32 {
 	// 与 VertexType 枚举序号一致; JS 侧映射为 (size, gl_type)
 	return u32(t)
@@ -276,6 +288,7 @@ WebEvent :: struct {
 // Platform / Web / Helpers — 字符串传参辅助
 // ------------------------------------------------------------------------------
 
+@(private)
 web_string_bytes :: proc(s: string) -> (ptr: rawptr, length: i32) {
 	if len(s) == 0 {
 		return nil, 0
@@ -284,6 +297,7 @@ web_string_bytes :: proc(s: string) -> (ptr: rawptr, length: i32) {
 	return &bytes[0], i32(len(bytes))
 }
 
+@(private)
 web_event_text :: proc(allocator := context.temp_allocator) -> string {
 	length := fw_event_text(nil, 0)
 	if length <= 0 {
@@ -297,6 +311,7 @@ web_event_text :: proc(allocator := context.temp_allocator) -> string {
 web_clipboard_callbacks: map[u32]ClipboardCallback
 web_clipboard_next_request: u32
 
+@(private)
 web_clipboard_register :: proc(callback: ClipboardCallback) -> u32 {
 	if callback == nil {
 		return 0
@@ -309,6 +324,7 @@ web_clipboard_register :: proc(callback: ClipboardCallback) -> u32 {
 	return web_clipboard_next_request
 }
 
+@(private)
 web_clipboard_complete :: proc(request: u32, succeeded: bool) {
 	if callback, ok := web_clipboard_callbacks[request]; ok {
 		delete_key(&web_clipboard_callbacks, request)
@@ -325,6 +341,7 @@ web_dialog_next_request: u32
 web_storage_callbacks: map[u32]StorageFileCallback
 web_storage_next_request: u32
 
+@(private)
 web_dialog_start :: proc(request: ^DialogRequest, filters: []DialogFilter) {
 	if web_dialog_requests == nil {
 		web_dialog_requests = make(map[u32]^DialogRequest)
@@ -336,6 +353,7 @@ web_dialog_start :: proc(request: ^DialogRequest, filters: []DialogFilter) {
 	fw_dialog_start(web_dialog_next_request, u32(request.Kind), raw_data(data), i32(len(data)))
 }
 
+@(private)
 web_dialog_complete :: proc(id: u32, succeeded: bool) {
 	request, ok := web_dialog_requests[id]
 	if !ok {
@@ -355,6 +373,7 @@ web_dialog_complete :: proc(id: u32, succeeded: bool) {
 	}
 }
 
+@(private)
 web_storage_flush :: proc(path: string, callback: StorageFileCallback) {
 	if web_storage_callbacks == nil {
 		web_storage_callbacks = make(map[u32]StorageFileCallback)
@@ -364,6 +383,7 @@ web_storage_flush :: proc(path: string, callback: StorageFileCallback) {
 	fw_fs_flush(web_storage_next_request, raw_data(path), i32(len(path)))
 }
 
+@(private)
 web_storage_complete :: proc(id: u32, succeeded: bool) {
 	if callback, ok := web_storage_callbacks[id]; ok {
 		delete_key(&web_storage_callbacks, id)
@@ -371,6 +391,7 @@ web_storage_complete :: proc(id: u32, succeeded: bool) {
 	}
 }
 
+@(private)
 web_storage_shutdown :: proc() {
 	for _, request in web_dialog_requests {
 		StorageDialogDispose(request)
@@ -393,6 +414,7 @@ web_device_placeholder: u64
 // Platform / Web / Lifecycle — App 生命周期与帧循环
 // ==============================================================================
 
+@(private)
 web_relocate_app :: proc(app: ^App) -> ^App {
 	// main() 在 .JS 下于 Run 返回后立即返回, 其栈帧(含调用方声明的 App 结构)会被
 	// 后续调用复用。在 Run() 入口把 App 拷贝到堆上并修正内部回指针, 之后的一切
@@ -424,16 +446,19 @@ web_relocate_app :: proc(app: ^App) -> ^App {
 	return heap_app
 }
 
+@(private)
 web_enter_run_loop :: proc(app: ^App) {
 	web_app = app
 }
 
+@(private)
 web_take_frame_delta :: proc() -> coretime.Duration {
 	delta := web_frame_delta
 	web_frame_delta = 0
 	return delta
 }
 
+@(private)
 web_log :: proc(message: string) {
 	if len(message) > 0 {
 		bytes := transmute([]byte)message
@@ -443,16 +468,19 @@ web_log :: proc(message: string) {
 
 // 用户路径返回应用自己的虚拟前缀，存储由 localStorage 文件/目录键持久化。
 
+@(private)
 web_user_path :: proc(name: string) -> string {
 	return fmt.aprintf("/foster/%s/", name)
 }
 
+@(private)
 web_window_size :: proc() -> Point2 {
 	// M1: 与像素尺寸一致(矩阵/视口/帧缓冲统一用绘制缓冲像素, DPR>1 也正确);
 	// M3 接输入时再区分 CSS 逻辑坐标与像素坐标
 	return web_window_size_in_pixels()
 }
 
+@(private)
 web_window_size_in_pixels :: proc() -> Point2 {
 	w, h: i32
 	fw_canvas_pixel_size(&w, &h)

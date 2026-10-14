@@ -24,20 +24,17 @@
 | 2D/3D 相机与场景 | World/* | `kit/world` | Camera2D/3D、Frustum3D、Ray3D、自备 Matrix4（行向量 v*M、D3D 深度）、SceneRouter |
 | CLI | CliConsole | `kit/app` | `has_arg` + 后台 stdin 控制台（`cli_open`）；不提供启动模板，直接用 `foster.App` |
 | 骨骼动画 | SkeletonAnimator | `kit/animation` | Step/Linear/CubicSpline 采样、palette 传播、blend、蒙皮包围盒 |
-| 3D 渲染栈 | Rendering3D | `kit/rendering3d` | Mesh/材质/排序、着色器管线（dxil/spv `#load`）、前向主 pass（方向/点/聚光、透明、蒙皮）、DebugDraw3D、LOD |
+| 3D 渲染机制 | Rendering3D | `kit/rendering3d` | Mesh 上传、泛型渲染队列（不透明前到后 / 透明后到前）、字节码按驱动选择（spv/dxil/msl，SDL_shadercross 编译）、std140 打包、DebugDraw3D、LOD；光照/材质/着色器的参考实现在 olib_sample `forward3d` |
 | 音频 | Audio | `kit/audio` | 直接绑 `vendor:sdl3`（Foster 本身不含音频）：设备流、WAV 装载、音量 |
 | 游戏 UI | Paper UI（替代） | `kit/ui` | clay 布局 + foster 后端：圆角/裁剪/九宫格、位图/MSDF 字体、运行时 SDF 字体（`ui_font_bake_sdf`）与位图烘焙（`ui_font_bake`）、控件/焦点/模态/缩放 |
 | JobScheduler | Threading/* | 不移植 | `core:thread.Pool` + `core:sync.Wait_Group` 已覆盖“常驻池 + 完成等待”，见下文并行一节 |
 
 ## 后续（按需启动，无固定排期）
 
-### 3D 渲染增量（`kit/rendering3d`）
+### 3D（`kit/rendering3d`）
 
-- `.msl` / `.glsl` 平台补编：目前只有 dxil/spv，Metal 与 WebGL 目标的着色器分发返回 false。
-- 阴影 pass + CSM：`DepthOnly` / `DepthOnlySkinned` 着色器已编译入库。
-- 后处理与天空：`Tonemap` / `PostBloom` / `PostFxaa` / `PostDepth` / `Sky3D` 的 HLSL 源已拷入
-  `kit/rendering3d/shaders/`，尚未编译、未接入 Renderer3D。
-- IBL / 环境烘焙。
+- Web 目标的 3D 着色器：Web 后端是 WebGL + 手写 GLSL ES、命名 uniform、不用 UBO；
+  SDL_shadercross 不输出 GLSL，3D 上 Web 时需要另写一套。
 
 ### UI 增量（`kit/ui`）
 
@@ -60,14 +57,16 @@ DragonLib JobScheduler 的主要价值（区间分批 `ScheduleParallel`、每�
 
 ### 工具链（构建期，随 3D 需求一起看）
 
-ShaderCompiler（HLSL → 四后端 + 哈希清单）、FbxToGltf、QoaEncode、msdf-atlas-gen（需要尖角质量时再做）、DataConfig。
-目前 `kit/rendering3d/shaders/build_shaders.ps1` 只覆盖 dxil/spv。
+FbxToGltf、QoaEncode、msdf-atlas-gen（需要尖角质量时再做）、DataConfig。
+ShaderCompiler 的编译部分已由 `kit/rendering3d/shaders/build_shaders.ps1` 覆盖（SDL_shadercross，HLSL → spv/dxil/msl，
+`-Dir` 指定任意目录）；哈希清单需要增量编译时再加。
 
 ## 明确不做
 
 | 项 | 理由 |
 |----|------|
 | ECS 全线（DragonECS / Engine.ECS / 预制体序列化） | 2026-10 决定不采用 ECS 路线；`thirdparty/oflecs` 已移除（git 历史可找回），`core/entities` 保留但无排期 |
+| 库内 PBR / IBL / 阴影 / CSM / 后处理 / 天空 | 外观由游戏决定，库只做机制；参考前向渲染器见 olib_sample `src/forward3d`，DragonLib 的 DepthOnly/Tonemap/Post*/Sky3D HLSL 源见 git 历史（`dcff6d8` 之前） |
 | Mathf（861 行） | `foster/utility.odin` 已覆盖 |
 | Paper UI | 由 `kit/ui`（clay）与 odin-imgui 替代 |
 | Vector2Int | `core:math` 已有 |

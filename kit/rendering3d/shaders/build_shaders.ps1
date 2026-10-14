@@ -1,4 +1,4 @@
-# Compiles 3D HLSL shaders to SPIR-V (Vulkan) and DXIL (D3D12) using
+# Compiles kit 3D HLSL shaders to SPIR-V (Vulkan) and DXIL (D3D12) using
 # the Vulkan SDK dxc. Metal (msl) and WebGL (glsl) targets must be
 # cross-compiled on their platforms; see README.
 # ASCII-only on purpose (see docs/CODE_STYLE.md).
@@ -17,7 +17,7 @@ $shaderDir = $PSScriptRoot
 $out = Join-Path $shaderDir 'Compiled'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-$shaders = @('Standard3D', 'Standard3DSkinned', 'DepthOnly', 'DepthOnlySkinned', 'DebugLine3D')
+$shaders = @('DebugLine3D')
 foreach ($name in $shaders) {
     $src = Join-Path $shaderDir "$name.hlsl"
     & $dxc -spirv -T vs_6_0 -E vertex_main -Fo (Join-Path $out "$name.vertex.spv") $src

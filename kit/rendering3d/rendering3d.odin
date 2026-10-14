@@ -1,16 +1,15 @@
-// rendering3d —— 3D 前向渲染（对位 DragonLib Engine.Rendering 的 3D 部分）。
+// rendering3d —— 3D 渲染机制层（与画风无关的部分）。
 //
-// 着色器管线（HLSL 源自 DragonLib，shaders/build_shaders.ps1 用 Vulkan SDK
-// dxc 编译）：dxil/spv 已入库并 #load 内嵌，按驱动分发（ShaderCreateInfo
-// 无格式字段，SDL 按字节码魔数识别）；.msl/.glsl 需在 Metal/Web 平台补编。
-// 阴影 pass（DepthOnly 已备好着色器）、CSM、Tonemap 后处理是后续增量。
+// 只提供每个 3D 游戏都要的机制；光照模型、材质模型、阴影、后处理等外观
+// 策略由游戏自己写。参考实现（Standard PBR 前向渲染器）在同级仓库
+// olib_sample 的 src/forward3d，复制过去按需修改。
 //
 // 分区：
-//   mesh3d.odin      dasset 顶点 -> Foster Mesh 上传（静态/蒙皮格式）
-//   material3d.odin  StandardMaterial3D 数据 + 渲染状态推导
-//   queue3d.odin     渲染项队列（不透明前到后 / 透明后到前）
-//   shaders/         HLSL 源 + 编译脚本 + Compiled 二进制（入库）
-//   shader3d.odin    着色器装载（#load 内嵌，按驱动分发）
-//   uniforms3d.odin  cbuffer 对应的 std140 打包（CPU 可测）
-//   renderer3d.odin  前向主 pass（公共槽一次 + 逐项 uniform + 发射）
+//   mesh3d.odin        dasset 顶点 -> Foster Mesh 上传（静态/蒙皮格式）
+//   queue3d.odin       泛型渲染队列（不透明前到后 / 透明后到前）
+//   shader3d.odin      字节码按驱动选择 + DebugLine3D 装载
+//   shaders/           DebugLine3D HLSL 源 + 编译脚本 + Compiled 二进制（入库）
+//   uniforms3d.odin    std140 写入 + 顶点矩阵块 + 骨骼 palette 打包
+//   debug_draw3d.odin  立即模式调试线
+//   lod3d.odin         屏幕高度 LOD 选择
 package rendering3d

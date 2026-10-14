@@ -259,9 +259,8 @@ debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, came
 	foster.MeshSetVertices(&d.mesh, raw_data(expanded), len(expanded))
 
 	vp_buf: [64]u8
-	if pack_shadow_matrix_block(vp_buf[:], world.camera3d_view_projection(camera)) {
-		foster.MaterialStageSetUniformBuffer(&d.material.Vertex, vp_buf[:], 0)
-	}
+	std140_write_matrix(vp_buf[:], 0, world.camera3d_view_projection(camera))
+	foster.MaterialStageSetUniformBuffer(&d.material.Vertex, vp_buf[:], 0)
 
 	command: foster.DrawCommand
 	foster.DrawCommandFromMesh(&command, target, &d.mesh, &d.material)

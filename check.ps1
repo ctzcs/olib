@@ -1,7 +1,7 @@
 ﻿# olib 一键验证：提交前运行，任何一项失败则以非零退出码结束。
 # 用法（olib 根目录）：
 #   powershell -File check.ps1              全部检查
-#   powershell -File check.ps1 -NoSamples   跳过同级 olib_sample 示例编译
+#   powershell -File check.ps1 -NoSamples   跳过同级 olib_sample 示例编译与示例测试
 # 产物写到 build/check/（已被 .gitignore 忽略）。
 
 param(
@@ -76,6 +76,11 @@ if (-not $NoSamples -and (Test-Path (Join-Path $samples 'src'))) {
 	foreach ($s in Get-ChildItem -Directory (Join-Path $samples 'src')) {
 		Invoke-Step "sample $($s.Name)" {
 			odin build $s.FullName "-collection:olib=$root" "-out:$out/sample_$($s.Name).exe"
+		}
+		if (Get-ChildItem -Path $s.FullName -Filter '*_test.odin') {
+			Invoke-Step "test   sample $($s.Name)" {
+				odin test $s.FullName "-collection:olib=$root" "-out:$out/test_sample_$($s.Name).exe"
+			}
 		}
 	}
 } elseif (-not $NoSamples) {

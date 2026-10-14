@@ -134,7 +134,7 @@ shader3d_standard_init :: proc(pair: ^Shader3D_Pair, device: ^foster.GraphicsDev
 
 // DebugLine3D（调试线）：vertex 1 个 UBO（ViewProjection），fragment 无。
 // 材质两阶段共用同一 Shader 资源（着色器对 stage 不敏感的部分由
-// material_init_with_shaders 区分，这里 vertex/fragment 各需实例）。
+// MaterialInitWithShaders 区分，这里 vertex/fragment 各需实例）。
 Shader3D_Debug_Line_Pair :: struct {
 	vertex:   foster.Shader,
 	fragment: foster.Shader,

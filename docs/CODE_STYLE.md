@@ -24,6 +24,9 @@ olib/
   （参考 `core/tween/`：manager / tween / interpolated / managed_*）。
 - 依赖方向单向：`kit → foster`、`kit → core → (Odin core/base)`；
   core 不得依赖 foster 或 kit；foster 不依赖 olib 其他任何包。
+- 命名用 Odin 惯例：类型 Ada_Case（`Joint_Pose`），proc、变量、字段 snake_case（`sample_pose`）。
+  foster 例外，对外沿用上游 Foster 的 PascalCase（`foster.BatcherRect`），
+  见 [foster/docs/CODE_STYLE.md](../foster/docs/CODE_STYLE.md#命名)。
 
 ## foster 与 kit 的边界
 
@@ -31,7 +34,7 @@ olib/
 2. **kit**：只提供 foster 没有的能力，例如 UI、资源管线、相机/场景、3D 队列、动画、音频、CLI 控制台。
 3. **硬规则**：
    - kit 的 API 直接接收、返回 foster 类型；**不给** foster 的类型或 proc 起别名，**不做**一对一封装；
-   - kit **不封装** foster 的 App 生命周期（`init_app` / `Run` / `Exit` / `dispose_app`）；
+   - kit **不封装** foster 的 App 生命周期（`InitApp` / `Run` / `Exit` / `Dispose`）；
    - `foster/` 以外的代码**不得** import `olib:foster/internal/...`。
 4. 依赖方向：`kit → foster`、`kit → core`；`core` 不得依赖 `foster` 或 `kit`；`foster` 不依赖 olib 其他任何包。
 

@@ -57,8 +57,8 @@ files to these files, plus intentional API differences, is documented in
 `internal/third_party` (vendored C bindings) and `internal/web` (JS side of
 the web bridge).
 
-`tick_app` clears `context.temp_allocator` at the end of every frame, after
-`RenderProc` and `end_frame`, on both native and Web targets. Temporary allocations
+`Tick` clears `context.temp_allocator` at the end of every frame, after
+`RenderProc` and `GraphicsDeviceEndFrame`, on both native and Web targets. Temporary allocations
 from Update/Render expire at that point; Startup allocations expire at the end of
 the first frame. Keep data needed across frames in a persistent allocator.
 

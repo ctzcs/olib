@@ -152,7 +152,7 @@ NewFrame :: proc(owner: ^foster.App, dt: f32 = -1) {
 	}
 	io.DeltaTime = max(frame_dt, 1.0 / 1000.0)
 
-	// ofoster zeroes SwapchainWidth/Height in end_frame, so the update phase
+	// ofoster zeroes SwapchainWidth/Height in GraphicsDeviceEndFrame, so the update phase
 	// must use the sizes cached during the last render (queried live the very
 	// first time, before any render has happened)
 	if display_size[0] <= 0 || display_size[1] <= 0 {

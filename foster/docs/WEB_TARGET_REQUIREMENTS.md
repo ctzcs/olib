@@ -36,27 +36,27 @@ Compute、SSBO、离屏 MSAA、线框填充属于当前 WebGL2 后端限制。�
 - **死代码消除与 SDL 导入表**：未被静态可达调用链引用的 SDL foreign proc 不进 wasm 导入表；**文件级 proc 别名（`XXX :: yyy_proc`）不强制产出代码**。因此无需拆分 SDL 文件：保留全部 `import SDL "vendor:sdl3"`，只在内联 `when ODIN_OS == .JS` 分支替换调用点即可（SDL 类型如 `^SDL.Window` 字段在 .JS 下可继续使用）。
 - **core:os 在 js 目标是编译期 #panic**（`core/os/wasm.odin`，**仅 import 不使用也会触发**）；`core:path/filepath` 的 `path.odin` 无条件依赖 core:os，同样不可用。已引入平台文件收口：`platform_thread_native/web.odin`、`storage_os_native/web.odin`、`storage_path_native/web.odin`（`#+build !js` / `#+build js wasm32, js wasm64p32`；负向 tag 语义已实测有效）。**core:compress/zlib、core:path/slashpath、core:time 均为 js 安全**。
 - **§7 风险项已有结论**：core:os 在 js 下完全不可用 → vehicles 直接使用 `os.read_entire_file_from_path` 等的存档代码**必须**走 `when ODIN_OS == .JS` 分流到虚拟 FS 桥（不是可选项）。
-- **栈上 App 的生命周期陷阱**：.JS 下 `main()` 在 `Run` 注册帧循环后立即返回，游戏在 `main` 里声明的**栈上 `App` 结构会被后续调用复用覆写**（实测第 ~120 帧被 `fmt.println` 调用链打穿）。框架在 **`run()` 入口**经 `web_relocate_app` 把 App **堆拷贝并修正内部回指针**（Window/Input/FileSystem/RenderTarget；放在入口是因为 StartupProc 在 run 内部执行，其中初始化的 Batcher 等会持有 `&app.GraphicsDevice`）。**约束：游戏经 `AppSetUserData` 传入的状态在 web 上必须是全局变量或堆分配，不能是 main() 局部变量，也不能把 App 嵌在该状态里（嵌入的那份在 run() 入口被搬走后即过期）**（vehicles 需要检查这一点）。
+- **栈上 App 的生命周期陷阱**：.JS 下 `main()` 在 `Run` 注册帧循环后立即返回，游戏在 `main` 里声明的**栈上 `App` 结构会被后续调用复用覆写**（实测第 ~120 帧被 `fmt.println` 调用链打穿）。框架在 **`Run()` 入口**经 `web_relocate_app` 把 App **堆拷贝并修正内部回指针**（Window/Input/FileSystem/RenderTarget；放在入口是因为 StartupProc 在 run 内部执行，其中初始化的 Batcher 等会持有 `&app.GraphicsDevice`）。**约束：游戏经 `AppSetUserData` 传入的状态在 web 上必须是全局变量或堆分配，不能是 main() 局部变量，也不能把 App 嵌在该状态里（嵌入的那份在 run() 入口被搬走后即过期）**（vehicles 需要检查这一点）。
 - **rAF 与页面可见性**：浏览器对 hidden 页面暂停 requestAnimationFrame（符合预期，省电）；`pagehide → Quit` 事件已接通。IAB/无头测试环境里页面恒为 hidden，验收时需手动驱动 `foster_step`（webtest 已验证此法）。
 - **M0 验收结果**（webtest，Chrome IAB 实测）：600 帧长跑无中断、计时精确（2/4/6/8/10s）、画布像素读回游戏驱动的清屏色、resize 事件正常消费、Quit 干净走 `run_finish`、退出后防重入；桌面（Windows）构建回归通过。产物：`web.odin`（Odin 桥）、`internal/web/foster.js`（JS 桥）、`tests/webtest/`（验收程序 + 构建脚本）。
 
 ### M2/M3/M4(2026-09-10)新增已验证事实
 
-- **输入不伪造 SDL.Event**:Keys 枚举值与 SDL scancode 一致(`cast(Keys)scancode`),Web 事件在 poll_events 的 .JS 分支直接派发到现有 `input_key/input_mouse_button/input_mouse_move/input_mouse_wheel` 入口,复用全部现有状态机(双缓冲、stamp、Enabled 门控)。JS 侧维护 `e.code → scancode` 映射表;鼠标坐标 = `(clientX-rect.left) × (clientWidth/rect.width) × DPR`(见 vehicles 接入事实, offsetX 方案已被证伪)。
+- **输入不伪造 SDL.Event**:Keys 枚举值与 SDL scancode 一致(`cast(Keys)scancode`),Web 事件在 PollEvents 的 .JS 分支直接派发到现有 `InputKey/input_mouse_button/input_mouse_move/input_mouse_wheel` 入口,复用全部现有状态机(双缓冲、stamp、Enabled 门控)。JS 侧维护 `e.code → scancode` 映射表;鼠标坐标 = `(clientX-rect.left) × (clientWidth/rect.width) × DPR`(见 vehicles 接入事实, offsetX 方案已被证伪)。
 - **该环境 WebGL2 的 7 参 texSubImage2D 绑定不可用**(连 null 都 Overload resolution failed),必须用 9 参形式(带 width/height)—— `fw_gl_upload_texture` 已带宽高。
 - **新增 SDL 可达性坑**:`OpenUserStorage` 会把 `SDL.GetPrefPath` 拉进可达集(即使运行时走不到),`file_system_open_user/title_storage` 已加 .JS 分支。游戏每接入一个新框架路径都要复查导入表(`strings wasm | grep SDL3` 应为 0)。
 - **M4 虚拟 FS 设计**:localStorage 每文件一键(`fosterfs:<绝对路径>`,base64 载荷,二进制安全,同步 API 无需异步桥)。扁平 FS 无目录概念(`is_directory` 恒 false、`enumerate` 暂不支持)。**vehicles 侧直接用 core:os 的存档代码仍需 5 行分流** —— 但若改走 `OpenUserStorage + ReadAllText/WriteAllText` 公共 API 则零改动。
 - **M2 验收**:棋盘纹理四边形(Textured 管线)像素 `[120,220,160]` 精确;stb 中文烘焙 20 字形,文本行 87 个采样点命中;两纹理均经 9 参 texSubImage2D 上传。
-- **M3 验收**:合成 KeyboardEvent(ArrowRight)驱动标记每帧 +4 像素精确移动;滚轮/空格/鼠标事件链路无异常;`OnResize` 回调触发(resize → WindowResized 事件 → window_on_event)。
+- **M3 验收**:合成 KeyboardEvent(ArrowRight)驱动标记每帧 +4 像素精确移动;滚轮/空格/鼠标事件链路无异常;`OnResize` 回调触发(resize → WindowResized 事件 → OnEvent)。
 - **M4 验收**:visits 计数经 OpenUserStorage→WriteAllText 写入 localStorage,刷新页面后读回递增(1→2)并经 stb 字形渲染到画面。
 - 桌面(Windows)构建+运行回归通过(字形烘焙、存档、渲染无 panic)。
 
 ### vehicles 接入(2026-09-10)新增已验证事实
 
 - **鼠标坐标必须按 rect 归一**:`clientX - rect.left` 直接乘 DPR 在页面被 zoom/transform 时错位(实测 245 → 163.33,恰 2/3);正确公式 `(clientX-rect.left) × (clientWidth/rect.width) × DPR`。合成 PointerEvent 的 `offsetX` 不可信。**`<script src>` 会被浏览器缓存** —— 调试 JS 改动不生效时,先给 index.html 的引用加 `?v=N`。
-- **WebGL preserveDrawingBuffer 保留上一帧**,桌面交换链是 discard 语义 → 框架在 begin_frame(.JS)先清一次屏对齐桌面行为,防止游戏未 clear 的帧残留残影。
+- **WebGL preserveDrawingBuffer 保留上一帧**,桌面交换链是 discard 语义 → 框架在 GraphicsDeviceBeginFrame(.JS)先清一次屏对齐桌面行为,防止游戏未 clear 的帧残留残影。
 - **游戏侧接入清单(vehicles 已全部落地)**:core:os → 平台文件收口(game_args/io_read_file/io_write_file/io_remove);字体 → 源码字符集子集化(pyftsubset,17.8MB→486KB)`#load` 内嵌;音频 → WebAudio 桥(foster.js 的 `FOSTER_EXTRA_IMPORTS` 钩子注入,游戏侧 `audio_platform_web.odin` 每次 update 泵 1/60s 样本,AudioBufferSourceNode 顺序调度 + 前瞻缓冲);存档 → io_* 直通 storage_os 虚拟 FS,桌面行为不变。
-- **框架为此补的分支**:`window_set_fullscreen/fullscreen`(页面 Fullscreen API)、`window_set_size`(no-op,canvas 随视口)、`target_dispose`(离屏目标释放)、`texture_download_data`(返回 nil,截图类功能 Web 暂不支持,`texture_get_data` 自动退回 CPU 像素副本)。**MouseButtonDown 事件需同时更新鼠标位置**(桌面靠轮询,Web 禁用轮询)。
+- **框架为此补的分支**:`SetWindowFullscreen/fullscreen`(页面 Fullscreen API)、`SetWindowSize`(no-op,canvas 随视口)、`TargetDispose`(离屏目标释放)、`TextureDownloadData`(返回 nil,截图类功能 Web 暂不支持,`TextureGetData` 自动退回 CPU 像素副本)。**MouseButtonDown 事件需同时更新鼠标位置**(桌面靠轮询,Web 禁用轮询)。
 - **vehicles 验收结果**:完整启动(内嵌字体 495 字形烘焙 + WebAudio 初始化)、300 帧 0.33ms/帧、合成点击 Deploy 成功切换车库场景、settings 持久化 localStorage、wasm 导入表零 SDL;桌面(Windows)回归通过(随包字体路径不受影响)。产物:`web/vehicles.js`(音频桥)、`web/index.html`、`build_web.bat`。
 - **itch 发布路径**:`build_web.bat` 产物(build/web/ 全部文件)打 zip → itch 新建项目选 HTML 类型上传 → 勾选"在浏览器中运行"。
 

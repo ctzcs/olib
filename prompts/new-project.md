@@ -185,7 +185,7 @@ foster 支持 `js_wasm32`，但有硬约束，接入前完整阅读 olib 的 `fo
 Odin 没有 GC，所有权必须显式：
 
 - 每种资源配一对 `xxx_init` / `xxx_destroy`（或 `_dispose`），在注释里写明谁分配、谁释放、生命周期多长。foster 资源（Texture、Batcher、Font、Target……）同样由明确的所有者在 `ShutdownProc` 中释放。
-- 长期数据用 `context.allocator`；一帧内用完的字符串、临时数组用 `context.temp_allocator`。foster 在每帧末尾（`tick_app` 结束时，`RenderProc` 与 `end_frame` 之后）清空临时分配器；临时分配只在本帧有效，不要跨帧持有。`StartupProc` 中的临时分配在第一帧结束时失效。
+- 长期数据用 `context.allocator`；一帧内用完的字符串、临时数组用 `context.temp_allocator`。foster 在每帧末尾（`Tick` 结束时，`RenderProc` 与 `GraphicsDeviceEndFrame` 之后）清空临时分配器；临时分配只在本帧有效，不要跨帧持有。`StartupProc` 中的临时分配在第一帧结束时失效。
 - 返回切片或字符串的 proc 在签名或注释中说明由谁 `delete`；接收 `allocator := context.allocator` 参数的 proc 按调用方传入的分配器分配。
 - 指针稳定性：`core/handle/array` 的 `get` 返回的指针在 `add` / `remove` 后可能失效，不要跨越结构变更持有；需要稳定地址时选 `core/handle/growing` 或 `virtual`（见 `core/handle/README.md`）。`kit/ui` 的 `UI_Context` 必须地址稳定、不可按值复制。
 - 开发构建用 `core:mem` 的 `Tracking_Allocator` 检查泄漏（olib `core/debug` 有现成包装），退出时打印未释放的分配。

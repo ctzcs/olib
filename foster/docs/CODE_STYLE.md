@@ -12,6 +12,16 @@
 - 平台适配继续使用带 `#+build` 的文件；内部绑定和 Web 桥继续放在
   `foster/internal/`。文件对应关系见 [移植映射](PORTING_MAP.md)。
 
+## 命名
+
+- 对外 API 沿用上游 C# Foster 的 PascalCase，每个函数只有一个名字：
+  `Type.Method` 写成 `TypeMethod`（`Batcher.Rect` → `BatcherRect`），
+  重载用 proc group 或显式名区分，见 [移植映射](PORTING_MAP.md#有意的-api-差异)。
+- snake_case 只用于包内实现，必须标 `@(private)`；包外不能调用。
+  例外：`@(export)` 给 JS 调用的入口（`foster_step`）和 `foreign` 块里的绑定声明。
+- 不写 `PascalName :: snake_name` 形式的别名：需要对外时直接用 PascalCase 名字定义。
+- 类型、结构体字段、enum 成员同样沿用上游写法（`AppConfig`、`app.UserData`）。
+
 ## 文件内层级
 
 文件顶部保留构建条件、包声明、文件说明和 imports。导航放在 imports 后、

@@ -5,6 +5,7 @@ import "core:mem"
 import foster "olib:foster"
 
 verify_graphics :: proc(device: ^foster.GraphicsDevice, flush: proc(_: ^foster.GraphicsDevice)) {
+	verify_msaa_graphics(device, flush)
 	verify_font_graphics(device, flush)
 	batcher: foster.Batcher
 	foster.BatcherInit(&batcher, device)
@@ -150,4 +151,76 @@ verify_graphics :: proc(device: ^foster.GraphicsDevice, flush: proc(_: ^foster.G
 	fmt.println(
 		"PASS: stencil mask, color write mask, depth write/compare, Batcher state splitting and disposal",
 	)
+}
+
+// [olib L-005] 真正创建多采样附件，并跨通道绘制后验证解析纹理；不只测能力查询。
+verify_msaa_graphics :: proc(device: ^foster.GraphicsDevice, flush: proc(_: ^foster.GraphicsDevice)) {
+	if !foster.GraphicsDeviceIsTextureMultiSampleSupported(device, .Color, .Four) ||
+	   !foster.GraphicsDeviceIsTextureMultiSampleSupported(device, .Depth32, .Four) {
+		fmt.println("SKIP: 4x MSAA is not supported by this device")
+		return
+	}
+	target: foster.Target
+	attachments := [2]foster.TargetAttachmentSpec{
+		{Format = .Color, SampleCount = .Four},
+		{Format = .Depth32, SampleCount = .Four},
+	}
+	foster.TargetInit(&target, device, 16, 16, attachments[:], "MSAA regression")
+	defer foster.TargetDispose(&target)
+	assert(foster.TargetAttachment(&target).ResolveResource != nil)
+	surface := foster.DrawableTargetFromTarget(&target)
+	colors := [1]foster.Color{foster.Black}
+	// [olib L-006] Depth32 无模板；只清颜色/深度也必须通过 SDL cycle 验证。
+	foster.GraphicsDeviceClear(device, surface, colors[:], 1, 0, .Color | .Depth)
+	batcher: foster.Batcher
+	foster.BatcherInit(&batcher, device)
+	defer foster.BatcherDispose(&batcher)
+	white: foster.Texture
+	foster.TextureInit(&white, device, 1, 1)
+	defer foster.TextureDispose(&white)
+	pixel := [1]foster.Color{foster.White}
+	foster.TextureSetData(&white, raw_data(pixel[:]), size_of(pixel))
+	batcher.Texture = &white
+	foster.BatcherRect(&batcher, {0, 0, 16, 8}, foster.Color{255, 0, 0, 255})
+	foster.BatcherRender(&batcher, surface)
+	// [olib L-008] 通道活跃时再次上传，必须仍录入当前命令缓冲并保留红色区域。
+	command_buffer := device.CommandBuffer
+	staging_cursor := device.UploadStagingCursor
+	assert(device.RenderPass != nil)
+	foster.BatcherClear(&batcher)
+	batcher.Texture = &white
+	foster.BatcherRect(&batcher, {0, 8, 16, 8}, foster.Color{0, 255, 0, 255})
+	foster.BatcherRender(&batcher, surface)
+	assert(device.CommandBuffer == command_buffer)
+	when ODIN_OS != .JS {
+		assert(device.UploadStaging != nil && device.UploadStagingCursor > staging_cursor)
+	}
+	flush(device)
+	pixels := foster.TextureDownloadData(foster.TargetAttachment(&target))
+	defer delete(pixels)
+	assert(len(pixels) == 16*16*4)
+	for y in 0..<16 {
+		for x in 0..<16 {
+			i := (x+y*16)*4
+			assert(pixels[i] == (y < 8 ? 255 : 0))
+			assert(pixels[i+1] == (y < 8 ? 0 : 255))
+			assert(pixels[i+3] == 255)
+		}
+	}
+	foster.GraphicsDeviceClear(device, surface, colors[:], 1, 0, .Color | .Depth)
+	foster.BatcherClear(&batcher)
+	batcher.Texture = &white
+	foster.BatcherTriangle(&batcher, {1, 1}, {15, 1}, {1, 15}, foster.White)
+	foster.BatcherRender(&batcher, surface)
+	flush(device)
+	edge_pixels := foster.TextureDownloadData(foster.TargetAttachment(&target))
+	defer delete(edge_pixels)
+	partial := 0
+	for i in 0..<16*16 {
+		if edge_pixels[i*4] > 0 && edge_pixels[i*4] < 255 {
+			partial += 1
+		}
+	}
+	assert(partial > 0, "4x MSAA must produce partial edge coverage")
+	fmt.println("PASS: 4x MSAA attachments, cross-pass preservation, resolve readback and edge coverage")
 }

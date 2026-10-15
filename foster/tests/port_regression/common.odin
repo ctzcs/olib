@@ -2,11 +2,13 @@ package main
 
 import "core:fmt"
 import "core:io"
+import "core:mem"
 import foster "olib:foster"
 
 verify_common :: proc() {
 	verify_api_completion()
 	verify_font_memory()
+	verify_uniform_reuse()
 	polygon := foster.PolygonMake({0, 0}, {4, 0}, {4, 1}, {1, 1}, {1, 4}, {0, 4})
 	defer delete(polygon.Vertices)
 	defer delete(polygon.Indices)
@@ -109,6 +111,35 @@ verify_common :: proc() {
 	fmt.println(
 		"PASS: concave triangulation, spatial/time/ease helpers, JSON converters, input filters and press transitions",
 	)
+}
+
+// [olib L-009] 稳定尺寸的热路径必须复用分配，缩短与清空仍更新两份 uniform 数据。
+verify_uniform_reuse :: proc() {
+	tracker: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&tracker, context.allocator)
+	defer mem.tracking_allocator_destroy(&tracker)
+	{
+		context.allocator = mem.tracking_allocator(&tracker)
+		stage: foster.MaterialStage
+		foster.MaterialStageInit(&stage, .Vertex)
+		bytes: [64]u8
+		foster.MaterialStageSetUniformBuffer(&stage, bytes[:])
+		allocations := tracker.total_allocation_count
+		for i in 0..<1000 {
+			bytes[0] = u8(i%256)
+			foster.MaterialStageSetUniformBuffer(&stage, bytes[:])
+			assert(stage.UniformBuffers[0][0] == bytes[0])
+			assert(stage.UniformBufferObjects[0].Data[0] == bytes[0])
+		}
+		assert(tracker.total_allocation_count == allocations)
+		foster.MaterialStageSetUniformBuffer(&stage, bytes[:4])
+		assert(len(stage.UniformBuffers[0]) == 4 && len(stage.UniformBufferObjects[0].Data) == 4)
+		foster.MaterialStageSetUniformBuffer(&stage, nil)
+		assert(len(stage.UniformBuffers[0]) == 0 && len(stage.UniformBufferObjects[0].Data) == 0)
+		foster.MaterialStageDispose(&stage)
+	}
+	assert(len(tracker.allocation_map) == 0)
+	fmt.println("PASS: uniform update capacity reuse, shrink, clear and disposal")
 }
 
 verify_zip :: proc(storage: ^foster.StorageContainer) {

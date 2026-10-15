@@ -647,6 +647,8 @@ GraphicsDeviceEndFrame :: proc(graphics_device: ^GraphicsDevice) {
 	}
 
 	// 渲染已直接写入 swapchain 纹理: 无需 acquire / blit
+	// [olib L-007] 必须实际结束 GPU 通道（并解析 MSAA），不能只清空句柄后提交。
+	GraphicsDeviceEndRenderPass(graphics_device)
 	command_buffer := graphics_device.CommandBuffer
 	graphics_device.RenderPass = nil
 	graphics_device.CommandBuffer = nil
@@ -1670,11 +1672,17 @@ InitApp :: proc(app: ^App, config: AppConfig) {
 	app.GraphicsDevice.RequestedDriver = config.PreferredGraphicsDriver
 	app.main_thread_id = platform_current_thread_id()
 
-	fmt.println("Foster:", VersionString())
+	// [olib L-010] 版本字符串由调用方拥有，日志打印后释放，避免每次 InitApp 泄漏。
+	version := VersionString()
+	fmt.println("Foster:", version)
+	delete(version)
 	when ODIN_OS == .JS {
 		fmt.println("SDL: web backend (js_wasm32)")
 	} else {
-		fmt.println("SDL:", SDLVersionString())
+		// [olib L-010] SDLVersionString 同样返回已分配字符串。
+		sdl_version := SDLVersionString()
+		fmt.println("SDL:", sdl_version)
+		delete(sdl_version)
 		_ = SDL.SetHint(SDL.HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1")
 
 		init_flags := SDL.INIT_VIDEO + SDL.INIT_EVENTS + SDL.INIT_JOYSTICK + SDL.INIT_GAMEPAD

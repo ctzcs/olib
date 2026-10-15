@@ -21,6 +21,13 @@ contains a stored binary file, a Deflate text file, an empty file and directorie
 Shared GPU checks verify offscreen orientation, partial updates of GPU-rendered
 pixels, GPU clones, nearest scaled copies, stencil clipping, color write masks,
 depth writing/comparison and repeated Batcher disposal.
+When supported, native checks also create 4x MSAA color/depth attachments, preserve
+color across passes, read the resolved texture and verify partial diagonal-edge
+coverage. Native EndFrame checks verify the final pass is closed and submitted.
+The MSAA test uploads a second mesh while a render pass is active and verifies
+that both draws remain in the same command buffer, use staging storage, and
+preserve their distinct pixels. CPU checks perform 1,000 equal-sized uniform
+updates without new allocations and verify shrinking, clearing and disposal.
 
 For WebGL2, build the same checks and copy Odin's browser runtime:
 

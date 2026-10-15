@@ -599,6 +599,10 @@ target_init_with_attachments :: proc(
 		usage: SDL.GPUTextureUsageFlags
 		if TextureFormatIsColorFormat(attachment.Format) {
 			usage = SDL.GPUTextureUsageFlags{.SAMPLER, .COLOR_TARGET}
+			// [olib L-005] 多采样附件不可直接采样；TextureInitEx 另建单采样解析纹理。
+			if attachment.SampleCount != .One {
+				usage -= {.SAMPLER}
+			}
 		} else {
 			usage = SDL.GPUTextureUsageFlags{.DEPTH_STENCIL_TARGET}
 		}
@@ -761,8 +765,8 @@ MaterialStageSetUniformBuffer :: proc(stage: ^MaterialStage, data: []u8, slot: i
 	if slot < 0 || slot >= len(stage.UniformBuffers) {
 		panic("Uniform buffer slot out of range")
 	}
-	delete(stage.UniformBuffers[slot])
-	stage.UniformBuffers[slot] = nil
+	// [olib L-009] 保留容量，逐物体更新 uniform 不再每次 free/alloc。
+	clear(&stage.UniformBuffers[slot])
 	append(&stage.UniformBuffers[slot], ..data)
 	UniformBufferClear(&stage.UniformBufferObjects[slot])
 	UniformBufferSet(&stage.UniformBufferObjects[slot], data)
@@ -1417,7 +1421,8 @@ begin_render_pass_ex :: proc(
 				cycle                = len(clear_colors) > 0,
 			}
 			if attachment.ResolveResource != nil {
-				color_target.store_op = .RESOLVE
+				// [olib L-005] 后续通道可能 LOAD 同一附件，解析时也要保留多采样内容。
+				color_target.store_op = .RESOLVE_AND_STORE
 				color_target.resolve_texture = attachment.ResolveResource
 				color_target.resolve_mip_level = 0
 				color_target.resolve_layer = 0
@@ -1434,20 +1439,22 @@ begin_render_pass_ex :: proc(
 			color_targets[color_count] = color_target
 			color_count += 1
 		} else {
+			// [olib L-006] 没有模板平面时不能假装 LOAD；cycle 不得丢弃仍需 LOAD 的平面。
+			has_stencil := attachment.Format == .Depth24Stencil8 || attachment.Format == .Depth32Stencil8
 			depth_target_value = SDL.GPUDepthStencilTargetInfo {
 				texture          = attachment.Resource,
 				clear_depth      = depth,
 				load_op          = .LOAD,
 				store_op         = .STORE,
-				stencil_load_op  = .LOAD,
-				stencil_store_op = .STORE,
-				cycle            = clear_depth || clear_stencil,
+				stencil_load_op  = has_stencil ? .LOAD : .DONT_CARE,
+				stencil_store_op = has_stencil ? .STORE : .DONT_CARE,
+				cycle            = clear_depth && (clear_stencil || !has_stencil),
 				clear_stencil    = u8(stencil),
 			}
 			if clear_depth {
 				depth_target_value.load_op = .CLEAR
 			}
-			if clear_stencil {
+			if clear_stencil && has_stencil {
 				depth_target_value.stencil_load_op = .CLEAR
 			}
 			depth_target_ptr = &depth_target_value
@@ -1936,6 +1943,11 @@ create_pipeline_for_draw_command :: proc(
 	for i := 0; i < len(target_ptr.Attachments); i += 1 {
 		attachment := target_ptr.Attachments[i]
 		attachment_format := TextureFormatToSDL(attachment.Format)
+		// [olib L-011] 交换链可能为 BGRA，包装附件的 .Color 不能替代真实管线格式。
+		if target.IsWindow && graphics_device.HasWindowRenderTarget &&
+			TextureFormatIsColorFormat(attachment.Format) {
+			attachment_format = graphics_device.SwapchainFormat
+		}
 		attachment_sample_count := SampleCountToSDL(attachment.SampleCount)
 		if attachment_sample_count > sample_count {
 			sample_count = attachment_sample_count
@@ -2919,8 +2931,9 @@ GraphicsDeviceUploadToBuffer :: proc(
 
 	device := graphics_device.Device
 
-	// 帧内快速路径: 把上传记录进本帧命令缓冲的暂存缓冲分区 (免每帧创建/销毁与 GPU 空等)
-	if graphics_device.CommandBuffer != nil && graphics_device.RenderPass == nil {
+	// [olib L-008] 帧内上传先关闭绘制通道，仍录进同一命令缓冲，避免回退后 WaitForGPUIdle。
+	if graphics_device.CommandBuffer != nil {
+		GraphicsDeviceEndRenderPass(graphics_device)
 		cursor := graphics_device.UploadStagingCursor
 		required := data_size
 		need_total := cursor + required
@@ -2949,7 +2962,8 @@ GraphicsDeviceUploadToBuffer :: proc(
 			graphics_device.UploadStagingSize = next
 		}
 		transfer := graphics_device.UploadStaging
-		mapped := SDL.MapGPUTransferBuffer(device, transfer, false)
+		// [olib L-008] 每帧首次映射 cycle，保留 GPU 尚未读取的上帧暂存内容。
+		mapped := SDL.MapGPUTransferBuffer(device, transfer, cursor == 0)
 		if mapped == nil {
 			panic(CreateExceptionFromSDL("SDL_MapGPUTransferBuffer"))
 		}

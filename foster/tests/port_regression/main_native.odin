@@ -25,6 +25,21 @@ verify_native_graphics :: proc(driver: foster.GraphicsDriver, name: cstring) {
 	assert(device.CommandBuffer != nil)
 	fmt.println("Testing", driver)
 	verify_graphics(&device, flush_native)
+	// [olib L-007] EndFrame 自己负责关闭最后一个通道，不能依赖外部 flush。
+	final_target: foster.Target
+	foster.TargetInit(&final_target, &device, 4, 4)
+	defer foster.TargetDispose(&final_target)
+	foster.GraphicsDeviceClear(&device, foster.DrawableTargetFromTarget(&final_target), foster.White)
+	assert(device.RenderPass != nil)
+	foster.GraphicsDeviceEndFrame(&device)
+	assert(device.RenderPass == nil && device.CommandBuffer == nil && !device.InFrame)
+	assert(SDL.WaitForGPUIdle(device.Device))
+	final_pixels := foster.TextureDownloadData(foster.TargetAttachment(&final_target))
+	defer delete(final_pixels)
+	assert(len(final_pixels) == 64)
+	for value in final_pixels do assert(value == 255)
+	fmt.println("PASS: EndFrame closes and submits the final render pass")
+	device.CommandBuffer = SDL.AcquireGPUCommandBuffer(device.Device)
 	assert(SDL.CancelGPUCommandBuffer(device.CommandBuffer))
 }
 

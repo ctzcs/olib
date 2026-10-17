@@ -62,7 +62,7 @@ Compute、SSBO、离屏 MSAA、线框填充属于当前 WebGL2 后端限制。�
 
 ### M1(2026-09-09)新增已验证事实
 
-- **着色器语义以 SPIR-V 反编译为准**:本机 VulkanSDK 的 spirv-cross 可直接把 assets/shaders/*.spv 反编译成 GLSL(`spirv-cross --es --version 310 x.spv`)。Batcher 片元 = `(tex·mode.x)·color + color·(mode.y·tex.a) + color·mode.z`(Normal/Wash/Fill);三个顶点着色器都是 `Matrix * vec4(pos,0,1)`,Matrix 为 64 字节列主序。已产出 6 个 `*.glsl`(GLSL ES 300,命名式 uniform:`u_matrix`/`u_tex`/`u_distance_range`)。
+- **着色器语义以 SPIR-V 反编译为准**:本机 VulkanSDK 的 spirv-cross 可直接把 assets/shaders/Compiled/*.spv 反编译成 GLSL(`spirv-cross --es --version 310 x.spv`)。Batcher 片元 = `(tex·mode.x)·color + color·(mode.y·tex.a) + color·mode.z`(Normal/Wash/Fill);三个顶点着色器都是 `Matrix * vec4(pos,0,1)`,Matrix 为 64 字节列主序。已产出 6 个 `*.glsl`(GLSL ES 300,命名式 uniform:`u_matrix`/`u_tex`/`u_distance_range`)。
 - **§11 uniform 决策已定**:逐 draw 设 `uniformMatrix4fv`/`uniform1f`,不用 UBO(我们自控全部 GLSL,uniform 命名约定在握;Batcher 每 draw 恰好推一次矩阵)。
 - **GL 对象走句柄表**:JS 侧 `Map<索引, GL对象>`,Odin 把 u32 句柄 cast 进 `^SDL.GPUXxx` 字段;`web_handle_ptr/u32` 互转。管线缓存/采样器缓存沿用 Odin 侧 map(键不变)。
 - **viewport/scissor 需 Y 翻转**:SDL_GPU 左上原点 → `gl.viewport(x, fbH-y-h, w, h)`;正交矩阵本身已含 Y 翻转,不用动。

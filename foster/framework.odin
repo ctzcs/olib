@@ -313,24 +313,25 @@ DefaultResourcesDispose :: proc(device: ^GraphicsDevice) {
 }
 
 // Built-in shaders are vendored with the Odin package so it can be relocated.
-batcher_vertex_spv :: #load("assets/shaders/Batcher.vertex.spv")
-batcher_fragment_spv :: #load("assets/shaders/Batcher.fragment.spv")
-batcher_vertex_dxil :: #load("assets/shaders/Batcher.vertex.dxil")
-batcher_fragment_dxil :: #load("assets/shaders/Batcher.fragment.dxil")
-batcher_vertex_msl :: #load("assets/shaders/Batcher.vertex.msl")
-batcher_fragment_msl :: #load("assets/shaders/Batcher.fragment.msl")
-textured_vertex_spv :: #load("assets/shaders/Textured.vertex.spv")
-textured_fragment_spv :: #load("assets/shaders/Textured.fragment.spv")
-textured_vertex_dxil :: #load("assets/shaders/Textured.vertex.dxil")
-textured_fragment_dxil :: #load("assets/shaders/Textured.fragment.dxil")
-textured_vertex_msl :: #load("assets/shaders/Textured.vertex.msl")
-textured_fragment_msl :: #load("assets/shaders/Textured.fragment.msl")
-msdf_vertex_spv :: #load("assets/shaders/Msdf.vertex.spv")
-msdf_fragment_spv :: #load("assets/shaders/Msdf.fragment.spv")
-msdf_vertex_dxil :: #load("assets/shaders/Msdf.vertex.dxil")
-msdf_fragment_dxil :: #load("assets/shaders/Msdf.fragment.dxil")
-msdf_vertex_msl :: #load("assets/shaders/Msdf.vertex.msl")
-msdf_fragment_msl :: #load("assets/shaders/Msdf.fragment.msl")
+// [olib L-013] 原生 shader 产物统一放入 Compiled，源码留在 shaders。
+batcher_vertex_spv :: #load("assets/shaders/Compiled/Batcher.vertex.spv")
+batcher_fragment_spv :: #load("assets/shaders/Compiled/Batcher.fragment.spv")
+batcher_vertex_dxil :: #load("assets/shaders/Compiled/Batcher.vertex.dxil")
+batcher_fragment_dxil :: #load("assets/shaders/Compiled/Batcher.fragment.dxil")
+batcher_vertex_msl :: #load("assets/shaders/Compiled/Batcher.vertex.msl")
+batcher_fragment_msl :: #load("assets/shaders/Compiled/Batcher.fragment.msl")
+textured_vertex_spv :: #load("assets/shaders/Compiled/Textured.vertex.spv")
+textured_fragment_spv :: #load("assets/shaders/Compiled/Textured.fragment.spv")
+textured_vertex_dxil :: #load("assets/shaders/Compiled/Textured.vertex.dxil")
+textured_fragment_dxil :: #load("assets/shaders/Compiled/Textured.fragment.dxil")
+textured_vertex_msl :: #load("assets/shaders/Compiled/Textured.vertex.msl")
+textured_fragment_msl :: #load("assets/shaders/Compiled/Textured.fragment.msl")
+msdf_vertex_spv :: #load("assets/shaders/Compiled/Msdf.vertex.spv")
+msdf_fragment_spv :: #load("assets/shaders/Compiled/Msdf.fragment.spv")
+msdf_vertex_dxil :: #load("assets/shaders/Compiled/Msdf.vertex.dxil")
+msdf_fragment_dxil :: #load("assets/shaders/Compiled/Msdf.fragment.dxil")
+msdf_vertex_msl :: #load("assets/shaders/Compiled/Msdf.vertex.msl")
+msdf_fragment_msl :: #load("assets/shaders/Compiled/Msdf.fragment.msl")
 
 // ==============================================================================
 // Graphics / Defaults / BatcherVertex — 默认批处理顶点

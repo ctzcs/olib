@@ -3,6 +3,8 @@
 // 用法：
 //   odin run tools/shaders                         编译 kit/rendering3d/shaders（DebugLine3D）
 //   odin run <olib>/tools/shaders -- -dir:<目录>   编译游戏/示例自己的着色器目录（相对当前目录）
+//   odin run tools/shaders -- -dir:foster/assets/shaders  重建 Foster 三组默认 shader
+// 目录归属与源码/产物规则见同目录 README.md。
 //
 // 流程与上游 Foster 的 compile.sh 一致：目录下每个 *.hlsl（跳过 *.hlsli）的
 // vertex / fragment 两个阶段，先 HLSL -> .spv，再 .spv -> .dxil 与 .spv -> .msl，

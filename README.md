@@ -138,5 +138,7 @@ odin-imgui 的 foster 后端示例、校验 foster 本地修改清单；同级�
 odin test kit/ui -collection:olib=.
 ```
 
+Shader 的模块归属、源码与 `Compiled/` 分层及统一编译入口见 [Shader 归属与编译](tools/shaders/README.md)。
+
 编码规范：[docs/CODE_STYLE.md](docs/CODE_STYLE.md)
 移植路线图：[docs/ROADMAP.md](docs/ROADMAP.md)

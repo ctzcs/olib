@@ -76,7 +76,10 @@ path, an empty `Root` resolves paths relative to the current working directory.
   layer incl. Batcher), `images.odin` (image loading and fonts), `input.odin`,
   `spatial.odin`, `utility.odin`, `storage.odin`, `web.odin` (js bridge), plus
   `#+build` platform pair (`platform_native.odin` / `platform_web.odin`).
-- `assets/shaders/`: default shaders embedded at compile time via `#load`.
+- `assets/shaders/`: default HLSL and hand-adapted Web GLSL sources. Native artifacts
+  live in `assets/shaders/Compiled/` and are embedded via `#load`; rebuild with
+  `odin run tools/shaders -- -dir:foster/assets/shaders` from the olib root.
+  See [shader layout and build conventions](../tools/shaders/README.md).
 - `internal/`: vendored C bindings (`third_party`) and the web bridge JS
   (`web`).
 - `tests/`: `webtest` (web acceptance program), `graphics_regression`

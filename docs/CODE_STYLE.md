@@ -142,3 +142,11 @@ odin fmt kit
 - 涉及文件系统的测试在 `%TEMP%/olib_<包名>_test` 下自建自清；
   Windows 上不用 `os.remove_all`（core bug，见
   [odin#7547](https://github.com/odin-lang/Odin/issues/7547)），用自实现递归删除。
+
+## 9. Shader 资产
+
+- Shader 归使用它的模块或项目所有，放在其 `shaders/` 下；库不得依赖示例资产。
+- HLSL、HLSLI 和手工适配的 Web GLSL 是源码；生成的 SPIR-V、DXIL、MSL 统一放入
+  同目录的 `Compiled/`，通过 `#load` 嵌入，禁止手工修改生成文件。
+- 原生 vertex/fragment 发布产物统一用 `tools/shaders` 编译；源码改动时同步更新产物。
+  热重载缓存和专用测试夹具的边界见 [Shader 归属与编译](../tools/shaders/README.md)。

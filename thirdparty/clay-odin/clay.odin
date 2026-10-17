@@ -1,60 +1,48 @@
+// Clay v0.14 native Odin port; existing olib API retained.
+// Altered source derived from nicbarker/clay; see README.md and LICENSE.md.
 package clay
 
-import "core:c"
-
-when ODIN_OS == .Windows {
-	foreign import Clay "windows/clay.obj"
-} else when ODIN_OS == .Linux {
-	foreign import Clay "linux/clay.a"
-} else when ODIN_OS == .Darwin {
-	when ODIN_ARCH == .arm64 {
-		foreign import Clay "macos-arm64/clay.a"
-	} else {
-		foreign import Clay "macos/clay.a"
-	}
-} else when ODIN_ARCH == .wasm32 || ODIN_ARCH == .wasm64p32 {
-	foreign import Clay "wasm/clay.o"
-}
+// Native Odin implementation; no foreign objects or C runtime.
 
 String :: struct {
-	isStaticallyAllocated: c.bool,
-	length: c.int32_t,
-	chars:  [^]c.char,
+	isStaticallyAllocated: bool,
+	length: i32,
+	chars:  [^]u8,
 }
 
 StringSlice :: struct {
-	length: c.int32_t,
-	chars:  [^]c.char,
-	baseChars:  [^]c.char,
+	length: i32,
+	chars:  [^]u8,
+	baseChars:  [^]u8,
 }
 
-Vector2 :: [2]c.float
+Vector2 :: [2]f32
 
 Dimensions :: struct {
-	width:  c.float,
-	height: c.float,
+	width:  f32,
+	height: f32,
 }
 
 Arena :: struct {
 	nextAllocation: uintptr,
-	capacity:       c.size_t,
-	memory:         [^]c.char,
+	capacity:       uint,
+	memory:         [^]u8,
 }
 
 BoundingBox :: struct {
-	x:      c.float,
-	y:      c.float,
-	width:  c.float,
-	height: c.float,
+	x:      f32,
+	y:      f32,
+	width:  f32,
+	height: f32,
 }
 
-Color :: [4]c.float
+Color :: [4]f32
 
 CornerRadius :: struct {
-	topLeft:     c.float,
-	topRight:    c.float,
-	bottomLeft:  c.float,
-	bottomRight: c.float,
+	topLeft:     f32,
+	topRight:    f32,
+	bottomLeft:  f32,
+	bottomRight: f32,
 }
 
 BorderData :: struct {
@@ -222,6 +210,7 @@ BorderRenderData :: struct {
 }
 
 RenderCommandData :: struct #raw_union {
+	clip: ClipRenderData,
 	rectangle: RectangleRenderData,
 	text: TextRenderData,
 	image: ImageRenderData,
@@ -274,13 +263,13 @@ SizingType :: enum EnumBackingType {
 }
 
 SizingConstraintsMinMax :: struct {
-	min: c.float,
-	max: c.float,
+	min: f32,
+	max: f32,
 }
 
 SizingConstraints :: struct #raw_union {
 	sizeMinMax:  SizingConstraintsMinMax,
-	sizePercent: c.float,
+	sizePercent: f32,
 }
 
 SizingAxis :: struct {
@@ -373,52 +362,6 @@ ErrorHandler :: struct {
 	userData: rawptr,
 }
 
-Context :: struct {} // opaque structure, only use as a pointer
-
-@(link_prefix = "Clay_", default_calling_convention = "c")
-foreign Clay {
-	_OpenElement :: proc() ---
-	_CloseElement :: proc() ---
-	MinMemorySize :: proc() -> u32 ---
-	CreateArenaWithCapacityAndMemory :: proc(capacity: c.size_t, offset: [^]u8) -> Arena ---
-	SetPointerState :: proc(position: Vector2, pointerDown: bool) ---
-	Initialize :: proc(arena: Arena, layoutDimensions: Dimensions, errorHandler: ErrorHandler) -> ^Context ---
-	GetCurrentContext :: proc() -> ^Context ---
-	SetCurrentContext :: proc(ctx: ^Context) ---
-	UpdateScrollContainers :: proc(enableDragScrolling: bool, scrollDelta: Vector2, deltaTime: c.float) ---
-	SetLayoutDimensions :: proc(dimensions: Dimensions) ---
-	BeginLayout :: proc() ---
-	EndLayout :: proc() -> ClayArray(RenderCommand) ---
-	GetElementId :: proc(id: String) -> ElementId ---
-	GetElementIdWithIndex :: proc(id: String, index: u32) -> ElementId ---
-	GetElementData :: proc(id: ElementId) -> ElementData ---
-	Hovered :: proc() -> bool ---
-	OnHover :: proc(onHoverFunction: proc "c" (id: ElementId, pointerData: PointerData, userData: rawptr), userData: rawptr) ---
-	PointerOver :: proc(id: ElementId) -> bool ---
-	GetScrollOffset :: proc() -> Vector2 ---
-	GetScrollContainerData :: proc(id: ElementId) -> ScrollContainerData ---
-	SetMeasureTextFunction :: proc(measureTextFunction: proc "c" (text: StringSlice, config: ^TextElementConfig, userData: rawptr) -> Dimensions, userData: rawptr) ---
-	SetQueryScrollOffsetFunction :: proc(queryScrollOffsetFunction: proc "c" (elementId: u32, userData: rawptr) -> Vector2, userData: rawptr) ---
-	RenderCommandArray_Get :: proc(array: ^ClayArray(RenderCommand), index: i32) -> ^RenderCommand ---
-	SetDebugModeEnabled :: proc(enabled: bool) ---
-	IsDebugModeEnabled :: proc() -> bool ---
-	SetCullingEnabled :: proc(enabled: bool) ---
-	GetMaxElementCount :: proc() -> i32 ---
-	SetMaxElementCount :: proc(maxElementCount: i32) ---
-	GetMaxMeasureTextCacheWordCount :: proc() -> i32 ---
-	SetMaxMeasureTextCacheWordCount :: proc(maxMeasureTextCacheWordCount: i32) ---
-	ResetMeasureTextCache :: proc() ---
-}
-
-@(link_prefix = "Clay_", default_calling_convention = "c", private)
-foreign Clay {
-	_ConfigureOpenElement :: proc(config: ElementDeclaration) ---
-	_HashString :: proc(key: String, offset: u32, seed: u32) -> ElementId ---
-	_OpenTextElement :: proc(text: String, textConfig: ^TextElementConfig) ---
-	_StoreTextElementConfig :: proc(config: TextElementConfig) -> ^TextElementConfig ---
-	_GetParentElementId :: proc() -> u32 ---
-}
-
 ConfigureOpenElement :: proc(config: ElementDeclaration) -> bool {
 	_ConfigureOpenElement(config)
 	return true
@@ -468,16 +411,16 @@ SizingGrow :: proc(sizeMinMax: SizingConstraintsMinMax) -> SizingAxis {
 	return SizingAxis{type = SizingType.Grow, constraints = {sizeMinMax = sizeMinMax}}
 }
 
-SizingFixed :: proc(size: c.float) -> SizingAxis {
+SizingFixed :: proc(size: f32) -> SizingAxis {
 	return SizingAxis{type = SizingType.Fixed, constraints = {sizeMinMax = {size, size}}}
 }
 
-SizingPercent :: proc(sizePercent: c.float) -> SizingAxis {
+SizingPercent :: proc(sizePercent: f32) -> SizingAxis {
 	return SizingAxis{type = SizingType.Percent, constraints = {sizePercent = sizePercent}}
 }
 
 MakeString :: proc(label: string) -> String {
-	return String{chars = raw_data(label), length = cast(c.int)len(label)}
+	return String{chars = raw_data(label), length = cast(i32)len(label)}
 }
 
 ID :: proc(label: string, index: u32 = 0) -> ElementId {

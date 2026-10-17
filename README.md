@@ -31,7 +31,7 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
 └── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
 
-thirdparty/  外部绑定：clay-odin / odin-imgui（含 Foster 后端）
+thirdparty/  外部移植与绑定：纯 Odin clay-odin / odin-imgui（含 Foster 后端）
 
 prompts/     给 AI 的提示词：新项目创建 / 面向数据开发约定
 ```

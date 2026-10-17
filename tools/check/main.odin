@@ -106,6 +106,13 @@ main :: proc() {
 	}
 
 	// ---- thirdparty 中依赖 foster 的绑定示例 ----
+	run(&c, "check  clay pure Odin",
+		"odin", "check", "thirdparty/clay-odin", "-no-entry-point", "-vet",
+		"-vet-packages:clay")
+	run(&c, "test   clay C v0.14 parity",
+		"odin", "test", "thirdparty/clay-odin/tests", "-vet",
+		"-vet-packages:clay,clay_tests",
+		fmt.tprintf("-out:%s/test_clay%s", c.out, EXE))
 	run(&c, "build  odin-imgui ofoster example",
 		"odin", "build", "thirdparty/odin-imgui/examples/ofoster", "-collection:olib=.",
 		fmt.tprintf("-out:%s/imgui_ofoster%s", c.out, EXE))

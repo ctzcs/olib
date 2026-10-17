@@ -29,6 +29,7 @@ Foster 的拥有者目录为 `foster/assets/shaders/`，遵循相同的源码/�
 | --- | --- |
 | `foster/assets/shaders` | Batcher / Textured / Msdf |
 | `kit/rendering3d/shaders` | DebugLine3D |
+| `kit/gizmo/shaders` | Gizmo3D |
 | `olib_sample/src/<示例>/shaders` | 示例专用效果与材质 |
 
 测试夹具留在对应测试目录。热重载生成的临时头文件与字节码属于项目的
@@ -46,6 +47,7 @@ Foster 的拥有者目录为 `foster/assets/shaders/`，遵循相同的源码/�
 ```sh
 odin run tools/shaders -- -dir:foster/assets/shaders
 odin run tools/shaders -- -dir:kit/rendering3d/shaders
+odin run tools/shaders -- -dir:kit/gizmo/shaders
 ```
 
 在游戏/示例仓库运行同一个工具：

@@ -5,6 +5,8 @@ Odin 游戏库集合，内置 `foster/`（Foster 框架的 Odin 移植，原 OFo
 
 让 AI 创建新游戏时，使用 [新项目创建提示词](prompts/new-project.md)：包含 def/data/logic/view/game 五层目录与依赖方向、kit/ui 界面、Odin 编码风格与中文注释、桌面/Web 发布和验证约定。新游戏默认放在 olib 的同级独立目录。日常开发中的数据布局、内容目录、模拟实例所有权、缓存失效与验证方式见 [面向数据开发约定](prompts/dod-guidelines.md)。
 
+开发编辑器、开发面板或交互工具时，遵循 [编辑工具开发约定](prompts/editor-guidelines.md)：统一编辑会话、工具输入、编辑事务、撤销与保存。它是项目组织与接入规则，不代表库已提供编辑器框架。
+
 ## 布局
 
 ```
@@ -23,6 +25,7 @@ foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组
 kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── asset/       资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
+├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Batcher 覆盖层，不持有场景对象
 ├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
 ├── rendering3d/ 3D 机制：Mesh 上传 / 泛型渲染队列 / 字节码选择 / std140 / DebugDraw3D / LOD（光照材质由游戏实现）
 ├── animation/   骨骼动画采样 / palette / 混合
@@ -35,7 +38,7 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 
 thirdparty/  外部移植与绑定：纯 Odin clay-odin / odin-imgui（含 Foster 后端）
 
-prompts/     给 AI 的提示词：新项目创建 / 面向数据开发约定
+prompts/     给 AI 的提示词：新项目创建 / 面向数据开发约定 / 编辑工具开发约定
 ```
 
 可运行示例在独立仓库 [olib_sample](https://github.com/ctzcs/olib_sample)（与 olib 同级检出，`run.bat <示例名>`）。

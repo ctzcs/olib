@@ -147,8 +147,7 @@ effects_panel :: proc(s: ^Session) {
 					set_pass_enabled(s, s.selected_effect, i, !e.enabled[i])
 				}
 				label := display_name(p.label, string(p.id))
-				if lab_button(s, fmt.tprintf("pass:%s", p.id), label, selected, true,
-					selected && e.expanded[i] ? "ui/arrow-down-03" : "ui/arrow-right-03") {
+				if lab_button(s, fmt.tprintf("pass:%s", p.id), label, selected, true) {
 					if selected {
 						cancel(s)
 						e.expanded[i] = !e.expanded[i]

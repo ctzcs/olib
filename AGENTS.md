@@ -8,6 +8,7 @@
 - kit 不封装、不别名 foster；`foster/` 以外不得 import `olib:foster/internal/...`。
 - 修改 `foster/` 必须登记到 [foster/docs/LOCAL_CHANGES.md](foster/docs/LOCAL_CHANGES.md)，并在修改处写 `// [olib L-xxx]` 标记。
 - 示例在同级仓库 olib_sample，库仓库只放库代码与测试。
+- 新增或修改编辑器、开发面板和交互工具前，阅读并遵循 [编辑工具开发约定](prompts/editor-guidelines.md)；它是项目接入规则，不要求预建编辑器框架。
 - UI/字体或游戏渲染改动须阅读 [UI 像素与采样约定](kit/ui/README.md#最终像素采样与清晰度验收)。UI 在最终像素尺寸绘制，不能随低分辨率场景一起放大；截图取最终输出。3D 分辨率与抗锯齿、字体小字号质量分别验收，不能以加粗字体代替采样排查。
 
 ## 提交前

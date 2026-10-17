@@ -40,7 +40,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 5. 新游戏默认建在 olib 的同级独立目录。不要因为当前工作目录在 olib 就把游戏业务写进库，也不要复制 olib 源码进游戏。
 6. **不得 import `olib:foster/internal/...`**，这是 olib 的硬规则，对游戏同样适用。需要的能力在 foster 公开 API 或 kit 中找；确实缺失时说明缺口，不要绕道内部包。
 7. 默认不用 ECS：按数据形状选容器（见 `prompts/dod-guidelines.md` 第 1 节）。网格用扁平数组，没人跨帧引用的批量数据用 `#soa[dynamic]`，只有会被跨帧引用的实体才用 `core/handle` 句柄池 + SoA 行。`core/entities` 存在但不是默认方案。
-8. 调试界面需要时可用 `thirdparty/odin-imgui`（含 foster 后端），只用于桌面调试工具，不用于玩家 UI。
+8. 调试界面需要时可用 `thirdparty/odin-imgui`（含 foster 后端），只用于桌面调试工具，不用于玩家 UI。需要编辑器或开发工具时先读 olib 的 `prompts/editor-guidelines.md`，按统一的会话、输入和编辑事务约定接入；该文档是项目实现约定，不代表库已有编辑器框架。
 9. 物理、音频、多线程、自定义 Shader 等按实际需求添加，不因库中存在某个模块就全部接入。
 10. 如果依赖缺失，说明缺少的具体路径和受影响的步骤，继续完成不依赖它的工作；不要创建同名空壳冒充真实库，也不要声称已构建成功。
 
@@ -75,7 +75,10 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 │  │  └─ <feature>/              可选，复杂功能需要独立边界时再拆子包
 │  ├─ view/                      package view：UI、世界绘制、音频播放、显示缓存（可按需拆 view/ui 等子包）
 │  ├─ game/                      package main：App 回调、输入映射、固定步调度、系统执行顺序、诊断命令
-│  └─ ids/                       可选，package ids：内容 ID 常量，只给测试、工具、装载器和诊断命令
+│  ├─ ids/                       可选，package ids：内容 ID 常量，只给测试、工具、装载器和诊断命令
+│  ├─ editor/                    可选，package editor：项目编辑会话、文档、工具与历史
+│  └─ tools/                     可选，交互工具入口，复用 editor 实现
+│     └─ editor/                 package main：独立编辑器入口
 ├─ assets/
 │  ├─ balance/                   数值与内容目录 JSON
 │  ├─ worlds/                    场景或关卡文件
@@ -102,6 +105,8 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 `<feature>` 等名称是模板，需要替换成准确的职责名称；不预设塔防、经营、战斗或关卡编辑等特定玩法。同一功能的定义、数据、规则、表现分别放入对应层，例如 `def/units.odin`、`data/units.odin`、`logic/units.odin`、`view/units.odin`；只建立确实需要的文件。
 
 文件装载按需独立为 `src/content/` 或工具入口，负责 JSON 解码、格式检查、版本迁移与资源读取。它依赖 `def` 的配置类型；`game` 调用 `logic` 完成模拟语义校验后安装配置。五层不要求额外创建 `authoring` 包，`def / data / logic` 不依赖装载器。
+
+`src/editor/` 由独立工具入口或游戏开发模式接入，目录内部职责见 [编辑工具开发约定](editor-guidelines.md)。根目录 `tools/` 保留给无界面的构建期工具；不因模板列出编辑目录就预建空实现。编辑器与装载器复用配置定义，装载器不反向依赖编辑器。
 
 `ols.json` 至少声明两个 collection，让编辑器能解析导入：
 
@@ -161,7 +166,7 @@ odin run tools/check
 
 ### 分层和依赖方向
 
-先按五层职责确定代码所在的包，再在层内按功能拆文件或子包。五层的职责与 import 规则只在 olib 的 `prompts/dod-guidelines.md` 第 2 节维护（包括 `view` 如何拿到查询结果、可选的 `ids` 包），创建项目前先读该节，按其中的表建立包结构和层间检查。以下只列创建项目时额外要做的事：
+先按五层职责确定代码所在的包，再在层内按功能拆文件或子包。五层的职责与 import 规则只在 olib 的 `prompts/dod-guidelines.md` 第 2 节维护（包括 `view` 如何拿到查询结果、可选的 `ids` 与 `editor` 包及工具入口），创建项目前先读该节，按其中的表和补充规则建立包结构和层间检查。以下只列创建项目时额外要做的事：
 
 - `logic` 不依赖 foster，才能在 `odin test` 里无窗口运行；向量用 `[2]f32` 或 `core:math/linalg`，需要和 foster 类型互转的地方放在 `game` 或 `view`。
 - 在 `tools/check` 里写层间依赖检查（如 `tools/check/layers.odin`）：解析每个包的 `import` 行，按 dod-guidelines 的表验证，`*_test.odin` 按测试规则单独检查；Odin 的 import 只能写在文件顶部且必须是字符串字面量，按行解析是可靠的。
@@ -448,18 +453,21 @@ shutdown :: proc(app: ^foster.App) {
 1. 阅读目标目录已有的 `AGENTS.md`、README 和脚本，检查 Git 状态及 olib 位置。先读 olib 的 `README.md`、`docs/CODE_STYLE.md`、`kit/ui/README.md` 和要用的包源码；遇到 API 不确定时先查源码。
 2. 建立 `src/` 各层包、`ols.json`、`play.bat`，先让空窗口、中文文本和一个可交互的 kit/ui 按钮正常运行。
 3. 完成一个贯穿各层的功能：输入 → 操作请求 → `logic` 校验与状态变更 → 画面反馈。再补完需求中约定的第一版玩法闭环和重开。
-4. 需要调试/编辑工具时，作为 `src/` 下另一个 package main（如 `src/tools/editor`）或游戏内的调试面板（odin-imgui），不进入发布构建的可达代码。
+4. 需要调试/编辑工具时，按 `prompts/editor-guidelines.md` 在 `src/editor/` 集中实现，由独立入口 `src/tools/editor/` 或游戏开发模式接入。按该文档验收编辑事务、取消、撤销重做、输入捕获和保存；只读面板不强制实现文档与历史。用独立入口或编译期文件选择保证编辑器及开发专用依赖不进入发布构建的可达代码。
 5. 目标平台包含 Web 时，按“桌面与 Web 发布入口”的约束拆出平台文件，核对资源内嵌、用户存储和 HTTP 预览，不直接复制桌面文件系统假设。
 6. 实现 `publish.bat`（和需要时的 `publish_web.bat`），验证实际产物；不能以开发构建能启动代替发布包可运行。
 7. 为 `logic` 及实际创建的子包写 `*_test.odin`（`#+test` + `@(test)`），用 `odin test` 无窗口运行；画面与输入用游戏 exe 的 `shot` / `smoke` 参数验证（参考 olib_sample 的 game_ui：注入点击、渲染一帧、写 PNG 后退出）。
 8. 编写 `tools/check`（Odin package main，只依赖 `core:*`，用 `odin run tools/check` 运行，跨平台）：自动发现并运行所有含 `@(test)` 的包、运行层间依赖检查、编译游戏；任何一项失败返回非零退出码（可参考 olib 根目录的 `tools/check`）。
 9. 完成 README、`src/` 分层说明和简短 AGENTS.md。README 写明脚本用法、输出目录及依赖；新文档加入 `docs/README.md`，说明真实实现与尚未实现的内容。AGENTS.md 写明编码风格与注释遵循 olib 的 `docs/CODE_STYLE.md` 第 2～5 节，数据布局与分层遵循 olib 的 `prompts/dod-guidelines.md`（写出 olib 的相对路径），并写入计划归档规则：多步改动计划放 `docs/plans/`，完成并验收后由执行者 `git mv` 到 `docs/plans/archive/`、在标题下写完成日期、commit 范围与偏离，单独提交（规则原文见 olib 的 `docs/plans/README.md`）。
 
+项目 AGENTS.md 另写明：“新增或修改编辑器、开发面板和交互工具前，阅读并遵循 olib 的 `prompts/editor-guidelines.md`。”同样写出 olib 的实际相对路径，使后续新增工具能找到约定；不复制维护另一份事务规则。
+
 至少验证以下内容：
 
 - 构建成功，游戏能够启动，默认场景可以操作并重开。
 - `logic` 可无窗口测试，覆盖正常路径及关键拒绝条件；涉及缓存或句柄时验证失效和复用。
 - 层间依赖检查覆盖 dod-guidelines 第 2 节表中的禁止导入（尤其 `logic` 不得 import foster/kit/view，模拟各层的非测试文件不得 import `ids`），以及任何代码不得 import `olib:foster/internal`。
+- 有编辑工具时，同时检查 dod-guidelines 第 2 节的编辑器依赖边界、发布隔离，并按 editor-guidelines 第 9 节验收已实现的工具；不以 gizmo 能绘制或编辑器能编译代替完整交互验收。
 - 游戏用 `-vet` 编译通过，检查游戏及其可达依赖；olib 的 `tools/check` 已对所有第一方包启用 vet。
 - UI 的文字、按钮和输入命中正确，点击不会穿透；文字在各缩放下锐利，窗口缩放和语言切换不会导致明显溢出。
 - 配置出错能定位原因；涉及保存时，写入和重新读取的内容一致。
@@ -506,5 +514,6 @@ odin test src/logic -collection:olib=..\olib -collection:game=src
 | 命令队列与广播 | [core/messaging](../core/messaging/messaging.odin) |
 | 配置读写 | [core/encoding](../core/encoding/) |
 | 面向数据的开发约定 | [dod-guidelines.md](dod-guidelines.md) |
+| 编辑工具开发约定 | [editor-guidelines.md](editor-guidelines.md) |
 
 可运行示例位于独立的 olib_sample 仓库，默认与 olib 同级（`run.bat <示例名>`）。它们用于参考库 API；新项目的业务、资源和验证应保存在新游戏自己的仓库中。

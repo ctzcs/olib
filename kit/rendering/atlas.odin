@@ -106,7 +106,8 @@ atlas_subtexture :: proc(atlas: ^Sprite_Atlas, name: string) -> (foster.Subtextu
 	src := foster.Rect{
 		f32(rect.X), f32(rect.Y), f32(rect.Width), f32(rect.Height),
 	}
-	return foster.SubtextureMake(&atlas.texture, src, src), true
+	// 图集坐标只用于采样；未裁边子图的绘制原点始终是本地 (0, 0)。
+	return foster.SubtextureFromSource(&atlas.texture, src), true
 }
 
 // ------------------------------------------------------------------------------

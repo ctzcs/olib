@@ -38,4 +38,5 @@
 | L-009 | 2026-10-15 | 行为变更 | graphics.odin / MaterialStageSetUniformBuffer | Material.cs / uniform 更新 | 复用已有 CPU 缓冲容量，避免每个物体每个 uniform 槽反复释放和分配；仍拷贝入参并同步 UniformBufferObjects，缩短和清空语义不变，回归检查稳定尺寸下零新增分配 | 同步时重新评估 |
 | L-010 | 2026-10-15 | 修复 | framework.odin / InitApp 版本日志 | App.cs / 启动日志（C# 有 GC，无对应） | 释放 VersionString 与 SDLVersionString 的调用方所有权，消除每次原生启动的两笔共 16 字节泄漏 | 保留 |
 | L-011 | 2026-10-15 | 修复 | graphics.odin / create_pipeline_for_draw_command | GraphicsDeviceSDL / 管线目标格式 | 窗口目标使用真实 SwapchainFormat 参与管线描述和缓存键，避免 Vulkan 的 BGRA 交换链复用 RGBA 离屏管线而触发验证错误 | 同步时重新评估 |
+| L-012 | 2026-10-17 | 新增 | graphics.odin / ShaderTryInit；olib_shader_reload.odin / ShaderPairTryReplace | 无 | 开发期 Shader 创建返回错误；候选顶点/片元及实际绘制管线全部成功后原位替换，失败保留旧资源与材质引用，支持 2D/3D 热重载 | 保留 |
 | L-013 | 2026-10-17 | 修复 | framework.odin / 默认 Shader 嵌入路径；assets/shaders/ | Framework/Content/Shaders | 原生产物统一移至 Compiled，保留字节内容；补回同步基线 06213b9 的 Batcher.hlsl，使 tools/shaders 能重建全部默认 Shader；Web GLSL 仍为手工适配源码 | 保留 |

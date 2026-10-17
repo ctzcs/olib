@@ -32,7 +32,8 @@ Foster 的拥有者目录为 `foster/assets/shaders/`，遵循相同的源码/�
 | `olib_sample/src/<示例>/shaders` | 示例专用效果与材质 |
 
 测试夹具留在对应测试目录。热重载生成的临时头文件与字节码属于项目的
-项目缓存目录或临时目录，不覆盖 `Compiled/` 中用于发布的资产。
+`library/shader_dev` 或临时目录，遵循 [shaderdev](../../kit/shaderdev/README.md)，
+不覆盖 `Compiled/` 中用于发布的资产。
 
 ## 编译入口
 

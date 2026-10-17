@@ -26,6 +26,8 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
 ├── rendering3d/ 3D 机制：Mesh 上传 / 泛型渲染队列 / 字节码选择 / std140 / DebugDraw3D / LOD（光照材质由游戏实现）
 ├── animation/   骨骼动画采样 / palette / 混合
+├── material/    材质参数描述、独立实例值、稳定 ID 迁移与生成 GPU 布局
+├── shaderdev/   Odin 字段标签生成参数面板数据；HLSL 热重载，2D/3D 共用
 ├── storage/     资源根 / 用户存档路径策略
 ├── app/         CLI 参数 + 调试控制台（可选 cli_open 接入 foster.App）
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
@@ -115,6 +117,8 @@ Web 上 `Run` 会把 App 拷贝到堆上并立即返回，但不会搬移游戏�
 [Foster App 用法](foster/README.md#app-usage)与示例仓库的 `app_composition`。
 
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
+内置 [默认图标图集](assets/icons/README.md) 提供 815 个白色图标，单张 4096×4096 PNG；
+通过 `rendering.builtin_icons_load` 加载，按名称取得 Subtexture，可直接用于 UI 或 Batcher。
 游戏 UI 示例见 [olib_sample](https://github.com/ctzcs/olib_sample) 的 `game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
 基础控件验收页见同仓库的 `ui_gallery`。
 
@@ -142,3 +146,6 @@ Shader 的模块归属、源码与 `Compiled/` 分层及统一编译入口见 [S
 
 编码规范：[docs/CODE_STYLE.md](docs/CODE_STYLE.md)
 移植路线图：[docs/ROADMAP.md](docs/ROADMAP.md)
+
+可嵌入编辑器的 Shader 工具见 [kit/tools/shader_lab](kit/tools/shader_lab/README.md)，底层热重载见
+[kit/shaderdev](kit/shaderdev/README.md)。在同级 olib_sample 运行 `run.bat shader_lab`，保存 HLSL 即可更新 2D/3D 预览。

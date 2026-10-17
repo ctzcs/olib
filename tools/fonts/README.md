@@ -55,4 +55,4 @@ odin test kit/ui -collection:olib=.
 Abel 源字体及 OFL 许可证位于 `foster/tests/port_regression/fonts/`，图集旁附许可证副本。
 
 示例共用的中英文图集及复现说明位于同级 `olib_sample/shared/msdf_font/`；
-`game_ui` 和 `ui_gallery` 内嵌该资产，无系统字体依赖。
+`game_ui`、`ui_gallery` 和 Shader Lab 内嵌该资产，无系统字体依赖。

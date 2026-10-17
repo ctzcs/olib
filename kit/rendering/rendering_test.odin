@@ -70,6 +70,51 @@ kenney_build_rects_parse :: proc(t: ^testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// 图集绘制坐标与默认图标目录
+// ---------------------------------------------------------------------------
+
+// 图集中的偏移只能影响 UV，不能把图标顶点移到本地原点之外。
+@(test)
+atlas_subtexture_uses_local_origin :: proc(t: ^testing.T) {
+	atlas: Sprite_Atlas
+	atlas.rects = make(map[string]foster.RectInt)
+	defer delete(atlas.rects)
+	atlas.rects["ui/test"] = {X = 266, Y = 398, Width = 128, Height = 128}
+	atlas.texture.Width = 4096
+	atlas.texture.Height = 4096
+
+	_, before_upload := atlas_subtexture(&atlas, "ui/test")
+	testing.expect(t, !before_upload)
+	// 这里只构造纹理尺寸元数据，不创建 GPU 资源。
+	atlas.has_upload = true
+	sub, ok := atlas_subtexture(&atlas, "ui/test")
+	testing.expect(t, ok && sub.Texture == &atlas.texture)
+	testing.expect(t, sub.Frame == foster.Rect{0, 0, 128, 128})
+	testing.expect(t, sub.DrawCoords[0] == foster.Vec2{0, 0})
+	testing.expect(t, sub.DrawCoords[2] == foster.Vec2{128, 128})
+	testing.expect(t, sub.TexCoords[0] == foster.Vec2{266.0 / 4096, 398.0 / 4096})
+	testing.expect(t, sub.TexCoords[2] == foster.Vec2{394.0 / 4096, 526.0 / 4096})
+	_, missing := atlas_subtexture(&atlas, "missing")
+	testing.expect(t, !missing)
+}
+
+@(test)
+builtin_icons_catalog_bounds :: proc(t: ^testing.T) {
+	rects := kenney_build_rects(#load("../../assets/icons/game-icons.xml"))
+	if !testing.expect(t, rects != nil) do return
+	defer kenney_rects_dispose(rects)
+	testing.expectf(t, len(rects^) == 815, "默认图标应有 815 张，实际 %d", len(rects^))
+	for name, rect in rects^ {
+		testing.expectf(t, rect.Width == 128 && rect.Height == 128,
+			"%s 必须保留原始 128px 留白", name)
+		testing.expectf(t, rect.X >= 2 && rect.Y >= 2 &&
+			rect.X + rect.Width + 2 <= 4096 && rect.Y + rect.Height + 2 <= 4096,
+			"%s 超出图集或缺少采样隔离", name)
+	}
+	testing.expect(t, "game/action-points" in rects^)
+}
+
+// ---------------------------------------------------------------------------
 // Sprite 动画采样
 // ---------------------------------------------------------------------------
 

@@ -3690,17 +3690,34 @@ Shader :: struct {
 	Disposed:        bool,
 }
 
+// [olib L-012] 可恢复创建与原有 panic API 共用实现。
 ShaderInit :: proc(
 	shader: ^Shader,
 	graphics_device: ^GraphicsDevice,
 	create_info: ShaderCreateInfo,
 	name: string = "",
 ) {
-	if graphics_device == nil || graphics_device.Device == nil {
-		panic("GraphicsDevice is nil")
+	if ok, error := ShaderTryInit(shader, graphics_device, create_info, name); !ok {
+		panic(error)
+	}
+}
+
+// [olib L-012] 目标须为零值或已释放；失败不修改目标。Code/Name/EntryPoint 借用。
+// error 为当前临时分配器中的诊断，需跨帧保存时由调用方复制。
+ShaderTryInit :: proc(
+	shader: ^Shader,
+	graphics_device: ^GraphicsDevice,
+	create_info: ShaderCreateInfo,
+	name: string = "",
+) -> (ok: bool, error: string) {
+	if shader == nil {
+		return false, "Shader is nil"
+	}
+	if graphics_device == nil || graphics_device.Device == nil || graphics_device.Disposed {
+		return false, "GraphicsDevice is nil"
 	}
 	if len(create_info.Code) == 0 {
-		panic("Shader code is empty")
+		return false, "Shader code is empty"
 	}
 	entrypoint := create_info.EntryPoint
 	if entrypoint == "" {
@@ -3709,7 +3726,7 @@ ShaderInit :: proc(
 
 	when ODIN_OS == .JS {
 		if create_info.Stage == .Compute {
-			panic("foster_web: compute shaders are not supported on web (M1 非目标)")
+			return false, "foster_web: compute shaders are not supported"
 		}
 		stage := u32(1)
 		if create_info.Stage == .Vertex {
@@ -3717,11 +3734,11 @@ ShaderInit :: proc(
 		}
 		code := create_info.Code
 		if len(code) == 0 || &code[0] == nil {
-			panic("foster_web: shader code is empty")
+			return false, "foster_web: shader code is empty"
 		}
 		handle := fw_gl_create_shader(stage, &code[0], i32(len(code)))
 		if handle == 0 {
-			panic("foster_web: GLSL shader compile failed (详见页面日志)")
+			return false, "foster_web: GLSL shader compile failed"
 		}
 		shader.GraphicsDevice = graphics_device
 		shader.Stage = create_info.Stage
@@ -3732,7 +3749,7 @@ ShaderInit :: proc(
 		delete(shader.PipelineHashes)
 		shader.PipelineHashes = nil
 		shader.Disposed = false
-		return
+		return true, ""
 	}
 
 	sdl_stage := ShaderStageToSDL(create_info.Stage)
@@ -3783,7 +3800,7 @@ ShaderInit :: proc(
 		}
 		compute_resource := SDL.CreateGPUComputePipeline(graphics_device.Device, compute_info)
 		if compute_resource == nil {
-			panic(CreateExceptionFromSDL("SDL_CreateGPUComputePipeline"))
+			return false, fmt.tprintf("SDL_CreateGPUComputePipeline: %s", SDL.GetError())
 		}
 		shader.GraphicsDevice = graphics_device
 		shader.Stage = create_info.Stage
@@ -3794,12 +3811,12 @@ ShaderInit :: proc(
 		delete(shader.PipelineHashes)
 		shader.PipelineHashes = nil
 		shader.Disposed = false
-		return
+		return true, ""
 	}
 
 	res := SDL.CreateGPUShader(graphics_device.Device, info)
 	if res == nil {
-		panic(CreateExceptionFromSDL("SDL_CreateGPUShader"))
+		return false, fmt.tprintf("SDL_CreateGPUShader: %s", SDL.GetError())
 	}
 
 	shader.GraphicsDevice = graphics_device
@@ -3811,6 +3828,7 @@ ShaderInit :: proc(
 	delete(shader.PipelineHashes)
 	shader.PipelineHashes = nil
 	shader.Disposed = false
+	return true, ""
 }
 
 ShaderRecreate :: proc(shader: ^Shader, create_info: ShaderCreateInfo) {

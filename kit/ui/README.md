@@ -15,7 +15,7 @@ Clay 负责布局，`kit/ui` 提供控件、交互与 Foster Batcher 后端。
 // 初始化：font 与 texture 由资产层提供，存活到 ui_dispose 之后。
 ui.ui_init(&ctx, 1280, 720)
 theme := ui.UI_THEME_DARK
-theme.body_font_id = u16(ui.ui_register_font(&ctx, &font, texture, .Bitmap))
+theme.body_font_id = u16(ui.ui_register_font(&ctx, &font, texture, .MSDF))
 
 // 每帧：viewport 和鼠标位置均为渲染目标像素，布局尺寸则是逻辑像素。
 ui.ui_set_viewport(&ctx, {0, 0, pixel_width, pixel_height}, scale = 1.25)
@@ -46,39 +46,43 @@ foster.BatcherRender(&batcher, target)
 的结果由调用者 `delete`。`ui_translate_into` 可以复用自有缓冲。
 不要在 `ui_end` 之后再调用 `ui_draw`，它会重复结束布局。
 
-## 距离场字体（推荐）
+## 离线 MSDF 字体（默认）
 
-普通游戏 UI 通常先用 `ui_font_bake_sdf`，以 `.MSDF` 注册，支持多个显示字号和窗口缩放。
-它不保证任意小字号都清晰，也不能消除 UI 输出之后再次缩放造成的模糊。
-它用 stb_truetype 在运行时生成单通道 SDF，将同一个距离值写入 RGB，
-复用现有 MSDF 着色器；极大字号的尖角会略圆，需要尖角质量时可使用离线 MSDF 图集。
+新项目统一使用真正的多通道 MSDF：离线用 `msdf-atlas-gen -type msdf` 生成 PNG＋JSON，
+运行时直接加载并以 `.MSDF` 注册。RGB 保存不同边缘的距离信息，不能把单个距离值复制到 RGB。
+生成命令、字符集格式与测试资产的复现步骤见 [字体资产生成](../../tools/fonts/README.md)。
 
 ```odin
-source := foster.FontLoadFile("path/to/font.ttf") // 内嵌 TTF 可用 FontMake
-font, texture, ok := ui.ui_font_bake_sdf(&game.GraphicsDevice, &source, 48)
-foster.FontDispose(&source)
-if ok {
-    ui.ui_register_font(&ctx, &font, texture, .MSDF)
-}
+font := foster.MsdfFontLoadFiles("assets/ui.png", "assets/ui.json")
+// 本加载接口对图像与元数据的校验有限，资产构建阶段必须检查生成结果。
+assert(font.Image.Width > 0 && font.Size > 0 && font.DistanceRange > 0)
+texture := foster.TextureFromImage(&game.GraphicsDevice, &font.Image, "UI MSDF")
+assert(texture.Resource != nil)
+ui.ui_register_font(&ctx, &font, texture, .MSDF)
 ```
 
-- `size` 默认 48，是图集的烘焙尺寸，与控件的显示字号独立；显示时按 `字号 / Size` 缩放。
-- `codepoints` 默认 ASCII 32..126。中文等字符必须传入本地化文本中用到的全部码点，
-  源字体也必须包含对应字形。
-- `distance_range` 默认 8，是烘焙尺寸下编码的距离范围，写入 `MsdfFont.DistanceRange`。
-  字形外留 `ceil(distance_range / 2) + 1` 像素，RGB 为距离值、alpha 恒为 255，不做预乘。
-- `label` 默认 `"ui sdf font"`，作为 GPU 纹理名字。
+- 生成时必须指定 `-type msdf -yorigin top`；现有 Foster 加载器按向下的 Y 轴读取字形边界，
+  不能直接使用生成器默认的 bottom 原点。PNG 与 JSON 必须来自同一次生成。
+- `-size 48 -pxrange 8` 是起点，分别写入 `Size` 与 `DistanceRange`；显示字号独立于图集尺寸。
+- 字符集文件应包含全部本地化文字、标点与动态文本可能用到的字符；仅 ASCII 不包含中文。
+  新增字符需重新生成资产并重新打包，不在运行时读取 TTF 补字。
+- 距离值按线性数据采样，不使用 sRGB 解码、不做 `ImagePremultiply`；保持线性过滤。
+- `font` 地址必须稳定并存活到 `ui_dispose` 之后。随后调用 `MsdfFontDispose`、
+  `TextureDispose` 分别释放字体和纹理。`MsdfFontLoadFiles` 成功加载时拥有图像；
+  用 `ImageFromEncoded`＋`MsdfFontMake` 内嵌资产时，须显式设置 `font.OwnsImage = true`
+  或由调用方单独释放图像，不能重复释放。
 
-`font` 拥有 `Image.Pixels`、`Characters` 和 `Kerning`，必须保持地址稳定并存活到
-`ui_dispose` 之后；调用方随后用 `MsdfFontDispose` 和 `TextureDispose` 分别释放字体与纹理。
-源 `Font` 仍由调用方管理，可以在烘焙后释放；烘焙失败不遗留资源。
+迁移：`ui_font_bake_sdf` 已删除，没有兼容别名。旧调用应改为加载离线 MSDF 资产，
+保留 `.MSDF` 注册。SDF 的旧图集也必须重新生成，不能只改名字。
+MSDF 能更好地保留尖角，但不保证任意小字号都清晰，仍须完成下面的最终像素验收。
 
-示例：`run.bat ui_gallery shot sdf`、`run.bat ui_gallery shot sdf scaled`。
+示例：`run.bat ui_gallery shot msdf`、`run.bat ui_gallery shot msdf scaled`；
+两个 UI 示例均加载真正的 MSDF，`msdf` 模式单独展示中英文在 14/18/36/72px 下的效果。
 
-## 位图字体烘焙
+## 旧项目的位图字体兼容
 
-像素风、固定缩放或需要更好小字号覆盖率的 UI 均可用位图；烘焙尺寸应等于
-“显示字号 × 最终像素比例”的实际像素尺寸，比例变化时重新烘焙对应缓存。
+保留 `ui_font_bake` 与 `.Bitmap` 供旧项目兼容，新项目默认采用上面的离线 MSDF。
+位图烘焙尺寸应等于“显示字号 × 最终像素比例”的实际像素尺寸，比例变化时重新烘焙对应缓存。
 UI 使用线性采样且图集没有 mipmap，将较大的位图缩小显示会让笔画边缘发灰发虚。
 
 `ui_font_bake` 使用 Foster 的公开 Font API，把字体烘焙为 UI 可注册的位图图集。
@@ -109,7 +113,7 @@ if ok {
 推荐顺序为：世界渲染 → 缩放/后处理到窗口实际像素 → 叠加 UI → 输出窗口。
 如果使用最终离屏 Target，它应与窗口 drawable 像素尺寸一致，再 1:1 复制到窗口。
 不要把文字先画进固定 1280×720 的场景 Target，再整体缩放到 1600×900 等窗口尺寸：
-SDF 已经解码成像素，后续仍会插值或产生台阶，增大图集和加粗字体都不能消除这次采样。
+MSDF 已经解码成像素，后续仍会插值或产生台阶，增大图集和加粗字体都不能消除这次采样。
 需要模糊、FXAA 等全屏后处理时，应先处理世界再叠加 UI。
 
 `ui_set_viewport` 的 rect 与指针都以最终渲染目标像素为单位，scale 负责逻辑布局到像素的映射。
@@ -120,10 +124,10 @@ viewport、留边及命中坐标。只改变布局尺寸而不改变最终 UI �
 
 - 字号、字重和采样是不同变量。常规中文正文优先保证约 14～16 个实际像素的可读性，
   更小字号需在最终尺寸实测。窄窗口不能无条件按比例缩小所有文字。
-- SDF 的默认 size 48 是起点；根据最终字号检查图集精度、`DistanceRange` 与实际屏幕距离范围。
+- MSDF 图集的 size 48 是起点；根据最终字号检查图集精度、`DistanceRange` 与实际屏幕距离范围。
   中文细笔画的小字号可能仍发灰，单纯提高图集 size 不保证改善。距离场保留线性采样，
   不要用最近邻或硬阈值作为通用修复，否则会产生锯齿和缩放闪烁。
-- 小字号可用 `ui_font_bake` 按每个实际像素字号生成 `.Bitmap` 覆盖率图集，大标题继续用 SDF。
+- 小字号可用 `ui_font_bake` 按每个实际像素字号生成 `.Bitmap` 覆盖率图集，大标题继续用 MSDF。
   位图字形最终应按 1:1 像素绘制；必要时只平移整个字形到像素格点，保持四边形大小和
   advance/kerning 的累计精度，不分别取整两侧边缘或累计字距。kit/ui 当前不自动做像素对齐，
   自定义操作流可使用 `ui_end → ui_translate_into → 调整字形位置 → ui_render`，不能再调用 `ui_draw`。
@@ -141,7 +145,7 @@ viewport、留边及命中坐标。只改变布局尺寸而不改变最终 UI �
 记录窗口逻辑尺寸、实际渲染像素和 UI scale。先按 1:1 查看可读性，再放大看笔画边缘，
 同时验证点击与留边对齐。修改后重建实际运行的开发版/发布版，避免观察旧可执行文件。
 
-文字发虚时按以下顺序定位：最终缩放链路 → 字形实际像素大小与像素对齐 → 图集及 SDF 参数 → 字体字重。
+文字发虚时按以下顺序定位：最终缩放链路 → 字形实际像素大小与像素对齐 → 图集及 MSDF 参数 → 字体字重。
 3D 场景的斜边台阶与运动闪烁还需要单独检查场景分辨率、抗锯齿和细线尺度；
 UI 的线性采样不是场景抗锯齿，文字清晰也不意味着 3D 画面已经通过验收。
 
@@ -220,7 +224,7 @@ if show_dialog {
 ## 字体、缩放和资源
 
 - `ui_register_font(..., .Bitmap)`：普通预乘 alpha 位图；默认类型，兼容旧 demo。
-- `ui_register_font(..., .MSDF)`：真实距离场图集；使用字体的 `DistanceRange`
+- `ui_register_font(..., .MSDF)`：真正的多通道距离场图集；使用字体的 `DistanceRange`
   和设备默认 MSDF 材质。不同字体会分别保留材质参数。GraphicsDevice 必须先初始化。
 - 字体元数据与 GPU 纹理由调用方持有，UI 只释放自己的池、圆角纹理和材质副本。
   只在帧外注册字体；注册会清除 Clay 的文本测量缓存。
@@ -257,8 +261,8 @@ odin test kit/ui -collection:olib=.
 .\run.bat game_ui
 ```
 
-运行时需 Foster 的平台动态库（Windows 为 SDL3.dll）。Windows 自动尝试系统字体；
-其他平台或自定义字体可传 `font <ttf路径>`。示例使用 ASCII 位图字体，测试中另有中文测量用例。
+运行时需 Foster 的平台动态库（Windows 为 SDL3.dll）。`game_ui` / `ui_gallery` 内嵌共享的
+离线中英文 MSDF，不依赖系统字体；`font <图集前缀>` 可指定成对的 PNG＋JSON。
 
 `game_ui` 的交互：点击地面移动角色；点击技能或按 1–6 施放；B 切换背包；
 点击格子选择道具；Esc 暂停/继续，暂停菜单中可调音量、切换音乐状态或退出。
@@ -286,11 +290,11 @@ if clay.UI()(decl) {
 纹理应先通过 `ImagePremultiply` 转换为预乘 alpha，再上传；透明圆角由 PNG 自身提供。
 九宫格目前使用整张纹理和对称边距，普通图集/裁切帧背景使用 `ui_image_decl`。
 
-原来的距离场渲染探针在控件展台中：
+真实 MSDF 字体的多字号展示在控件展台中：
 
 ```powershell
 .\run.bat ui_gallery shot msdf
 ```
 
-它使用解析环形距离场编码到 RGB，验证 18/36/72px 下的解码与材质切换，
-不是完整 MSDF 字体资产的视觉回归测试。
+它使用离线多通道图集绘制 `AV中文`，覆盖 14/18/36/72px，旧的同值 RGB 环形探针已移除。
+库内 CPU 测试使用 Abel 的真实 MSDF 资产，检查通道差异、基线、字距、图集边界与文字布局。

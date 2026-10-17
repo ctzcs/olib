@@ -211,7 +211,7 @@ kit/ui 目前**没有**文本输入/IME、Dropdown、富文本、拖放和列表
 
 帧流程（在 `RenderProc` 中）：设置 viewport 与指针 → `ui_set_navigation` → `ui_begin` → 声明 UI → 绘制世界 → `ui_draw` 叠加 UI → `ui_input_capture` 决定本帧鼠标/键盘是否还交给世界。读取 capture 之后再处理世界点击，避免穿透。
 
-- 字体：`foster.FontLoadFile` 或 `FontMake` 读取 TTF，通常先用 `ui.ui_font_bake_sdf` 烘焙（size 48 是起点），以 `.MSDF` 注册；这不保证任意小字号都清晰。中文小字号必须比较实际效果，必要时用 `ui_font_bake` 按“显示字号 × 最终像素比例”生成覆盖率位图，以 `.Bitmap` 注册，并在比例变化时重建缓存。位图不限于像素风；不能把大位图缩小冒充小字号质量。**默认只烘焙 ASCII 32..126**；中文必须把本地化文本用到的全部字符作为 `codepoints` 传入。完整采样与验收步骤见 `kit/ui/README.md` 的“最终像素采样与清晰度验收”。
+- 字体：统一使用离线生成的真正 MSDF 图集（PNG＋JSON），直接用 `foster.MsdfFontLoadFiles` 加载并以 `.MSDF` 注册；生成时固定 `-type msdf -yorigin top`，`-size 48 -pxrange 8` 是起点，完整命令见 `tools/fonts/README.md`。不再使用已删除的 `ui_font_bake_sdf`，也不能把灰度距离复制到 RGB 冒充 MSDF。字符集必须包含本地化和动态文本用到的全部字符，中文需显式纳入；增加字符后重新生成并打包资产。MSDF 不保证任意小字号都清晰，完整采样与验收步骤见 `kit/ui/README.md` 的“最终像素采样与清晰度验收”。
 - 控件 ID 全局唯一且跨帧稳定；动态列表用内容 ID，不用会随排序变化的位置。
 - 主题集中在 `view` 的 theme 文件中，从 `ui.UI_THEME_DARK` 复制后调整；不要在每个控件里分别写颜色和尺寸。
 - 缩放：`ui_set_viewport(&ctx, rect, scale)` 的矩形与指针都是渲染目标像素，布局尺寸是逻辑像素。绘制、点击判定、相机预留区域和测试点击位置使用同一套布局结果。

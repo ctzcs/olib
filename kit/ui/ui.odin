@@ -162,7 +162,7 @@ ui_dispose :: proc(ctx: ^UI_Context, allocator := context.allocator) {
 // 注册字体（fontId 即下标）；texture 为图集的 GPU 纹理（由调用侧上传）。
 // 返回 fontId。测量在字体注册前调用会按零宽处理。
 // 字体/纹理由调用者持有到 ui_dispose 之后；注册只在帧外进行。
-// 默认 Bitmap 保持旧位图图集兼容；真实距离场必须显式传 .MSDF。
+// 默认 Bitmap 保持旧位图图集兼容；真正的多通道 MSDF 图集必须显式传 .MSDF。
 ui_register_font :: proc(
 	ctx: ^UI_Context,
 	font: ^foster.MsdfFont,

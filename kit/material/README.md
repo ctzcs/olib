@@ -112,4 +112,4 @@ GPU 执行见 [rendering3d](../rendering3d/README.md#模型材质执行)。完�
 一个 Effect 内不能混合 Sprite、Model 或图像效果；Sprite 使用 2d 参数组，Model 使用 3d。
 Sprite 的 `sprite_texture` 指定当前帧覆盖的 Texture 字段，无隐式贴图槽。
 Sprite 默认预乘 Alpha、无剔除和深度读写；`.Premultiplied` 可显式声明预乘混合。
-2D 接口及示例见 [材质 Sprite](../rendering/README.md#材质-sprite)。
+2D 接口及示例见 [精灵绘制](../rendering/README.md#精灵绘制)。

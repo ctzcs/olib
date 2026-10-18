@@ -1,6 +1,6 @@
 package shader_lab
 
-// 2D/3D 对象预览与游戏共用材质执行器；此处只准备编辑器资源和预览回调。
+// 材质预览：2D/3D 对象与游戏共用绘制实现；本文件负责预览接入和材质存取。
 import "core:math"
 import foster "olib:foster"
 import mat "olib:kit/material"

@@ -1,5 +1,7 @@
 package rendering
 
+// 共享实现：供精灵、模型及 ShaderLab 集成，不是业务绘制入口。
+// 因跨包复用保留这些接口；普通业务使用 material_load + sprite_draw / model_draw。
 // 分区：绑定 / 绘制输入 / Pass 状态 / 对象多 Pass 执行。
 import foster "olib:foster"
 import mat "olib:kit/material"
@@ -20,6 +22,8 @@ Material_Draw :: struct {
 	// 可选预览覆盖：enabled 空值使用声明；pass_limit=0 绘制全部。
 	enabled: []bool,
 	pass_limit: int,
+	// 空值绘制全部；非空按稳定 Pass ID 选择，未知 ID 返回 false，不提交绘制。
+	pass_id: mat.Pass_Id,
 	user_data: rawptr,
 	prepare: proc(user_data: rawptr, pass_index: int, command: ^foster.DrawCommand),
 	submit: proc(user_data: rawptr, pass_index: int, command: ^foster.DrawCommand),
@@ -67,14 +71,35 @@ pass_state_apply :: proc(command: ^foster.DrawCommand, state: mat.Pass_State) {
 	if state.depth_write != .Default do command.DepthWriteEnabled = state.depth_write == .On
 }
 
+// 先解析完整选择，再提交；显式选择也遵守 disabled/enabled 和 pass_limit。
+@(private)
+material_pass_indices :: proc(effect: mat.Effect_Desc, draw: Material_Draw,
+	indices: ^[32]int) -> (count: int, ok: bool) {
+	if len(effect.passes) == 0 || len(effect.passes) > len(indices) do return 0, false
+	if len(draw.enabled) != 0 && len(draw.enabled) < len(effect.passes) do return 0, false
+	found := draw.pass_id == ""
+	for p, i in effect.passes {
+		if draw.pass_id != "" && p.id != draw.pass_id do continue
+		found = true
+		if draw.pass_limit > 0 && i >= draw.pass_limit do continue
+		if len(draw.enabled) > 0 ? !draw.enabled[i] : p.disabled do continue
+		indices[count] = i
+		count += 1
+	}
+	return count, found
+}
+
 // 调用方先通过 effect_order / instance_make 验证定义。绑定完整性仍在提交首个 Pass 前检查。
 // 返回 false 时不发出任何 Draw；每次 draw 重新绑定，多个实例可以共享 GPU Material。
 material_draw :: proc(device: ^foster.GraphicsDevice, effect: mat.Effect_Desc,
 	bindings: []Material_Binding, draw: Material_Draw) -> bool {
 	if device == nil || draw.mesh == nil || !mat.effect_is_material(effect) || len(effect.passes) > 32 do return false
-	if len(draw.enabled) != 0 && len(draw.enabled) < len(effect.passes) do return false
+	selected: [32]int
+	count, ok := material_pass_indices(effect, draw, &selected)
+	if !ok do return false
 	indices: [32]int
-	for p, i in effect.passes {
+	for i in selected[:count] {
+		p := effect.passes[i]
 		if p.draw != draw.kind do return false
 		indices[i] = -1
 		for b, j in bindings {
@@ -97,9 +122,8 @@ material_draw :: proc(device: ^foster.GraphicsDevice, effect: mat.Effect_Desc,
 			if field < 0 || bindings[indices[i]].schema.fields[field].kind != .Texture do return false
 		}
 	}
-	for p, i in effect.passes {
-		if draw.pass_limit > 0 && i >= draw.pass_limit do break
-		if len(draw.enabled) > 0 ? !draw.enabled[i] : p.disabled do continue
+	for i in selected[:count] {
+		p := effect.passes[i]
 		b := bindings[indices[i]]
 		values := make([]mat.Value, len(b.values), context.temp_allocator)
 		copy(values, b.values)

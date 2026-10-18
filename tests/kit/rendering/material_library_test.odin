@@ -6,6 +6,84 @@ import "core:testing"
 import foster "olib:foster"
 import mat "olib:kit/material"
 
+// Pass 选择在提交前完成；不存在的 ID 不能退回“全部”。
+@(test)
+material_pass_selection_preserves_order_and_disabled_flags :: proc(t: ^testing.T) {
+	effect := mat.Effect_Desc{passes = {
+		{id = "shadow"}, {id = "body"}, {id = "outline", disabled = true},
+	}}
+	indices: [32]int
+	count, ok := material_pass_indices(effect, {}, &indices)
+	testing.expect(t, ok && count == 2 && indices[0] == 0 && indices[1] == 1)
+	count, ok = material_pass_indices(effect, {pass_id = "body"}, &indices)
+	testing.expect(t, ok && count == 1 && indices[0] == 1)
+	count, ok = material_pass_indices(effect, {pass_id = "missing"}, &indices)
+	testing.expect(t, !ok && count == 0)
+	count, ok = material_pass_indices(effect, {pass_id = "outline"}, &indices)
+	testing.expect(t, ok && count == 0)
+	count, ok = material_pass_indices(effect, {
+		pass_id = "outline", enabled = []bool{true, true, true},
+	}, &indices)
+	testing.expect(t, ok && count == 1 && indices[0] == 2)
+	count, ok = material_pass_indices(effect, {pass_id = "body", pass_limit = 1}, &indices)
+	testing.expect(t, ok && count == 0)
+	_, ok = material_pass_indices(effect, {enabled = []bool{true}}, &indices)
+	testing.expect(t, !ok)
+}
+
+// CPU 侧检查真实合批输入与快照，不创建窗口或伪造 GPU 句柄。
+@(test)
+sprite_batch_preserves_geometry_and_material_snapshot :: proc(t: ^testing.T) {
+	renderer: Sprite_Renderer
+	defer delete(renderer.vertices)
+	defer delete(renderer.indices)
+	defer foster.MaterialDispose(&renderer.batch_material)
+	source: foster.Material
+	foster.MaterialInit(&source)
+	defer foster.MaterialDispose(&source)
+	uniform := [4]u8{1, 2, 3, 4}
+	foster.MaterialStageSetUniformBuffer(&source.Fragment, uniform[:])
+	texture: foster.Texture
+	source.Fragment.Samplers[0] = {&texture, foster.TextureSamplerMake(.Linear, .Clamp)}
+	command: foster.DrawCommand
+	foster.DrawCommandInit(&command)
+	command.Material = &source
+	command.Target = {WidthInPixels = 800, HeightInPixels = 600}
+	first := Sprite_Submission{renderer = &renderer, vertices = {
+		{{0, 0}, {0, 0}}, {{10, 0}, {0.5, 0}}, {{10, 10}, {0.5, 1}}, {{0, 10}, {0, 1}},
+	}}
+	sprite_batch_submit(&first, 0, &command)
+	// 不同 Material 地址但 GPU 输入相同，也应合批。
+	other := foster.MaterialClone(&source)
+	defer foster.MaterialDispose(&other)
+	command.Material = &other
+	second := first
+	for &vertex in second.vertices do vertex.position.x += 20
+	sprite_batch_submit(&second, 0, &command)
+	testing.expect(t, renderer.sprite_passes == 2 && renderer.draw_calls == 0)
+	testing.expect(t, len(renderer.vertices) == 8 && len(renderer.indices) == 12)
+	testing.expect_value(t, renderer.vertices[0].position, [2]f32{0, 0})
+	testing.expect_value(t, renderer.vertices[4].position, [2]f32{20, 0})
+	testing.expect_value(t, renderer.vertices[6].uv, [2]f32{0.5, 1})
+	for value, i in ([12]u32{0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7}) {
+		testing.expect_value(t, renderer.indices[i], value)
+	}
+	testing.expect(t, sprite_batch_matches(&renderer, renderer.batch_state, &other))
+	uniform[0] = 9
+	foster.MaterialStageSetUniformBuffer(&other.Fragment, uniform[:])
+	testing.expect(t, !sprite_batch_matches(&renderer, renderer.batch_state, &other))
+	testing.expect_value(t, foster.MaterialStageGetUniformBuffer(&renderer.batch_material.Fragment)[0], 1)
+	foster.MaterialCopyTo(&source, &other)
+	other.Fragment.Samplers[0].Texture = nil
+	testing.expect(t, !sprite_batch_matches(&renderer, renderer.batch_state, &other))
+	state := renderer.batch_state
+	state.depth_write = !state.depth_write
+	testing.expect(t, !sprite_batch_matches(&renderer, state, &source))
+	state = renderer.batch_state
+	state.target.WidthInPixels += 1
+	testing.expect(t, !sprite_batch_matches(&renderer, state, &source))
+}
+
 // 用真实 StorageContainer 内存条目验证文件 -> 效果解析，不创建窗口或伪造 GPU。
 @(test)
 material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing.T) {

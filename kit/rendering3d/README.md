@@ -2,14 +2,17 @@
 
 这个包只提供与画风无关、每个 3D 游戏都要用的机制：
 
+已有材质时直接看[模型加载与绘制](#模型材质加载与使用)，业务调用 `model_draw`。
+下面的 Shader 编写与底层绑定章节供效果作者、渲染器和工具集成使用。
+
 | 文件 | 提供 |
 | --- | --- |
 | `mesh3d.odin` | dasset primitive 上传为 `foster.Mesh`（静态 / 蒙皮顶点格式） |
 | `queue3d.odin` | `Render_Queue($T)`：payload 由游戏定义，不透明从前到后、透明从后到前排序 |
 | `shader3d.odin` | `shader3d_pick_code`：按图形驱动选 spv / dxil / msl 字节码 |
 | `uniforms3d.odin` | `std140_write_matrix` / `std140_write_vec4`、WVP + World 顶点矩阵块、骨骼 palette 打包 |
-| `material3d.odin` | 模型材质的参数绑定、Pass 状态与有序绘制；与 Shader Lab 共用 |
-| `../rendering/material_library.odin` | 2D/3D 共用的材质加载与缓存；模型槽见 material3d |
+| `model_draw.odin` | 模型材质的参数绑定、Pass 状态与有序绘制；与 Shader Lab 共用 |
+| `../rendering/material_library.odin` | 2D/3D 共用的材质加载与缓存；模型绘制见 model_draw.odin |
 | `debug_draw3d.odin` | 立即模式调试线（线、盒、球、视锥、网格、骨架） |
 | `lod3d.odin` | 按屏幕高度选 LOD |
 | `shaders/` | DebugLine3D 的 HLSL 与编译产物；编译工具是 olib 根目录的 `tools/shaders` |
@@ -211,39 +214,30 @@ model.material, reason = rendering.material_load(&materials, "materials/hero.jso
 
 // 每帧；view 包含场景目标、相机 VP、时间。
 ok := r3d.model_draw(model, transform, view)
+// 只画指定 Pass；用循环自行组织“全部本体 → 全部描边”等顺序。
+ok = r3d.model_draw_pass(model, "outline", transform, view)
 // 场景退出：先停止绘制所有借用该库的模型，再释放。
 rendering.materials_dispose(&materials)
 ```
 
-一次登记放在资源初始化代码，参考 `olib_sample/src/material3d/shaders.odin`。
-库复制 Effect/Schema，借用当前后端的 Shader 字节码（通常 #load）；按需创建 GPU 资源。
-`material_load` 每次创建**独立参数实例**，同一效果的 Shader/底层 Material、同路径的贴图共享。
-默认贴图为白色。所有 IO 直接通过同一个 `StorageContainer`，兼容其目录、ZIP/虚拟文件后端；
-根目录由项目按 `kit/storage` 的策略选择，或显式指定资产根，不绕开存储层读取系统文件。
-
-材质文件路径相对于存储根，贴图路径相对于材质文件；两者使用相对逻辑路径。
-Shader Lab 导出跨盘绝对贴图路径时，应先把贴图纳入游戏资产根并改为相对路径。
-`. / .. / 反斜杠` 会规范化，使相同逻辑贴图复用缓存。
-
-- `material_set_number(material, group, field, value)` 按稳定 ID 修改实例参数，检查类型、范围和有限值；
-  不影响其他实例。贴图/布局等资源改变通过重新加载材质文件处理。
-- `material_reload(&materials, model.material)` 重新读原文件，也可指定新文件；先准备完整候选，失败保留
-  原实例，成功保持对象地址，所有引用该实例的模型槽同时看到结果。
-- reload 只刷新材质内容；同路径贴图复用缓存，不自动监听或刷新 Shader/贴图文件。
-- 库拥有所有返回的材质和缓存，统一由 `materials_dispose` 释放，目前不逐项卸载或自动淘汰。
-  建议按场景/资源会话划分库；释放后不可再用模型中的旧指针。不要浅复制拥有数据的库或材质。
-- 库、设备和存储的地址、存储根及 Shader 字节码在使用期间保持稳定；所有 GPU 操作在主线程、
-  合法设备生命周期内进行，加载/重载放在提交绘制之外。
+每种效果登记一次，参考 `olib_sample/src/material3d/shaders.odin`。
+材质加载、参数修改、重载、路径和生命周期统一遵循 [公共材质资源](../rendering/README.md#公共材质资源)。
+模型和精灵使用同一种 `rendering.Material`，各自的绘制入口验证 Effect 是否适用。
 
 `Model` 表示一个静态网格/primitive 的材质槽，不是新的场景或模型导入器；多 primitive 模型可持有多项。
 场景仍负责网格、变换、相机、颜色/深度目标以及绘制排序。
+`model_draw` 画全部启用 Pass，`model_draw_pass` 使用稳定 ID，空/未知 ID 返回 false；
+已禁用的已知 Pass 成功但不绘制，也遵守 view.pass_limit。库不调度绘制阶段。
+3D 仍逐网格提交，不自动合并不同模型或做实例化；按 Pass 分组可以减少 Shader/状态切换，
+实际 Draw 数不因此降低。与精灵混画时，先 `sprite_flush`，再提交模型。
 
 ## 模型材质执行
 
 以下是渲染器/Shader Lab 需要的底层接口，普通业务使用上面的 `material_load` 和 `model_draw`。
 
 `model_material_draw(device, effect, bindings, draw)` 把一个静态网格的所有 `.Model` Pass
-依次画到同一个外部颜色/深度目标。先用 `material.effect_order` 或 `instance_make` 校验定义；
+依次画到同一个外部颜色/深度目标；draw.pass_id 非空时只画指定 Pass。
+先用 `material.effect_order` 或 `instance_make` 校验定义；
 执行器借用资源，不加载文件、不清屏，也不决定场景排序。
 
 ```odin

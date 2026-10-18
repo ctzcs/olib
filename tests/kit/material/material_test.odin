@@ -2,8 +2,6 @@
 package material
 
 import "core:mem"
-import "core:fmt"
-import "core:os"
 import "core:strings"
 import "core:testing"
 
@@ -79,7 +77,7 @@ changed_type_uses_defaults :: proc(t: ^testing.T) {
 
 
 @(test)
-resource_roundtrip_isolation_validation_and_atomic_file :: proc(t: ^testing.T) {
+resource_roundtrip_isolation_and_validation :: proc(t: ^testing.T) {
 	track: mem.Tracking_Allocator
 	mem.tracking_allocator_init(&track, context.allocator)
 	defer mem.tracking_allocator_destroy(&track)
@@ -115,21 +113,4 @@ resource_roundtrip_isolation_validation_and_atomic_file :: proc(t: ^testing.T) {
 		invalid, message := resource_decode(schema, transmute([]u8)bad)
 		testing.expect(t, invalid == nil && message != "")
 	}
-	directory, dir_err := os.make_directory_temp("", "olib_material_", context.allocator)
-	testing.expect(t, dir_err == nil)
-	defer delete(directory)
-	defer _ = os.remove(directory)
-	path := fmt.tprintf("%s/material.json", directory)
-	defer _ = os.remove(path)
-	testing.expect_value(t, resource_save(schema, changed, path), "")
-	file_values, file_error := resource_load(schema, path)
-	defer values_dispose(file_values)
-	testing.expect(t, file_error == "" && file_values[1].number == changed[1].number)
-	changed[0].number[0] = 5
-	testing.expect(t, resource_save(schema, changed, path) != "")
-	again, again_error := resource_load(schema, path)
-	defer values_dispose(again)
-	testing.expect(t, again_error == "" && again[0].number[0] == 0.7)
-	missing, missing_error := resource_load(schema, fmt.tprintf("%s-missing", path))
-	testing.expect(t, missing == nil && missing_error != "")
 }

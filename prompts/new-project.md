@@ -204,7 +204,7 @@ odin run tools/check
 所有新游戏沿用模板的 `kit/storage` 接入，完整策略见 [存储说明](../kit/storage/README.md)。共享协议与资源函数放在 core/services.odin，由 editor/game 入口调用 resources_init 并持有资源根、用户根及 Foster 容器，通过 `Services.assets` 和 `Services.user_storage` 借给业务，退出时调用 resources_dispose；热重载候选不重新创建或释放入口资源。core 不依赖热重载加载器，业务读写使用跨平台容器，不另造 host 包。
 
 - 使用稳定的 `STORAGE_ID`，不要使用可变窗口标题。桌面开发版和发布版共用系统用户目录，Web 使用当前源下 `/foster/<ID>/` 的 localStorage 虚拟目录。
-- 读写直接调用 Foster 的 `ReadAllBytes / WriteAllBytes` 等操作，不另做 API 别名或跨平台读写包装。拆出的纯模拟包仍不依赖存储；core 或内容装载层接收容器并负责 IO。
+- 读写直接调用 Foster 的 Storage API；读取用 `ReadAllBytes`，存档、配置和编辑文档保存优先用 `WriteAllBytesAtomic / WriteAllTextAtomic`，检查返回值。普通直接写入仍可用 `WriteAllBytes`。不另做 API 别名或跨平台读写包装；拆出的纯模拟包仍不依赖存储，core 或内容装载层接收容器并负责 IO。平台语义与 Web 外部文件确认见 [存储约定](../kit/storage/README.md)。
 - Web 的资源根是虚拟 FS 根，不是站点 URL；未内嵌的资源需要先加载/挂载，不能把 HTTP 路径当成本地文件读取。
 - 默认初始化存储不等于自动保存游戏。存档和设置的字段、校验、版本、保存/恢复时机由具体业务实现；处理打开与写入失败，不静默退回工作目录。不要在候选 load 或模块 unload 中写盘，避免失败候选或热切换覆盖存档。
 

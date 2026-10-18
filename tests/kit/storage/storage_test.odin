@@ -8,6 +8,56 @@ import "core:testing"
 
 import foster "olib:foster"
 
+// Storage 真实文件集成；临时目录独占，不启动窗口或新增冒烟入口。
+@(test)
+atomic_storage_replace_and_failure_preserve_previous :: proc(t: ^testing.T) {
+	directory, error := os.make_directory_temp("", "olib_storage_atomic_", context.allocator)
+	if !testing.expect(t, error == nil) do return
+	defer delete(directory)
+	defer remove_tree(directory)
+	storage := foster.StorageContainer{Root = directory, Writable = true}
+	path :: "nested/state.json"
+	testing.expect(t, foster.WriteAllTextAtomic(&storage, path, "original"))
+	testing.expect(t, foster.WriteAllTextAtomic(&storage, path, "replacement"))
+	testing.expect_value(t, foster.ReadAllText(&storage, path, context.temp_allocator), "replacement")
+	// nil / 空路径 / 只读 / ZIP 都必须拒绝，不回退到目录写入。
+	testing.expect(t, !foster.WriteAllTextAtomic(nil, path, "bad"))
+	testing.expect(t, !foster.WriteAllTextAtomic(&storage, "", "bad"))
+	readonly := storage
+	readonly.Writable = false
+	testing.expect(t, !foster.WriteAllTextAtomic(&readonly, path, "bad"))
+	entries := make(map[string][dynamic]u8)
+	defer delete(entries)
+	zip := storage
+	zip.ZipEntries = &entries
+	testing.expect(t, !foster.WriteAllTextAtomic(&zip, path, "bad"))
+	testing.expect(t, !foster.WriteAllTextAtomic(&storage, "nested", "bad"))
+	testing.expect(t, !foster.WriteAllTextAtomic(&storage, path + "/child", "bad"))
+	testing.expect_value(t, foster.ReadAllText(&storage, path, context.temp_allocator), "replacement")
+	when ODIN_OS == .Windows {
+		// Odin 的打开文件句柄不共享 DELETE：让最后的替换失败，而非仅测试输入校验。
+		locked, lock_error := os.open(foster.StorageJoinPath(&storage, path))
+		if !testing.expect(t, lock_error == nil) do return
+		testing.expect(t, !foster.WriteAllTextAtomic(&storage, path, "must not replace"))
+		testing.expect_value(t, foster.ReadAllText(&storage, path, context.temp_allocator), "replacement")
+		testing.expect(t, os.close(locked) == nil)
+	}
+	// 失败后同目录不能留下候选文件。
+	names := foster.EnumerateDirectory(&storage, "nested")
+	defer delete(names)
+	defer for name in names do delete(name)
+	testing.expect(t, len(names) == 1 && names[0] == "state.json")
+	testing.expect(t, foster.WriteAllBytesAtomic(&storage, path, nil))
+	testing.expect(t, foster.FileExists(&storage, path))
+	testing.expect_value(t, len(foster.ReadAllBytes(&storage, path, context.temp_allocator)), 0)
+	binary := []u8{0, 255, 42, 0}
+	testing.expect(t, foster.WriteAllBytesAtomic(&storage, path, binary))
+	loaded := foster.ReadAllBytes(&storage, path)
+	defer delete(loaded)
+	if !testing.expect_value(t, len(loaded), len(binary)) do return
+	for value, i in binary do testing.expect_value(t, loaded[i], value)
+}
+
 @(private)
 TEST_APP :: "olib_storage_test_app"
 

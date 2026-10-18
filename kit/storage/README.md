@@ -2,6 +2,16 @@
 
 `kit/storage` 统一选择资源根、用户根与应用命名空间，默认用于新游戏模板。实际文件读写直接使用 Foster 的 `StorageContainer`、`ReadAllBytes`、`WriteAllBytes` 等 API，不另包一套读写接口。
 
+保存存档、配置和编辑文档时使用 `foster.WriteAllBytesAtomic` / `WriteAllTextAtomic`：
+
+- 桌面写入目标同目录的独占临时文件，写完、同步并关闭后替换目标；失败保留原文件并清理临时文件。
+- Web 以一次 localStorage 单键写入替换虚拟文件，返回值表示虚拟存储的结果。
+  若路径来自浏览器保存对话框，外部文件另需 `FlushStorageFileAsync` 确认异步写入结果。
+- 自动创建父目录；拒绝空路径、只读和 ZIP 容器。允许保存空文件，失败须检查返回的 bool。
+- 这是单文件完整替换，不是多文件事务或断电持久性保证；普通 `WriteAllBytes/WriteAllText` 仍为直接写入。
+
+ShaderLab 的预设和材质保存也调用同一 Storage 原子写接口，工具只负责格式和路径转换。
+
 | 平台 | `user_root(app_name)` |
 | --- | --- |
 | Windows | `%APPDATA%/<app_name>` |
@@ -21,7 +31,7 @@ root := storage.user_root("MyGame")
 if root == "" do return
 defer delete(root)
 files := foster.StorageContainer{Root = root, Writable = true}
-ok := foster.WriteAllText(&files, "settings.json", `{}`)
+ok := foster.WriteAllTextAtomic(&files, "settings.json", `{}`)
 // 由调用方处理 ok；存档格式、版本与保存时机属于游戏。
 ```
 

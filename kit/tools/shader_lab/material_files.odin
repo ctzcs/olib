@@ -1,16 +1,21 @@
 #+build !js
-package material
+package shader_lab
 
-// 桌面资源读写；Web/虚拟文件系统可用 resource_decode/encode 接自己的 IO。
+// ShaderLab 的文件路径适配；数据编解码交给 material，读取与原子保存统一交给 Storage。
+// 分区：预设文件 / Storage 保存 / 整材质文件。
 import "core:fmt"
-import "core:os"
 import "core:path/filepath"
 import "core:strings"
 
-resource_load :: proc(schema: Schema, path: string) -> ([]Value, string) {
-	bytes, err := os.read_entire_file(path, context.temp_allocator)
-	if err != nil do return nil, fmt.tprintf("%s: cannot read material (%v)", path, err)
-	values, reason := resource_decode(schema, bytes)
+import foster "olib:foster"
+import mat "olib:kit/material"
+
+@(private)
+preset_file_load :: proc(schema: mat.Schema, path: string) -> ([]mat.Value, string) {
+	storage := foster.StorageContainer{Root = filepath.dir(path)}
+	bytes := foster.ReadAllBytes(&storage, filepath.base(path), context.temp_allocator)
+	if len(bytes) == 0 do return nil, fmt.tprintf("%s: cannot read material or file is empty", path)
+	values, reason := mat.resource_decode(schema, bytes)
 	if reason != "" do return nil, fmt.tprintf("%s: %s", path, reason)
 	directory, _ := filepath.abs(filepath.dir(path), context.temp_allocator)
 	for &value, i in values {
@@ -25,13 +30,14 @@ resource_load :: proc(schema: Schema, path: string) -> ([]Value, string) {
 }
 
 // 同目录临时文件完成后才替换；失败保留旧文件。texture_root 指定输入相对贴图的根。
-resource_save :: proc(schema: Schema, values: []Value, path: string, texture_root := "") -> string {
+@(private)
+preset_file_save :: proc(schema: mat.Schema, values: []mat.Value, path: string, texture_root := "") -> string {
 	if path == "" do return "Empty material path"
-	checked, check_error := resource_encode(schema, values)
+	checked, check_error := mat.resource_encode(schema, values)
 	delete(checked)
 	if check_error != "" do return check_error
-	owned := values_make(schema, schema, values)
-	defer values_dispose(owned)
+	owned := mat.values_make(schema, schema, values)
+	defer mat.values_dispose(owned)
 	directory, _ := filepath.abs(filepath.dir(path), context.temp_allocator)
 	for &value, i in owned {
 		if schema.fields[i].kind != .Texture || value.texture == "" do continue
@@ -44,38 +50,27 @@ resource_save :: proc(schema: Schema, values: []Value, path: string, texture_roo
 		delete(value.texture)
 		value.texture = strings.clone(err == nil ? relative : absolute)
 	}
-	bytes, reason := resource_encode(schema, owned)
+	bytes, reason := mat.resource_encode(schema, owned)
 	defer delete(bytes)
 	if reason != "" do return reason
-	return resource_write(path, bytes)
+	return material_file_write(path, bytes)
 }
 
 @(private)
-resource_write :: proc(path: string, bytes: []u8) -> string {
-	directory, _ := filepath.abs(filepath.dir(path), context.temp_allocator)
-	if os.make_directory_all(directory) != nil do return "Cannot create material directory"
-	file, err := os.create_temp_file(directory, ".material-*.tmp")
-	if err != nil do return "Cannot stage material resource"
-	temporary := strings.clone(os.name(file), context.temp_allocator)
-	closed := false
-	defer {
-		if !closed do os.close(file)
-		_ = os.remove(temporary)
+material_file_write :: proc(path: string, bytes: []u8) -> string {
+	storage := foster.StorageContainer{Root = filepath.dir(path), Writable = true}
+	if !foster.WriteAllBytesAtomic(&storage, filepath.base(path), bytes) {
+		return "Cannot save material; previous file retained"
 	}
-	written, write_err := os.write(file, bytes)
-	if write_err != nil || written != len(bytes) do return "Cannot write complete material"
-	if os.sync(file) != nil do return "Cannot sync material"
-	close_err := os.close(file)
-	closed = true
-	if close_err != nil do return "Cannot close material"
-	if os.rename(temporary, path) != nil do return "Cannot replace material; previous file retained"
 	return ""
 }
 
-instance_load :: proc(effect: Effect_Desc, schemas: []Schema, path: string) -> (Instance, string) {
-	bytes, err := os.read_entire_file(path, context.temp_allocator)
-	if err != nil do return {}, "Cannot read material instance"
-	result, reason := instance_decode(effect, schemas, bytes)
+@(private)
+material_file_load :: proc(effect: mat.Effect_Desc, schemas: []mat.Schema, path: string) -> (mat.Instance, string) {
+	storage := foster.StorageContainer{Root = filepath.dir(path)}
+	bytes := foster.ReadAllBytes(&storage, filepath.base(path), context.temp_allocator)
+	if len(bytes) == 0 do return {}, "Cannot read material instance or file is empty"
+	result, reason := mat.instance_decode(effect, schemas, bytes)
 	if reason != "" do return {}, reason
 	directory, _ := filepath.abs(filepath.dir(path), context.temp_allocator)
 	for &group in result.groups {
@@ -89,19 +84,20 @@ instance_load :: proc(effect: Effect_Desc, schemas: []Schema, path: string) -> (
 	return result, ""
 }
 
-instance_save :: proc(instance: Instance, path: string, texture_root := "") -> string {
+@(private)
+material_file_save :: proc(instance: mat.Instance, path: string, texture_root := "") -> string {
 	if path == "" do return "Empty material path"
-	checked, check_error := instance_encode(instance)
+	checked, check_error := mat.instance_encode(instance)
 	delete(checked)
 	if check_error != "" do return check_error
-	// 临时副本只借用 Schema，独立拥有 Value；不改调用方的路径。
-	copy_instance := Instance{instance.effect, make([]Instance_Group, len(instance.groups))}
+	// 临时副本只借用 mat.Schema，独立拥有 mat.Value；不改调用方的路径。
+	copy_instance := mat.Instance{instance.effect, make([]mat.Instance_Group, len(instance.groups))}
 	defer delete(copy_instance.groups)
-	defer for group in copy_instance.groups do values_dispose(group.values)
+	defer for group in copy_instance.groups do mat.values_dispose(group.values)
 	directory, _ := filepath.abs(filepath.dir(path), context.temp_allocator)
 	for group, i in instance.groups {
 		if len(group.values) != len(group.schema.fields) do return "Material value count differs from schema"
-		copy_instance.groups[i] = {group.schema, values_make(group.schema, group.schema, group.values)}
+		copy_instance.groups[i] = {group.schema, mat.values_make(group.schema, group.schema, group.values)}
 		for &value, j in copy_instance.groups[i].values {
 			if group.schema.fields[j].kind != .Texture || value.texture == "" do continue
 			texture := value.texture
@@ -112,8 +108,8 @@ instance_save :: proc(instance: Instance, path: string, texture_root := "") -> s
 			value.texture = strings.clone(err == nil ? relative : absolute)
 		}
 	}
-	bytes, reason := instance_encode(copy_instance)
+	bytes, reason := mat.instance_encode(copy_instance)
 	defer delete(bytes)
 	if reason != "" do return reason
-	return resource_write(path, bytes)
+	return material_file_write(path, bytes)
 }

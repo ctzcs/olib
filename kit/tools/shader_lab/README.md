@@ -226,12 +226,19 @@ folder 标题前缀。均支持中文，字形须包含在宿主 MSDF 图集中�
 
 `olib_sample` 的 `Outlined_Passes` 使用两个 `.Model` Pass：本体背面剔除并写深度，描边
 外扩顶点、正面剔除、只读深度。二者必须使用同一个 output 和 target 描述，不接受图目标输入。
-库会调用 `rendering3d.model_material_draw`；游戏里的 `material3d` 示例也使用它。
+预览调用 `rendering3d.model_material_draw`；游戏里的 `material3d` 示例使用 `model_draw/model_draw_pass`。
 这里的“当前 Pass”显示从首个 Pass 累积绘制到选中 Pass 的结果，关闭某 Pass 只跳过绘制，
 不会清除其他 Pass 的颜色/深度。旧图像效果仍保留独立目标、输入拓扑和历史帧机制。
 
-保存后的材质 JSON 可由 `material.instance_load` 直接装载。游戏需要一起提供同一 Effect 定义和
-预编译 Shader；参数文件本身不是 Shader 包。Pass 定义、预览启停和相机不会写进材质 JSON。
+保存后的材质 JSON 在游戏中通过 `rendering.material_load` 从 Foster StorageContainer 加载，
+材质文件和贴图都归同一容器管理。游戏需要一起提供同一 Effect 定义和预编译 Shader；
+参数文件本身不是 Shader 包。Pass 定义、预览启停和相机不会写进材质 JSON。
+ShaderLab 的 `save_material/load_material` 仍接受桌面路径；预设使用 `save_preset/load_preset`。
+路径适配集中在 [material_files.odin](material_files.odin)，均为包内私有函数。
+读取使用 `foster.ReadAllBytes`，保存使用 `foster.WriteAllBytesAtomic`；同目录临时文件替换由
+Storage 统一实现，ShaderLab 只处理相对贴图路径换算、编解码和将结果应用到会话。
+保存失败不覆盖旧文件；这套安全保存也可直接用于游戏存档和配置。
+公共 `kit/material` 只提供数据与编解码，不再提供桌面文件 load/save；游戏不 import ShaderLab 来读资源。
 示例的描边颜色可在面板修改；宽度目前是 HLSL 常量，可以修改源码热重载，不是材质数值字段。
 3D 效果可以包含使用 2D 顶点接口的全屏模糊、合成和反馈，它们不会被拆到 2D 工作区；
 显式声明为 2D 的效果不能包含 3D 模型 Pass。`select_workspace(session, 0 / 1)` 可从宿主切换。

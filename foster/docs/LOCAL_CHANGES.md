@@ -41,3 +41,5 @@
 | L-012 | 2026-10-17 | 新增 | graphics.odin / ShaderTryInit；olib_shader_reload.odin / ShaderPairTryReplace | 无 | 开发期 Shader 创建返回错误；候选顶点/片元及实际绘制管线全部成功后原位替换，失败保留旧资源与材质引用，支持 2D/3D 热重载 | 保留 |
 | L-013 | 2026-10-17 | 修复 | framework.odin / 默认 Shader 嵌入路径；assets/shaders/ | Framework/Content/Shaders | 原生产物统一移至 Compiled，保留字节内容；补回同步基线 06213b9 的 Batcher.hlsl，使 tools/shaders 能重建全部默认 Shader；Web GLSL 仍为手工适配源码 | 保留 |
 | L-014 | 2026-10-18 | 修复 | web.odin / web_relocate_app | 无（Odin Web App 堆迁移） | 搬移 App 时重绑默认材质的 Shader 指针及 Shader 的 GraphicsDevice，避免 main 返回后引用旧栈地址，修复 Web MSDF 文字不显示 | 保留 |
+| L-015 | 2026-10-19 | 新增 | olib_ext.odin / WriteAllBytesAtomic、WriteAllTextAtomic；platform_native.odin、platform_web.odin / storage_os_write_file_atomic | 无 | Storage 统一提供单文件原子替换，桌面同步同目录临时文件后重命名，Web 复用虚拟文件单键替换；ShaderLab 和游戏共用，拒绝只读/ZIP 写入，保留旧版直接写入 API | 保留 |
+| L-016 | 2026-10-19 | 修复 | images.odin / ImageWritePng 与 imports | Image.cs / WritePng | 原生 PNG 路径转换复用包内 to_cstring，移除 Web 分支未使用的 strings 导入，使 Web -vet 通过，保持原有分配与写入行为 | 保留 |

@@ -84,7 +84,7 @@ save_preset :: proc(s: ^Session, index: int, path: string) -> bool {
 	p := &s.parameters[index]
 	if !p.available do return false
 	color_picker_close(s, true)
-	reason := mat.resource_save(p.live, p.values, path, s.source_root)
+	reason := preset_file_save(p.live, p.values, path, s.source_root)
 	parameter_error(p, reason)
 	return reason == ""
 }
@@ -93,7 +93,7 @@ load_preset :: proc(s: ^Session, index: int, path: string) -> bool {
 	if index < 0 || index >= s.shader_count do return false
 	p := &s.parameters[index]
 	if !p.available do return false
-	values, reason := mat.resource_load(p.live, path)
+	values, reason := preset_file_load(p.live, path)
 	defer mat.values_dispose(values)
 	if reason != "" {
 		parameter_error(p, reason)

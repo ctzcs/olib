@@ -90,7 +90,7 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 	return foster.TargetAttachment(target)
 }
 
-// 保存整个对象效果的参数；临时借用组和数值，instance_save 内部复制路径。
+// 保存整个对象效果的参数；临时借用组和数值，文件保存函数内部复制路径。
 save_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 	if effect < 0 || effect >= len(s.effects) || !mat.effect_is_material(s.effects[effect].desc) do return false
 	color_picker_close(s, true)
@@ -103,7 +103,7 @@ save_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 		p := &s.parameters[bank_index(s.bank, string(pass.params))]
 		append(&groups, mat.Instance_Group{p.live, p.values})
 	}
-	reason := mat.instance_save({e.name, groups[:]}, path, s.source_root)
+	reason := material_file_save({e.name, groups[:]}, path, s.source_root)
 	parameter_error(&s.parameters[bank_index(s.bank, string(e.passes[0].params))], reason)
 	return reason == ""
 }
@@ -114,7 +114,7 @@ load_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 	e := s.effects[effect].desc
 	schemas := make([]mat.Schema, s.shader_count, context.temp_allocator)
 	for p, i in s.parameters[:s.shader_count] do schemas[i] = p.live
-	next, reason := mat.instance_load(e, schemas, path)
+	next, reason := material_file_load(e, schemas, path)
 	defer mat.instance_dispose(&next)
 	reporter := &s.parameters[bank_index(s.bank, string(e.passes[0].params))]
 	if reason != "" {

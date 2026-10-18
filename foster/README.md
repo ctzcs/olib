@@ -147,6 +147,16 @@ require a supported File System Access API and user activation; unsupported or
 cancelled pickers return an empty/cancelled result. Picked paths are virtual
 snapshots. Writes to selected save files are queued; `FlushStorageFileAsync`
 confirms completion, while the synchronous write result confirms virtual storage.
+
+`WriteAllBytesAtomic` and `WriteAllTextAtomic` provide complete single-file replacement.
+Native storage writes and syncs a unique temporary file beside the destination, then
+renames it over the destination; failures retain the previous file and clean up the
+temporary file. Web uses one localStorage key replacement, with the same external-file
+flush requirement described above. These APIs reject read-only/ZIP containers and
+empty paths, create parent directories, and support empty files. They do not provide
+multi-file transactions or a power-loss durability guarantee. The original
+`WriteAllBytes` / `WriteAllText` APIs keep their direct-write behavior.
+
 Web compute, graphics storage buffers, wireframe fill and attachment MSAA remain
 outside WebGL2 coverage.
 Custom Web shaders use the bridge's named uniforms (`u_matrix`, `u_tex`,

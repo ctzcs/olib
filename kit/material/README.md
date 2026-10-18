@@ -1,7 +1,7 @@
 # 材质参数描述与值
 
 `material` 保存 Shader 参数的描述、实例值，并生成与之匹配的 HLSL 和 uniform 字节。
-它不依赖 UI、编辑器或 `shaderdev`，不持有 Foster Shader/Texture。多个材质可以用
+它不依赖文件系统、UI、编辑器或 `shaderdev`，不持有 Foster Shader/Texture。多个材质可以用
 同一 `Schema` 各自创建一份 `values_make` 结果。
 
 参数作者使用同一 Odin 包中的具名结构体，详见 [Shader 开发](../shaderdev/README.md)。
@@ -60,10 +60,14 @@ HLSL 参数名统一添加 `_` 前缀：Odin 的 `strength` 对应 `_strength`�
 嵌套结构体或 vertex 材质参数。
 
 `resource_encode/decode` 提供单参数组 JSON（version=1，兼容 Shader Lab 预设）；
-`instance_encode/decode` 提供模型材质 JSON（version=2，包含 Effect 名和全部参数组）。
-字节接口没有文件系统依赖，可以接 `kit/storage`；桌面另有原子文件保存与相对贴图路径处理的
-`resource_save/load`、`instance_save/load`。这不是资产导入器；GPU 纹理仍由游戏资产系统加载。
-Shader Lab 显式导出当前参数，不自动修改 Odin 默认值或宿主材质文档。
+`instance_encode/decode` 提供 2D/3D 完整材质 JSON（version=2，包含 Effect 名和全部参数组）。
+本包只处理字节与数据校验，不读取文件、不解析本机绝对路径，也不提供 load/save 文件接口。
+游戏统一通过 [Material_Library](../rendering/README.md#公共材质资源) 的 `material_load/reload`
+从 Foster StorageContainer 读取材质与贴图，再由本包解码；自定义资源层也应通过 Storage 获取字节。
+ShaderLab 内部的 [material_files.odin](../tools/shader_lab/material_files.odin)
+负责桌面文件路径和相对贴图路径换算，通过 Storage 读取与原子保存，对外使用
+`save_preset/load_preset` 或 `save_material/load_material`。游戏不依赖这套工具文件接口。
+ShaderLab 显式导出当前参数，不自动修改 Odin 默认值或宿主材质文档，JSON 格式保持兼容。
 
 ## 多 Pass 声明
 
@@ -98,7 +102,7 @@ passes := []mat.Pass_Desc{
   图像效果继续要求输出唯一，不能靠重名输出叠加模型。
 
 `instance_make(effect, schemas)` 校验定义并独立拥有 Schema/Value；`instance_dispose` 释放。
-`instance_load(effect, schemas, path)` 返回独立候选，失败不改原实例。文件保存 Effect 的稳定名和
+`instance_decode(effect, schemas, bytes)` 返回独立候选，失败不改原实例。文件保存 Effect 的稳定名和
 参数值，**不打包 Shader 或 Pass 定义**；运行时资源表必须能把这个名字解析为随游戏发布的同一份定义。
 多个 Pass 引用相同参数组时共用该组数值，可用 Pass.values 固定区分。
 

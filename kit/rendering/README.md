@@ -27,6 +27,8 @@ material, reason := rendering.material_load(&materials, "materials/hero.json")
 每次 load 创建独立参数实例，共享同一效果的 Shader 和同路径贴图。
 Effect/Schema 由库深复制，当前后端预编译字节码借用至 `materials_dispose`。
 材质和贴图使用同一个 Foster StorageContainer；材质路径相对容器根，贴图路径相对材质文件。
+游戏统一使用此入口，不直接读取桌面文件。`kit/material` 仅解码 Storage 读取的字节；
+ShaderLab 的本机路径适配属于工具内部实现，底层同样使用 Storage，不是另一套游戏加载接口。
 库、device、storage 的地址及存储根在使用期间须保持稳定。
 
 `material_set_number(material, group, field, value)` 检查类型和范围后修改单个实例。

@@ -108,6 +108,13 @@ storage_os_write_file :: proc(path: string, data: []byte) -> bool {
 	return fw_fs_write(path_ptr, path_len, &data[0], i32(len(data))) != 0
 }
 
+// [olib L-015] 桥先编码全部字节，再以一次 localStorage.setItem 替换虚拟文件。
+// 外部文件写入仍由已有异步队列和 FlushStorageFileAsync 确认。
+@(private)
+storage_os_write_file_atomic :: proc(path: string, data: []byte) -> bool {
+	return storage_os_write_file(path, data)
+}
+
 @(private)
 storage_os_working_directory :: proc(allocator := context.allocator) -> string {
 	_ = allocator

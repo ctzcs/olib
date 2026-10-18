@@ -3,8 +3,6 @@ package material
 
 import "core:testing"
 import "core:strings"
-import "core:fmt"
-import "core:os"
 
 @(test)
 sprite_material_contract_and_roundtrip :: proc(t: ^testing.T) {
@@ -93,24 +91,6 @@ model_instance_roundtrip_groups_and_reject_partial_decode :: proc(t: ^testing.T)
 	testing.expect(t, encode_error == "" && decode_error == "" && b.groups[0].values[0].number[0] == 0.75)
 	b.groups[0].values[0].number[0] = 0.1
 	testing.expect_value(t, a.groups[0].values[0].number[0], 0.75)
-	// 整材质原子保存、相对贴图恢复、失败保留文件。
-	directory, dir_error := os.make_directory_temp("", "olib_model_material_", context.allocator)
-	testing.expect(t, dir_error == nil)
-	defer delete(directory)
-	defer _ = os.remove(directory)
-	path := fmt.tprintf("%s/material.json", directory)
-	defer _ = os.remove(path)
-	testing.expect_value(t, instance_save(a, path, directory), "")
-	loaded, load_error := instance_load(e, schemas, path)
-	defer instance_dispose(&loaded)
-	testing.expect(t, load_error == "" && loaded.groups[0].values[0].number[0] == 0.75)
-	testing.expect(t, strings.contains(loaded.groups[1].values[0].texture, directory))
-	a.groups[0].values[0].number[0] = 5
-	testing.expect(t, instance_save(a, path, directory) != "")
-	retained, retained_error := instance_load(e, schemas, path)
-	defer instance_dispose(&retained)
-	testing.expect(t, retained_error == "" && retained.groups[0].values[0].number[0] == 0.75)
-	a.groups[0].values[0].number[0] = 0.75
 	testing.expect(t, raw_data(b.groups[1].values[0].texture) != raw_data(a.groups[1].values[0].texture))
 	for bad in ([]string{
 		`{"version":2,"effect":"Other"}`,

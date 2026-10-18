@@ -83,6 +83,33 @@ storage_os_write_file :: proc(path: string, data: []byte) -> bool {
 	return os.write_entire_file(path, data) == nil
 }
 
+// [olib L-015] 同目录临时文件确保替换不跨文件系统，失败时仅清理本次拥有的临时文件。
+@(private)
+storage_os_write_file_atomic :: proc(path: string, data: []byte) -> bool {
+	file, err := os.create_temp_file(filepath.dir(path), ".foster-*.tmp")
+	if err != nil {
+		return false
+	}
+	temporary := strings.clone(os.name(file), context.temp_allocator)
+	closed := false
+	defer {
+		if !closed {
+			os.close(file)
+		}
+		_ = os.remove(temporary)
+	}
+	written, write_err := os.write(file, data)
+	if write_err != nil || written != len(data) || os.sync(file) != nil {
+		return false
+	}
+	close_err := os.close(file)
+	closed = true
+	if close_err != nil {
+		return false
+	}
+	return os.rename(temporary, path) == nil
+}
+
 @(private)
 storage_os_working_directory :: proc(allocator := context.allocator) -> string {
 	dir, err := os.get_working_directory(allocator)

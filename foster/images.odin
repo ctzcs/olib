@@ -2,7 +2,7 @@ package foster_framework
 
 import qoi "./internal/third_party"
 import "core:c"
-import "core:strings"
+// [olib L-016] PNG 路径复用包内 to_cstring，移除仅原生分支使用的 core:strings 导入。
 import stbi "vendor:stb/image"
 import "core:bytes"
 import "core:math"
@@ -140,7 +140,8 @@ ImageWritePng :: proc(i: ^Image, path: string) -> bool {
 			raw_data(i.Pixels),
 		)
 	} else {
-		cstr, _ := strings.clone_to_cstring(path, context.temp_allocator)
+		// [olib L-016] 与原路径转换使用相同的临时分配器。
+		cstr := to_cstring(path)
 		return(
 			stbi.write_png(
 				cstr,

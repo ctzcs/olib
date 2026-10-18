@@ -1,0 +1,19 @@
+# __PROJECT__ 开发约定
+
+- 先读 [olib 新项目约定](__OLIB__/prompts/new-project.md)、[分层约定](__OLIB__/prompts/dod-guidelines.md) 与 [编码规范](__OLIB__/docs/CODE_STYLE.md)。
+- 默认只有 core/core_editor/editor/game 四个源码子目录；先在 core 内按文件组织，确有复用或依赖边界时在 src/core 内拆子包；tools/check 自动识别子包与 vet 包名，改变依赖边界时同步规则，不预建五层目录，也不恢复顶层 def/data/logic/view。
+- 日常业务入口为 `src/core/world.odin`、`src/core/rules.odin`、`src/core/ui.odin`。热重载底座已接入，不再从示例复制宿主。
+- 桌面开发默认保留状态热重载。改状态时同步检查 `src/core/core.odin` 的快照、恢复默认值及版本；普通 UI/玩法函数不用 export。
+- `src/editor` 是薄常驻开发入口，`src/core_editor` 是可热替换的编辑器实现与 DLL 接入；core_editor 连同 core 编成一个 DLL。core/game 不导入 core_editor；所有包不导入入口；editor 不静态导入 core_editor，不调用静态游戏实例。不另建 host、editor/play、src/tools/editor 或根目录宿主。
+- 游戏逻辑、游戏 UI 和编辑器工具 UI 一起热替换。DLL 拥有游戏/编辑会话，组合快照保存进度、面板开关和未处理命令；UI 和瞬时输入重建，按住输入等松开再接收。候选不改旧状态或持久存储。监听 core 和 core_editor（含子包）；editor 入口、core/services.odin、core/args_native.odin、olib、Odin 改动后重启。游戏和编辑器状态格式都维护版本，不静默重开；服务 ABI 变化升级 core.SERVICES_VERSION。
+- Windows/Web 发布共用 src/game/main.odin 和 core；Web 不接热重载、editor 或 core_editor。桌面依赖放 #+build !js 文件，Web 的 main 返回不释放仍供帧循环使用的状态。运行 publish_web.bat 发布、publish_web.bat serve 本地预览；WASM 不得有 SDL 函数导入。
+- 编译/加载失败反馈留在 src/editor/main.odin；不能移进 DLL。完整日志保存在 build/hotreload-last-error.txt，提示只能在 watch_apply 实际成功后清除，不能把 Ready 当成功。
+- 默认使用 kit/storage 选择跨平台资源根与用户根；共享协议与资源函数位于 core/services.odin，由 editor/game 入口持有 Services.assets/user_storage，业务直接使用 Foster 存储 API。存储 ID 稳定，保存时机和格式由 core 负责，不在热重载 load/unload 中自动写盘。
+- 字体和 UI 遵循 [最终像素采样约定](__OLIB__/kit/ui/README.md#最终像素采样与清晰度验收)。新增文字须更新离线图集。
+- 新增编辑器、开发面板和交互工具前阅读 [编辑工具约定](__OLIB__/prompts/editor-guidelines.md)。
+- 验证：`odin run tools/check`；按需直接运行游戏检查交互。默认不添加冒烟脚本、自动改源码或截图测试模式。
+- 生成文件遵循 [目录纪律](__OLIB__/prompts/new-project.md#生成文件与目录纪律)：截图放 library/screenshots，图像候选/参考图/提示词/交付前压缩包放 library/imagegen，临时脚本/报告/诊断日志放 library/tmp，按需创建并忽略 library。
+- 不在项目根新建 output/screenshots/artifacts 或日期、任务名目录；同场景截图复用文件名。仅在用户要求或画面/输入变化确需验收时截图，目录/文档/任务配置修改不额外截图；发布目录验收也输出到项目根 library，不污染发布包。
+- 正式游戏资源放 assets，预编译 Shader 放所属模块的 shaders/Compiled；字体子集与图集保留。已有素材整理前检查引用，不覆盖同名文件或未经要求批量删除；build 仅放构建、测试、发布产物及已有工具构建日志。
+- library 不整体删除或发布；派生 blob/manifest 独立放 library/assets，发布只挑选需要的资源。测试私有临时目录、编译器隔离目录和同目录原子保存文件仍按各自生命周期管理，不迁进共享目录。
+- 多步计划放 docs/plans，完成验收后按 [归档规则](__OLIB__/docs/plans/README.md) 移到 archive，写完成日期、commit 范围和偏离，单独提交归档。

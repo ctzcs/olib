@@ -1,0 +1,254 @@
+package main
+
+import "core:encoding/json"
+import "core:fmt"
+import "core:os"
+import "core:path/filepath"
+import "core:strings"
+
+// 只依赖 Odin core；构建入口、测试发现和层间检查集中于此。
+main :: proc() {
+	root, _ := filepath.abs(#directory + "/../..", context.temp_allocator)
+	library := os.get_env("OLIB", context.temp_allocator)
+	if library == "" do library = "__OLIB__"
+	assert(os.make_directory_all(fmt.tprintf("%s/build/check", root)) == nil)
+	exe := ODIN_OS == .Windows ? ".exe" : ""
+	dll := ODIN_OS == .Windows ? ".dll" : ODIN_OS == .Darwin ? ".dylib" : ".so"
+	lib_arg := fmt.tprintf("-collection:olib=%s", library)
+	game_arg := fmt.tprintf("-collection:game=%s/src", root)
+	names := make([dynamic]string, context.temp_allocator)
+	collect_package_names(root, "src", &names)
+	vet := fmt.tprintf("-vet-packages:%s", strings.join(names[:], ",", context.temp_allocator))
+	run(root, {"odin", "test", "tools/check", "-vet", "-vet-packages:main",
+		fmt.tprintf("-out:build/check/layers%s", exe)})
+	check_sources(root, "src", lib_arg, game_arg, exe, vet)
+	for entry in ([]string{"game", "editor", "core_editor"}) {
+		module := entry == "core_editor"
+		name := entry
+		package_path := entry
+		run(root, {"odin", "build", fmt.tprintf("src/%s", package_path), lib_arg, game_arg, "-vet", vet,
+			module ? "-build-mode:dll" : "-debug",
+			"-export-dependencies:json", fmt.tprintf("-export-dependencies-file:build/check/%s-dependencies.json", name),
+			fmt.tprintf("-out:build/check/%s%s", name, module ? dll : exe)})
+	}
+	run(root, {"odin", "build", "src/game", lib_arg, game_arg, "-target:js_wasm32",
+		"-define:SDL3_WASM_LIB=SDL3", "-o:speed", "-vet", vet, "-out:build/check/web.wasm",
+		"-export-dependencies:json", "-export-dependencies-file:build/check/web-dependencies.json"})
+	check_release(root, "game")
+	check_release(root, "web")
+	check_development(root)
+	// SDL 函数名会以导入字符串保留在 WASM 中；Foster 的 Web 桥不需要它们。
+	wasm, wasm_err := os.read_entire_file(fmt.tprintf("%s/build/check/web.wasm", root), context.temp_allocator)
+	assert(wasm_err == nil && !strings.contains(string(wasm), "SDL_"), "SDL function leaked into Web build")
+	fmt.println("PASS: tests, layers, Editor App, Editor DLL, static game and Web")
+}
+
+check_release :: proc(root, entry: string) {
+	// 使用编译器实际依赖清单，确认 editor 没有经间接导入进入静态入口。
+	bytes, err := os.read_entire_file(fmt.tprintf("%s/build/check/%s-dependencies.json", root, entry), context.temp_allocator)
+	assert(err == nil)
+	dependencies: struct {
+		source_files: []string,
+	}
+	assert(json.unmarshal(bytes, &dependencies, allocator = context.temp_allocator) == nil)
+	resident, _ := strings.replace_all(fmt.tprintf("%s/src", root), "\\", "/", context.temp_allocator)
+	for source in dependencies.source_files {
+		path, _ := strings.replace_all(source, "\\", "/", context.temp_allocator)
+		assert(!strings.contains(path, "/src/editor/") && !strings.contains(path, "/src/core_editor/") &&
+			filepath.dir(path) != resident && !strings.contains(path, "/core/devbuild/") &&
+			!strings.contains(path, "/core/hotreload/"), "development package leaked into static game")
+		if entry == "web" {
+			assert(!strings.contains(path, "/core/os/") && !strings.has_suffix(path, "_native.odin"),
+				"native source leaked into Web build")
+		}
+	}
+}
+
+// 编译器的实际依赖闭包：常驻入口不能静态带入编辑器实现，DLL 不能带入入口。
+check_development :: proc(root: string) {
+	for entry in ([]string{"editor", "core_editor"}) {
+		bytes, err := os.read_entire_file(fmt.tprintf("%s/build/check/%s-dependencies.json", root, entry), context.temp_allocator)
+		assert(err == nil)
+		dependencies: struct { source_files: []string }
+		assert(json.unmarshal(bytes, &dependencies, allocator = context.temp_allocator) == nil)
+		for source in dependencies.source_files {
+			path, _ := strings.replace_all(source, "\\", "/", context.temp_allocator)
+			for forbidden in ([]string{"game", "host", entry == "editor" ? "core_editor" : "editor"}) {
+				assert(!strings.contains(path, fmt.tprintf("/src/%s/", forbidden)), "entry/module boundary violated")
+			}
+		}
+	}
+}
+
+run :: proc(root: string, command: []string) {
+	state, out, errout, err := os.process_exec({working_dir = root, command = command}, context.temp_allocator)
+	if err != nil || !state.exited || state.exit_code != 0 {
+		fmt.eprintln(command)
+		fmt.eprintln(string(out), string(errout), err)
+		os.exit(1)
+	}
+	fmt.println(string(out))
+}
+
+check_sources :: proc(root, relative, library, game, exe, vet: string) {
+	entries, err := os.read_all_directory_by_path(fmt.tprintf("%s/%s", root, relative), context.temp_allocator)
+	assert(err == nil)
+	has_tests := false
+	for e in entries {
+		if e.type == .Directory {
+			check_sources(root, fmt.tprintf("%s/%s", relative, e.name), library, game, exe, vet)
+		} else if strings.has_suffix(e.name, ".odin") {
+			bytes, read_err := os.read_entire_file(e.fullpath, context.temp_allocator)
+			assert(read_err == nil)
+			test := strings.has_suffix(e.name, "_test.odin")
+			has_tests = has_tests || strings.contains(string(bytes), "@(test)")
+			source := source_package(relative)
+			assert(!in_package(source, "tools/editor") && !in_package(source, "editor/play"),
+				"Use editor for the resident entry and core_editor for reloadable tools")
+			assert(package_role(source) != "", "unclassified source package; update tools/check")
+			for raw_line in strings.split_lines(string(bytes), context.temp_allocator) {
+				line := strings.trim_space(raw_line)
+				if !strings.has_prefix(line, "import ") do continue
+				quotes := strings.split(line, "\"", context.temp_allocator)
+				if len(quotes) < 3 do continue
+				if !allowed(source, quotes[1], test) {
+					fmt.eprintln("Forbidden import:", e.fullpath, quotes[1])
+					os.exit(1)
+				}
+			}
+		}
+	}
+	if has_tests {
+		name, _ := strings.replace_all(relative, "/", "_", context.temp_allocator)
+		run(root, {"odin", "test", relative, library, game, "-vet", vet, fmt.tprintf("-out:build/check/%s%s", name, exe)})
+	}
+}
+
+// 保留完整的 collection 相对路径，嵌套业务包不能退化成父层 core。
+source_package :: proc(relative: string) -> string {
+	path, _ := strings.replace_all(relative, "\\", "/", context.temp_allocator)
+	if path == "src" do return ""
+	if !strings.has_prefix(path, "src/") do return ""
+	return strings.trim_prefix(path, "src/")
+}
+
+// 只匹配目录边界：logic/query2 不是 logic/query 的子包。
+in_package :: proc(path, parent: string) -> bool {
+	return path == parent || (strings.has_prefix(path, parent) &&
+		len(path) > len(parent) && path[len(parent)] == '/')
+}
+
+canonical_package :: proc(path: string) -> bool {
+	if path == "" || strings.contains(path, "\\") do return false
+	for part in strings.split(path, "/", context.temp_allocator) {
+		if part == "" || part == "." || part == ".." do return false
+	}
+	return true
+}
+
+package_role :: proc(path: string) -> string {
+	if !canonical_package(path) || in_package(path, "tools/editor") || in_package(path, "editor/play") do return ""
+	switch path {
+	case "game", "editor", "core":
+		return path
+	}
+	if in_package(path, "core_editor") do return "core_editor"
+	if strings.has_prefix(path, "tools/") do return "tool"
+	if in_package(path, "core/logic/query") do return "query"
+	for role in ([]string{"def", "data", "logic", "view", "ids", "content"}) {
+		if in_package(path, fmt.tprintf("core/%s", role)) do return role
+	}
+	// 按功能拆出的共享业务（如 core/combat）沿用业务边界；纯模拟层不能导入它。
+	if strings.has_prefix(path, "core/") do return "feature"
+	return ""
+}
+
+allowed :: proc(source, path: string, test: bool) -> bool {
+	role := package_role(source)
+	if role == "" do return false
+	colon := strings.index(path, ":")
+	if colon < 0 || !canonical_package(path[colon+1:]) do return false
+	if in_package(path, "olib:foster/internal") do return false
+	if strings.has_prefix(path, "base:") || strings.has_prefix(path, "core:") do return true
+	if strings.has_prefix(path, "game:") {
+		dep := strings.trim_prefix(path, "game:")
+		if in_package(dep, "editor") || in_package(dep, "game") || in_package(dep, "host") do return false
+		switch role {
+		case "ids":
+			return false
+		case "game", "editor":
+			return dep == "core"
+		case "core_editor", "tool":
+			return in_package(dep, "core") || in_package(dep, "core_editor")
+		case "core":
+			return strings.has_prefix(dep, "core/")
+		}
+		// core 内子包不能导入父组装包、发布入口或编辑器。
+		if !strings.has_prefix(dep, "core/") do return false
+		target := package_role(dep)
+		if test && target == "ids" do return true
+		switch role {
+		case "def":
+			return target == "def"
+		case "data":
+			return target == "def" || target == "data"
+		case "logic":
+			return target == "def" || target == "data" || target == "logic" || target == "query"
+		case "query":
+			// 保持只读查询的依赖闭包，不能借此间接把完整玩法层带进 view。
+			return target == "def" || target == "data" || target == "query"
+		case "view":
+			return target == "def" || target == "data" || target == "view" || target == "query"
+		case "content":
+			return target == "def" || target == "ids" || target == "content" ||
+				target == "logic" || target == "query"
+		case "feature":
+			return true
+		}
+		return false
+	}
+	development := role == "editor" || role == "core_editor" || role == "tool"
+	if in_package(path, "olib:core/hotreload") || in_package(path, "olib:core/devbuild") ||
+	   in_package(path, "olib:kit/shaderdev") || in_package(path, "olib:thirdparty/odin-imgui") {
+		return development
+	}
+	if role == "ids" do return false
+	if role == "def" || role == "data" || role == "logic" || role == "query" {
+		return strings.has_prefix(path, "olib:core/")
+	}
+	return strings.has_prefix(path, "olib:") || strings.has_prefix(path, "vendor:")
+}
+
+// 包名与目录名不必相同（main、按功能命名的子包）；从实际声明生成 vet 列表。
+collect_package_names :: proc(root, relative: string, names: ^[dynamic]string) {
+	entries, err := os.read_all_directory_by_path(fmt.tprintf("%s/%s", root, relative), context.temp_allocator)
+	assert(err == nil)
+	for e in entries {
+		if e.type == .Directory {
+			collect_package_names(root, fmt.tprintf("%s/%s", relative, e.name), names)
+		} else if strings.has_suffix(e.name, ".odin") {
+			bytes, read_err := os.read_entire_file(e.fullpath, context.temp_allocator)
+			assert(read_err == nil)
+			name := declared_package(string(bytes))
+			assert(name != "", "missing package declaration")
+			found := false
+			for existing in names^ do found = found || existing == name
+			if !found do append(names, name)
+		}
+	}
+}
+
+declared_package :: proc(source: string) -> string {
+	for raw_line in strings.split_lines(source, context.temp_allocator) {
+		line := strings.trim_space(raw_line)
+		if !strings.has_prefix(line, "package ") do continue
+		rest := strings.trim_space(strings.trim_prefix(line, "package "))
+		for c, i in rest {
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_') {
+				return rest[:i]
+			}
+		}
+		return rest
+	}
+	return ""
+}

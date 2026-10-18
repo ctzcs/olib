@@ -1,0 +1,92 @@
+package core
+
+import foster "olib:foster"
+import storage "olib:kit/storage"
+
+// 分区：稳定协议 / 入口资源、存储与输入。修改本文件需重启开发宿主。
+// 稳定 ABI：改字段、类型或依赖库后升级版本并重启宿主。
+// 不在这里添加 World、编辑会话或模块指针；宿主只提供资源和原始输入。
+SERVICES_VERSION :: u64(7)
+
+// 发布与开发共用稳定存储 ID；不使用包含编译状态的窗口标题。
+STORAGE_ID :: "__PROJECT__"
+Input :: struct {
+	movement: f32,
+	pause, add_point, reset: bool,
+	mouse: foster.Vec2,
+	down: bool,
+	toggle_editor, focused: bool,
+}
+
+Services :: struct {
+	app: ^foster.App,
+	font: ^foster.MsdfFont,
+	texture: foster.Texture,
+	assets, user_storage: ^foster.StorageContainer,
+	input: Input,
+	scale: f32,
+	headless: bool,
+}
+
+// 入口共用的资源/输入转换；App 生命周期仍由各入口直接调用 Foster。
+Resources :: struct {
+	resource_root, user_root: string,
+	assets, user_storage: foster.StorageContainer,
+	font: foster.MsdfFont,
+	texture: foster.Texture,
+}
+
+resources_init :: proc(r: ^Resources, services: ^Services, development := false) -> bool {
+	r.resource_root = development ? storage.resources_root_dev() : storage.resources_root_release()
+	r.user_root = storage.user_root(STORAGE_ID)
+	if r.resource_root == "" || r.user_root == "" do return false
+	r.assets = {Root = r.resource_root, Writable = false}
+	r.user_storage = {Root = r.user_root, Writable = true}
+	services.assets = &r.assets
+	services.user_storage = &r.user_storage
+
+	image := foster.ImageFromEncoded(#load("../../assets/fonts/ui.png"))
+	if image.Width <= 0 do return false
+	r.font = foster.MsdfFontMake(image, #load("../../assets/fonts/ui.json"))
+	r.font.OwnsImage = true
+	if r.font.Size <= 0 do return false
+	r.texture = foster.TextureFromImage(&services.app.GraphicsDevice, &r.font.Image, "game font")
+	services.font = &r.font
+	services.texture = r.texture
+	return r.texture.Resource != nil
+}
+
+resources_dispose :: proc(r: ^Resources) {
+	foster.TextureDispose(&r.texture)
+	foster.MsdfFontDispose(&r.font)
+	delete(r.resource_root)
+	delete(r.user_root)
+	r^ = {}
+}
+
+read_input :: proc(app: ^foster.App) -> (value: Input) {
+	k := &app.Input.State.Keyboard
+	value.movement = f32(int(foster.KeyboardDown(k, .D) || foster.KeyboardDown(k, .Right)) -
+		int(foster.KeyboardDown(k, .A) || foster.KeyboardDown(k, .Left)))
+	value.pause = foster.KeyboardPressed(k, .Space)
+	value.add_point = foster.KeyboardPressed(k, .Enter)
+	// 这两项只供桌面 editor 分配输入；Web 静态入口不使用它们。
+	when ODIN_OS != .JS {
+		value.toggle_editor = foster.KeyboardPressed(k, .F1)
+		value.focused = foster.Focused(&app.Window)
+	}
+	m := &app.Input.State.Mouse
+	pixels := foster.SizeInPixels(&app.Window)
+	logical := foster.Size(&app.Window)
+	value.mouse = {m.Position.X*f32(pixels.X)/f32(max(logical.X, 1)),
+		m.Position.Y*f32(pixels.Y)/f32(max(logical.Y, 1))}
+	value.down = foster.MouseDown(m, .Left)
+	return
+}
+
+has_arg :: proc(arg: string) -> bool {
+	when ODIN_OS != .JS {
+		return native_has_arg(arg)
+	}
+	return false
+}

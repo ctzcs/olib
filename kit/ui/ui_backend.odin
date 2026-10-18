@@ -23,6 +23,9 @@ UI_Op_Kind :: enum u8 {
 
 UI_Op :: struct {
 	kind: UI_Op_Kind,
+	// 已合成的逻辑坐标变换；零值 op 保持旧版轴对齐行为。
+	transformed: bool,
+	transform: foster.Matrix3x2,
 
 	// Quad 有效字段
 	x0, y0, x1, y1: f32, // 逻辑像素（左上/右下）
@@ -59,6 +62,9 @@ ui_translate_into :: proc(
 			continue
 		}
 		bb := cmd.boundingBox
+		op_start := len(ops^)
+		// defer 也覆盖九宫格等提前 continue 的路径。
+		defer ui_visual_apply_ops(ctx, cmd.elementId, ops, op_start)
 
 		#partial switch cmd.commandType {
 		case .Rectangle:
@@ -287,6 +293,9 @@ ui_render :: proc(ctx: ^UI_Context, batcher: ^foster.Batcher, ops: ^[dynamic]UI_
 					current_font = font_id
 				}
 			}
+			if op.transformed {
+				foster.BatcherPushMatrixRaw(batcher, ui_visual_pixel_matrix(ctx, op.transform), false)
+			}
 			if op.radius >= 1 && ctx.corner_texture_ok {
 				ui_emit_rounded(batcher, &ctx.corner_texture, op)
 			} else if op.texture != nil {
@@ -297,6 +306,9 @@ ui_render :: proc(ctx: ^UI_Context, batcher: ^foster.Batcher, ops: ^[dynamic]UI_
 				foster.BatcherPushMode(batcher, .Fill)
 				foster.BatcherQuad(batcher, foster.Rect{op.x0, op.y0, op.x1 - op.x0, op.y1 - op.y0}, op.color)
 				foster.BatcherPopMode(batcher)
+			}
+			if op.transformed {
+				foster.BatcherPopMatrix(batcher)
 			}
 		case .Scissor_Start:
 			clip := ui_pixel_clip(ctx, {op.clip_x, op.clip_y, op.clip_w, op.clip_h})

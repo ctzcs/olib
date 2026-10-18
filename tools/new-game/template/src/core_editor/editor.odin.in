@@ -1,0 +1,134 @@
+package core_editor
+
+import "core:fmt"
+
+import foster "olib:foster"
+import ui "olib:kit/ui"
+import clay "olib:thirdparty/clay-odin"
+
+// 分区：编辑会话 / 输入归属 / 运行时编辑命令 / 面板绘制。
+// 编辑当前试玩实例，不写场景文件、不维护文档撤销历史。
+// DLL 拥有会话；State 与待处理命令进入快照，UI 与瞬时输入重建。
+PANEL_WIDTH :: f32(280)
+TITLE :: "LIVE EDITOR"
+Edit_Command :: enum { Move_Left, Move_Right, Score_Down, Score_Up, Toggle_Pause }
+Preview :: struct { x: f32, score: i64, paused: bool }
+State :: struct {
+	open: bool,
+}
+Pointer_Owner :: enum {
+	None,
+	Game,
+	Editor,
+	Discard,
+}
+Session :: struct {
+	state: State,
+	pending: [dynamic]Edit_Command,
+	ctx: ui.UI_Context,
+	batcher: foster.Batcher,
+	theme: ui.UI_Theme,
+	owner: Pointer_Owner,
+	previous_down, ready: bool,
+}
+Input :: struct {
+	game_mouse, editor_mouse: foster.Vec2,
+	game_down, editor_down, block_keys: bool,
+}
+
+init :: proc(e: ^Session, device: ^foster.GraphicsDevice, font: ^foster.MsdfFont,
+	texture: foster.Texture) -> bool {
+	if !ui.ui_init(&e.ctx, 280, 720) do return false
+	foster.BatcherInit(&e.batcher, device, "development editor")
+	e.theme = ui.UI_THEME_DARK
+	e.theme.body_font_id = u16(ui.ui_register_font(&e.ctx, font, texture, .MSDF))
+	e.theme.body_font_size = 16
+	e.theme.heading_font_size = 22
+	return true
+}
+
+dispose :: proc(e: ^Session) {
+	ui.ui_dispose(&e.ctx)
+	foster.BatcherDispose(&e.batcher)
+	delete(e.pending)
+}
+
+// 面板占独立的最终像素视口，游戏不会绘制或接收此区域的输入。
+viewports :: proc(open: bool, width, height, scale: f32) -> (game, panel: foster.Rect) {
+	panel_width := open ? min(PANEL_WIDTH*scale, width*0.45) : 0
+	game = {0, 0, max(width-panel_width, 1), height}
+	panel = {game.Width, 0, panel_width, height}
+	return
+}
+
+toggle :: proc(e: ^Session) {
+	e.state.open = !e.state.open
+	// 隐藏/重新打开不能把尚未松开的按键转交给另一个视口。
+	e.owner = .Discard
+	e.ready = false
+}
+
+route :: proc(e: ^Session, panel: foster.Rect, mouse: foster.Vec2, down, focused: bool) -> (input: Input) {
+	input.game_mouse = {-10000, -10000}
+	input.editor_mouse = {-10000, -10000}
+	inside := e.state.open && mouse.x >= panel.X && mouse.x < panel.X+panel.Width &&
+		mouse.y >= panel.Y && mouse.y < panel.Y+panel.Height
+	if !focused {
+		e.owner = .Discard
+		e.ready = false
+		input.block_keys = true
+		return
+	}
+	if !down {
+		e.ready = true
+		if !e.previous_down do e.owner = .None
+	}
+	if down && !e.previous_down {
+		e.owner = !e.ready ? .Discard : inside ? .Editor : .Game
+	}
+	e.previous_down = down
+	input.block_keys = inside || e.owner == .Editor || e.owner == .Discard
+	// 归属保持到松开帧；跨视口拖出仍会收到松开，但不会激活另一边。
+	if e.owner == .Game || (!down && e.owner == .None && !inside) {
+		input.game_mouse = mouse
+		input.game_down = down
+	}
+	if e.state.open && (e.owner == .Editor || (!down && e.owner == .None && inside)) {
+		input.editor_mouse = mouse
+		input.editor_down = down
+	}
+	return
+}
+
+draw :: proc(e: ^Session, w: ^Preview, target: foster.DrawableTarget, panel: foster.Rect,
+	input: Input, scale, dt: f32) {
+	if !e.state.open do return
+	ui.ui_set_viewport(&e.ctx, panel, scale)
+	ui.ui_set_pointer(&e.ctx, input.editor_mouse.x, input.editor_mouse.y, input.editor_down)
+	ui.ui_begin(&e.ctx, dt)
+	root := ui.ui_column_decl(12)
+	root.layout.padding = clay.PaddingAll(16)
+	root.layout.sizing.height = clay.SizingGrow({})
+	root.backgroundColor = ui.ui_clay_color({27, 36, 49, 255})
+	if clay.UI()(root) {
+		ui.ui_heading(&e.ctx, &e.theme, TITLE)
+		ui.ui_label_dim(&e.ctx, &e.theme, "F1: hide / show")
+		ui.ui_label(&e.ctx, &e.theme, fmt.tprintf("Position: %.1f", w.x))
+		if clay.UI()(ui.ui_row_decl(8)) {
+			if ui.ui_button(&e.ctx, &e.theme, "left", "-25") do append(&e.pending, .Move_Left)
+			if ui.ui_button(&e.ctx, &e.theme, "right", "+25") do append(&e.pending, .Move_Right)
+		}
+		ui.ui_label(&e.ctx, &e.theme, fmt.tprintf("Score: %d", w.score))
+		if clay.UI()(ui.ui_row_decl(8)) {
+			if ui.ui_button(&e.ctx, &e.theme, "less", "-1") do append(&e.pending, .Score_Down)
+			if ui.ui_button(&e.ctx, &e.theme, "more", "+1") do append(&e.pending, .Score_Up)
+		}
+		if ui.ui_button(&e.ctx, &e.theme, "pause", w.paused ? "Resume" : "Pause") {
+			append(&e.pending, .Toggle_Pause)
+		}
+		ui.ui_label_dim(&e.ctx, &e.theme, "Changes affect this run.")
+	}
+	foster.BatcherClear(&e.batcher)
+	ui.ui_draw(&e.ctx, &e.batcher)
+	foster.BatcherRender(&e.batcher, target)
+}

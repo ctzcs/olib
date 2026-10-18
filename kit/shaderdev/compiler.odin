@@ -11,11 +11,8 @@ import "core:os"
 import "core:path/filepath"
 import "core:slice"
 import "core:strings"
-import "core:sync"
 
-// core:os 的 process_start 会修改句柄继承标记；跨会话编译必须串行创建子进程。
-@(private)
-compiler_mutex: sync.Mutex
+import "olib:core/devbuild"
 
 Resources :: struct {
 	samplers: int,
@@ -40,12 +37,10 @@ build_dispose :: proc(b: ^Build) {
 
 @(private)
 run_compiler :: proc(args: ..string) -> string {
-	sync.mutex_lock(&compiler_mutex)
-	defer sync.mutex_unlock(&compiler_mutex)
 	command := make([]string, len(args) + 1, context.temp_allocator)
 	command[0] = "shadercross"
 	copy(command[1:], args)
-	state, stdout, stderr, err := os.process_exec({command = command}, context.temp_allocator)
+	state, stdout, stderr, err := devbuild.exec({command = command}, context.temp_allocator)
 	if err != nil || !state.exited || state.exit_code != 0 ||
 		strings.contains(string(stderr), "error:") || strings.contains(string(stdout), "error:") {
 		return fmt.aprintf("shadercross failed (%v, exit %d)\n%s%s", err, state.exit_code,

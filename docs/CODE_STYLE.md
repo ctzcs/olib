@@ -137,11 +137,17 @@ odin fmt kit
 ## 8. 测试约定
 
 - 提交前运行 `odin run tools/check`：对 `core/`、`kit/`、`tools/` 全部包及 foster 运行 `-vet` 检查，并对所有带测试的包启用 `-vet`。
-- 每包一个 `*_test.odin`，文件头 `#+test` + `package <包名>`，
+- 第一方测试集中在 `tests/<被测包路径>/`，生产包不放 `*_test.odin`。
+  文件头保留 `#+test` + `package <被测包名>`，检查工具隔离组合源码后执行；
+  入口和夹具规则见 [tests/README](../tests/README.md)。
   用例 `@(test)` + `testing.expect/expectf`。
 - 涉及文件系统的测试在 `%TEMP%/olib_<包名>_test` 下自建自清；
   Windows 上不用 `os.remove_all`（core bug，见
   [odin#7547](https://github.com/odin-lang/Odin/issues/7547)），用自实现递归删除。
+
+上述测试的系统私有临时目录由用例独占、自建自清，不属于项目留存产物。
+需要留存的截图、报告或诊断副本遵循 [生成文件规则](../prompts/new-project.md#生成文件与目录纪律)，
+统一放所属项目的 library 固定子目录；目录、文档和配置调整不额外截图。
 
 ## 9. Shader 资产
 

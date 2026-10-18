@@ -8,6 +8,7 @@ import "core:strings"
 
 import foster "olib:foster"
 import mat "olib:kit/material"
+import rendering "olib:kit/rendering"
 import dev "olib:kit/shaderdev"
 
 Parameter_Bank :: struct {
@@ -129,8 +130,10 @@ bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates
 				probes := make([dynamic]foster.DrawCommand, context.temp_allocator)
 				for p, j in e.desc.passes {
 					if string(p.params) != b.parameters[i].name do continue
-					target := foster.DrawableTargetFromTarget(&e.targets[j].buffers[0])
-					append(&probes, pass_command(s, b, i, p.draw, target, string(p.id)))
+					target := foster.DrawableTargetFromTarget(&e.targets[mat.effect_is_material(e.desc) ? 0 : j].buffers[0])
+					command := pass_command(s, b, i, p.draw, target, string(p.id))
+					rendering.pass_state_apply(&command, p.state)
+					append(&probes, command)
 				}
 				applied := false
 				if needs_apply {

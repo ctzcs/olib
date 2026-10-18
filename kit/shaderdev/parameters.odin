@@ -15,9 +15,9 @@ import "core:os"
 import "core:path/filepath"
 import "core:slice"
 import "core:strings"
-import "core:sync"
 import "core:thread"
 
+import "olib:core/devbuild"
 import mat "olib:kit/material"
 
 Parameter_Build :: struct {
@@ -183,9 +183,7 @@ parameters_compile :: proc(directory: string) -> (result: Parameter_Build) {
 		{exe, output},
 	}
 	for command in commands {
-		sync.mutex_lock(&compiler_mutex)
-		state, stdout, stderr, exec_err := os.process_exec({command = command}, context.allocator)
-		sync.mutex_unlock(&compiler_mutex)
+		state, stdout, stderr, exec_err := devbuild.exec({command = command}, context.allocator)
 		if exec_err != nil || !state.exited || state.exit_code != 0 {
 			context.allocator = runtime.heap_allocator()
 			result.error = fmt.aprintf("Parameter generator failed (%v, exit %d)\n%s%s", exec_err,

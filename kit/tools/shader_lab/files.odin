@@ -7,12 +7,14 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
+import mat "olib:kit/material"
 
 File_Action :: enum { None, Texture, Save_Preset, Load_Preset }
 File_Request :: struct {
 	id, generation: u64,
 	action: File_Action,
 	group, field: string,
+	effect: string, // 模型材质请求绑定整个效果，切换选中项不会重定向保存/载入。
 }
 
 // 返回借用描述；宿主只需保留 id/action，路径在主线程通过 file_reply 交回。
@@ -23,6 +25,7 @@ file_request :: proc(s: ^Session) -> File_Request {
 file_request_clear :: proc(s: ^Session) {
 	delete(s.request.group)
 	delete(s.request.field)
+	delete(s.request.effect)
 	s.request = {}
 }
 
@@ -32,7 +35,11 @@ request_file :: proc(s: ^Session, index: int, action: File_Action, field := "") 
 	if !p.available do return
 	color_picker_close(s, true)
 	s.request_serial += 1
-	s.request = {s.request_serial, p.generation, action, strings.clone(p.name), strings.clone(field)}
+	s.request = {id = s.request_serial, generation = p.generation, action = action,
+		group = strings.clone(p.name), field = strings.clone(field)}
+	if action != .Texture && s.selected_effect >= 0 && mat.effect_is_material(s.effects[s.selected_effect].desc) {
+		s.request.effect = strings.clone(s.effects[s.selected_effect].desc.name)
+	}
 }
 
 // 空路径代表取消；旧请求或已改变的布局被丢弃。只能在工具没有排队绘制时调用。
@@ -43,6 +50,14 @@ file_reply :: proc(s: ^Session, id: u64, path: string) -> bool {
 	if path == "" do return true
 	for &p, index in s.parameters[:s.shader_count] {
 		if !p.available || p.name != request.group || p.generation != request.generation do continue
+		if request.effect != "" {
+			for e, i in s.effects {
+				if e.desc.name != request.effect do continue
+				if request.action == .Save_Preset do return save_material(s, i, path)
+				if request.action == .Load_Preset do return load_material(s, i, path)
+			}
+			return false
+		}
 		switch request.action {
 		case .Save_Preset: return save_preset(s, index, path)
 		case .Load_Preset: return load_preset(s, index, path)

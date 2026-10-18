@@ -1,0 +1,230 @@
+package main
+
+import "core:fmt"
+import "core:os"
+import "core:path/filepath"
+import "core:strings"
+
+import reload "olib:core/hotreload"
+import foster "olib:foster"
+import ui "olib:kit/ui"
+import clay "olib:thirdparty/clay-odin"
+
+import "game:core"
+
+import SDL "vendor:sdl3"
+
+// 分区：常驻所有权 / 生命周期 / 帧边界切换 / 绘制。
+Editor_App :: struct {
+	services: core.Services,
+	resources: core.Resources,
+	session: reload.Session,
+	watch: reload.Watch,
+	feedback: Feedback,
+	root, sources, library: string,
+	status: reload.Build_Status,
+	failed: bool,
+}
+
+main :: proc() {
+	s := new(Editor_App)
+	defer free(s)
+	s.root, _ = filepath.abs(#directory + "/../..")
+	defer delete(s.root)
+	s.sources = fmt.aprintf("%s/src", s.root)
+	defer delete(s.sources)
+	s.library = os.get_env("OLIB", context.allocator)
+	if s.library == "" do s.library = strings.clone("__OLIB__")
+	defer delete(s.library)
+	s.services.scale = core.has_arg("scaled") ? 1.25 : 1
+	config := foster.DefaultAppConfig("__PROJECT__ / compiling", 960, 720)
+	if core.has_arg("narrow") do config.Width = 760
+	if core.has_arg("vulkan") do config.PreferredGraphicsDriver = .Vulkan
+	if core.has_arg("d3d12") do config.PreferredGraphicsDriver = .D3D12
+	app: foster.App
+	foster.InitApp(&app, config)
+	foster.AppSetUserData(&app, s)
+	app.StartupProc = startup
+	app.UpdateProc = update
+	app.RenderProc = render
+	app.ShutdownProc = shutdown
+	foster.Run(&app)
+	foster.Dispose(&app)
+	delete(app.GraphicsDevice.WindowRenderTarget.Attachments)
+	if s.failed do os.exit(1)
+}
+
+startup :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Editor_App)
+	s.services.app = app
+	if !check(s, core.resources_init(&s.resources, &s.services, development = true), "resource/storage initialization") do return
+	if !check(s, feedback_init(&s.feedback, s.root, &app.GraphicsDevice,
+		s.services.font, s.services.texture), "feedback initialization") {
+		return
+	}
+	if !check(s, reload.init(&s.session, core.SERVICES_VERSION, &s.services), "session initialization") do return
+	if !check(s, reload.watch_init(&s.watch, {
+		working_directory = s.root,
+		command = {"odin", "build", fmt.tprintf("%s/core_editor", s.sources), "-build-mode:dll", "-debug",
+			fmt.tprintf("-collection:olib=%s", s.library), fmt.tprintf("-collection:game=%s", s.sources),
+			"-out:{output}", "-vet"},
+		roots = {fmt.tprintf("%s/core_editor", s.sources), fmt.tprintf("%s/core", s.sources)},
+	}), "watch initialization") {
+		return
+	}
+	fmt.println("Save src/core or src/core_editor for game and Editor UI reload. F1 panel; F5 retry; Escape exit.")
+}
+
+shutdown :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Editor_App)
+	_ = SDL.WaitForGPUIdle(app.GraphicsDevice.Device)
+	check(s, reload.dispose(&s.session), "module disposal")
+	reload.watch_dispose(&s.watch)
+	feedback_dispose(&s.feedback)
+	core.resources_dispose(&s.resources)
+}
+
+update :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Editor_App)
+	if s.failed do return
+	k := &app.Input.State.Keyboard
+	if foster.KeyboardPressed(k, .Escape) do foster.Exit(app)
+	if foster.KeyboardPressed(k, .F5) do reload.watch_retry(&s.watch)
+	reload.watch_update(&s.watch, f64(app.Time.Delta))
+	installed, load_failed: bool
+	if s.watch.status == .Ready {
+		_ = SDL.WaitForGPUIdle(app.GraphicsDevice.Device)
+		installed = reload.watch_apply(&s.watch, &s.session) == .Success
+		load_failed = !installed && s.watch.status == .Error
+		if installed {
+			fmt.printfln("LIVE revision=%d", s.session.revision)
+		}
+	}
+	feedback_update(&s.feedback, s.watch.status, s.watch.diagnostic, installed, load_failed)
+	if s.status != s.watch.status {
+		s.status = s.watch.status
+		_ = SDL.SetWindowTitle(app.Window.Handle, strings.clone_to_cstring(
+			fmt.tprintf("__PROJECT__ / %v / F5 retry / see console", s.status), context.temp_allocator))
+	}
+	s.services.input = core.read_input(app)
+	reload.update(&s.session, f64(app.Time.Delta))
+}
+
+render :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Editor_App)
+	if s.failed || !app.GraphicsDevice.InFrame do return
+	target := foster.DrawableTargetFromWindow(&app.Window)
+	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, {16, 23, 33, 255})
+	reload.render(&s.session, f64(app.Time.Delta))
+	feedback_draw(&s.feedback, target, reload.is_live(&s.session), s.session.revision,
+		s.services.scale, app.Time.Delta)
+}
+
+check :: proc(s: ^Editor_App, ok: bool, message: string) -> bool {
+	if ok do return true
+	fmt.eprintln("FAIL:", message)
+	s.failed = true
+	foster.Exit(s.services.app)
+	return false
+}
+
+// 常驻失败提示：首次 DLL 构建失败也能显示。
+Feedback :: struct {
+	diagnostic, summary, log_path: string,
+	load_failed: bool,
+	ctx: ui.UI_Context,
+	batch: foster.Batcher,
+	theme: ui.UI_Theme,
+}
+
+feedback_init :: proc(f: ^Feedback, root: string, device: ^foster.GraphicsDevice,
+	font: ^foster.MsdfFont, texture: foster.Texture) -> bool {
+	f.log_path = fmt.aprintf("%s/build/hotreload-last-error.txt", root)
+	if !ui.ui_init(&f.ctx, 960, 720) do return false
+	foster.BatcherInit(&f.batch, device, "hot reload feedback")
+	f.theme = ui.UI_THEME_DARK
+	f.theme.body_font_id = u16(ui.ui_register_font(&f.ctx, font, texture, .MSDF))
+	f.theme.body_font_size = 16
+	return true
+}
+
+feedback_dispose :: proc(f: ^Feedback) {
+	ui.ui_dispose(&f.ctx)
+	foster.BatcherDispose(&f.batch)
+	delete(f.diagnostic)
+	delete(f.summary)
+	delete(f.log_path)
+	f^ = {}
+}
+
+// Waiting/Compiling/Ready 均保留上一失败。installed 只能来自 watch_apply 的 Success，
+// 不能由编译完成或候选 Ready 推断；相同错误不重复分配或刷写日志。
+feedback_update :: proc(f: ^Feedback, status: reload.Build_Status, diagnostic: string,
+	installed: bool = false, load_failed: bool = false) {
+	if installed {
+		delete(f.diagnostic)
+		delete(f.summary)
+		f.diagnostic = ""
+		f.summary = ""
+		f.load_failed = false
+		return
+	}
+	if status != .Error || diagnostic == f.diagnostic do return
+	delete(f.diagnostic)
+	delete(f.summary)
+	f.diagnostic = strings.clone(diagnostic)
+	f.summary = strings.clone(feedback_summary(diagnostic))
+	f.load_failed = load_failed
+	fmt.eprintln(diagnostic)
+	if err := os.write_entire_file(f.log_path, transmute([]u8)f.diagnostic); err != nil {
+		fmt.eprintln("Cannot write hot reload log:", f.log_path, err)
+	}
+}
+
+// 返回本帧有效的简短 UTF-8 摘要，完整错误只存入日志。
+feedback_summary :: proc(diagnostic: string) -> string {
+	first := "See the full log for details"
+	for raw_line in strings.split_lines(diagnostic, context.temp_allocator) {
+		line := strings.trim_space(raw_line)
+		if line == "" do continue
+		if first == "See the full log for details" do first = line
+		if index := strings.index(line, "Error:"); index >= 0 {
+			first = line[index:]
+			break
+		}
+	}
+	count := 0
+	for _, offset in first {
+		if count == 140 do return fmt.tprintf("%s...", first[:offset])
+		count += 1
+	}
+	return first
+}
+
+feedback_draw :: proc(f: ^Feedback, target: foster.DrawableTarget, live: bool,
+	revision: u64, scale, dt: f32) {
+	if f.diagnostic == "" do return
+	ui.ui_set_viewport(&f.ctx, {0, 0, f32(target.WidthInPixels), f32(target.HeightInPixels)}, scale)
+	// 被动提示，不抢游戏/编辑器输入、不暂停模拟，也不依赖 DLL 的 UI 上下文。
+	ui.ui_set_pointer(&f.ctx, -10000, -10000, false)
+	ui.ui_begin(&f.ctx, dt)
+	panel := ui.ui_column_decl(6)
+	panel.layout.padding = clay.PaddingAll(12)
+	panel.layout.sizing.width = clay.SizingFixed(max(1, f.ctx.width-24))
+	panel.backgroundColor = ui.ui_clay_color({91, 27, 33, 245})
+	panel.cornerRadius = clay.CornerRadiusAll(6)
+	panel.floating = {attachTo = .Root, offset = {12, 12}, zIndex = 100,
+		pointerCaptureMode = .Passthrough}
+	if clay.UI()(panel) {
+		stage := f.load_failed ? "Reload failed" : "Build failed"
+		heading := (live ? fmt.tprintf("%s - running previous version r%d", stage, revision) :
+			fmt.tprintf("%s - no game version loaded yet", stage))
+		ui.ui_label(&f.ctx, &f.theme, heading)
+		ui.ui_label(&f.ctx, &f.theme, f.summary)
+		ui.ui_label_dim(&f.ctx, &f.theme, "Fix and save, or F5 to retry. Full log:")
+		ui.ui_label_dim(&f.ctx, &f.theme, "build/hotreload-last-error.txt")
+	}
+	foster.BatcherClear(&f.batch)
+	ui.ui_draw(&f.ctx, &f.batch)
+	foster.BatcherRender(&f.batch, target)
+}

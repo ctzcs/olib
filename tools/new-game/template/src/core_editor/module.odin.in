@@ -1,0 +1,151 @@
+package core_editor
+
+import "core:encoding/json"
+import "core:mem"
+
+import reload "olib:core/hotreload"
+import foster "olib:foster"
+
+import "game:core"
+
+// 分区：候选生命周期 / 组合快照 / 编辑命令与帧调度。
+// 同一 DLL 拥有游戏与编辑会话；宿主只保存不透明实例，不调用普通业务函数。
+EDITOR_STATE_VERSION :: u64(1)
+MODULE_STATE_VERSION :: (core.STATE_VERSION << 32) | EDITOR_STATE_VERSION
+#assert(core.STATE_VERSION <= 0xffff_ffff && EDITOR_STATE_VERSION <= 0xffff_ffff)
+Module_Instance :: struct {
+	game: ^core.Instance,
+	tools: Session,
+	game_input: core.Input,
+	input: Input,
+	viewport, panel: foster.Rect,
+}
+Module_Snapshot :: struct {
+	game: []u8,
+	editor: State,
+	pending: [dynamic]Edit_Command,
+}
+
+@(export)
+olib_game_api :: proc "c" (version: u32, size: int, api: ^reload.API) -> bool {
+	if version != reload.API_VERSION || size != size_of(reload.API) do return false
+	api^ = {host_version = core.SERVICES_VERSION, state_version = MODULE_STATE_VERSION,
+		load = module_load, unload = module_unload, snapshot_size = module_snapshot_size,
+		save = module_save, update = module_update, render = module_render}
+	return true
+}
+
+module_load :: proc "c" (call: ^reload.Call, snapshot: reload.Snapshot) -> bool {
+	context = call.host_context^
+	services := cast(^core.Services)call.services
+	s := new(Module_Instance)
+	call.instance = s // 部分初始化失败也由 unload 完整释放。
+	s.tools.state.open = true
+	s.tools.owner = .Discard
+	data: Module_Snapshot
+	defer delete(data.game)
+	defer delete(data.pending)
+	version: u64
+	if snapshot.version != 0 {
+		if snapshot.version != MODULE_STATE_VERSION do return false
+		if json.unmarshal(snapshot.data, &data) != nil do return false
+		if len(data.game) == 0 do return false
+		for command in data.pending {
+			if command < .Move_Left || command > .Toggle_Pause do return false
+		}
+		s.tools.state = data.editor
+		s.tools.pending = data.pending
+		data.pending = nil
+		version = core.STATE_VERSION
+	}
+	ok: bool
+	s.game, ok = core.create(services, data.game, version)
+	if !ok do return false
+	if !services.headless && !init(&s.tools, &services.app.GraphicsDevice, services.font, services.texture) {
+		return false
+	}
+	return true
+}
+
+module_unload :: proc "c" (call: ^reload.Call) {
+	context = call.host_context^
+	s := cast(^Module_Instance)call.instance
+	if s == nil do return
+	dispose(&s.tools)
+	core.destroy(s.game)
+	free(s)
+}
+
+// 游戏格式继续由 core 管理，编辑会话独立编码；只保存数据，不保存 UI/指针/GPU 对象。
+module_encode :: proc(s: ^Module_Instance, allocator := context.allocator) -> ([]u8, bool) {
+	game, ok := core.encode(s.game, allocator)
+	if !ok do return game, false
+	defer delete(game, allocator)
+	data := Module_Snapshot{game = game, editor = s.tools.state, pending = s.tools.pending}
+	bytes, err := json.marshal(data, allocator = allocator)
+	return bytes, err == nil
+}
+
+module_snapshot_size :: proc "c" (call: ^reload.Call) -> int {
+	context = call.host_context^
+	bytes, ok := module_encode(cast(^Module_Instance)call.instance, context.temp_allocator)
+	return ok ? len(bytes) : -1
+}
+
+module_save :: proc "c" (call: ^reload.Call, destination: []u8) -> bool {
+	context = call.host_context^
+	bytes, ok := module_encode(cast(^Module_Instance)call.instance, context.temp_allocator)
+	if !ok || len(bytes) != len(destination) do return false
+	mem.copy(raw_data(destination), raw_data(bytes), len(bytes))
+	return true
+}
+
+apply_commands :: proc(w: ^core.World, commands: []Edit_Command) {
+	for command in commands {
+		switch command {
+		case .Move_Left: core.set_position(w, max(w.x-25, 20))
+		case .Move_Right: core.set_position(w, min(w.x+25, 580))
+		case .Score_Down: core.set_score(w, max(w.score-1, 0))
+		case .Score_Up:
+			if w.score < 1_000_000 do core.set_score(w, w.score+1)
+		case .Toggle_Pause: core.apply(w, {toggle_pause = true})
+		}
+	}
+}
+
+module_update :: proc "c" (call: ^reload.Call, dt: f64) {
+	context = call.host_context^
+	s := cast(^Module_Instance)call.instance
+	services := (cast(^core.Services)call.services)^
+	if !services.headless {
+		raw := services.input
+		if raw.toggle_editor && raw.focused do toggle(&s.tools)
+		size := foster.SizeInPixels(&services.app.Window)
+		s.viewport, s.panel = viewports(s.tools.state.open, f32(size.X), f32(size.Y), services.scale)
+		s.input = route(&s.tools, s.panel, raw.mouse, raw.down, raw.focused)
+		services.input.mouse = s.input.game_mouse
+		services.input.down = s.input.game_down
+		if s.input.block_keys {
+			services.input.movement = 0
+			services.input.pause = false
+			services.input.add_point = false
+		}
+	}
+	s.game_input = services.input
+	apply_commands(&s.game.state.world, s.tools.pending[:])
+	clear(&s.tools.pending)
+	core.update(s.game, &services, dt)
+}
+
+module_render :: proc "c" (call: ^reload.Call, dt: f64) {
+	context = call.host_context^
+	s := cast(^Module_Instance)call.instance
+	services := (cast(^core.Services)call.services)^
+	if services.headless do return
+	services.input = s.game_input
+	core.render(s.game, &services, dt, s.viewport)
+	w := &s.game.state.world
+	preview := Preview{x = w.x, score = w.score, paused = w.paused}
+	draw(&s.tools, &preview, foster.DrawableTargetFromWindow(&services.app.Window),
+		s.panel, s.input, services.scale, f32(dt))
+}

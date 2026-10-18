@@ -414,8 +414,9 @@ ui_slider :: proc(
 	min_width := max(width, 24)
 	if !state.disabled && span > 0 {
 		box := clay.GetElementData(clay.ID(id))
-		if box.found && (state.active || state.released) {
-			t := math.clamp((ctx.pointer_x - box.boundingBox.x - 8) / max(box.boundingBox.width - 16, 1), 0, 1)
+		local, invertible := ui_pointer_local(ctx, id)
+		if box.found && invertible && (state.active || state.released) {
+			t := math.clamp((local.x - box.boundingBox.x - 8) / max(box.boundingBox.width - 16, 1), 0, 1)
 			value^ = minimum + span * t
 		}
 		if state.focused && ctx.navigation.adjust != 0 {

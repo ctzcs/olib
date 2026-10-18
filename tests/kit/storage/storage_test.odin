@@ -91,3 +91,13 @@ resources_roots_resolve :: proc(t: ^testing.T) {
 	defer delete(rel)
 	testing.expectf(t, rel != "", "release 根 = exe 目录应非空")
 }
+
+@(test)
+invalid_namespace_does_not_fall_back_to_working_directory :: proc(t: ^testing.T) {
+	for name in ([]string{"", ".", "..", "../outside", "a/b", "a\\b", "C:outside", "bad\nname"}) {
+		testing.expectf(t, user_root(name) == "", "invalid namespace: %q", name)
+		testing.expect(t, user_file_path(name, "save.json") == "")
+	}
+	testing.expect(t, valid_app_name("MyGame"))
+	testing.expect(t, valid_app_name("My Game_2"))
+}

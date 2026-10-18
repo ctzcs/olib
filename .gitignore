@@ -10,6 +10,7 @@ imgui.ini
 
 # Build artifacts for the integrated Foster package and regression suites
 /build/
+/library/
 foster/build/
 foster/*.wasm
 foster/tests/webtest/*.wasm

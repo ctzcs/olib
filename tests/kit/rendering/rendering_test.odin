@@ -6,6 +6,17 @@ import "core:testing"
 
 import foster "olib:foster"
 
+@(test)
+sprite_material_vertices_preserve_trim_atlas_and_origin :: proc(t: ^testing.T) {
+	texture := foster.Texture{Width = 256, Height = 128}
+	frame := foster.SubtextureMake(&texture, {64, 32, 32, 16}, {-4, -6, 48, 32})
+	vertices := sprite_vertices(frame, {24, 16}, {2, 0, 0, 3, 100, 50})
+	testing.expect_value(t, vertices[0].position, [2]f32{60, 20})
+	testing.expect_value(t, vertices[2].position, [2]f32{124, 68})
+	testing.expect_value(t, vertices[0].uv, [2]f32{0.25, 0.25})
+	testing.expect_value(t, vertices[2].uv, [2]f32{0.375, 0.375})
+}
+
 // ---------------------------------------------------------------------------
 // Grid 图集来源
 // ---------------------------------------------------------------------------
@@ -100,7 +111,7 @@ atlas_subtexture_uses_local_origin :: proc(t: ^testing.T) {
 
 @(test)
 builtin_icons_catalog_bounds :: proc(t: ^testing.T) {
-	rects := kenney_build_rects(#load("../../assets/icons/game-icons.xml"))
+	rects := kenney_build_rects(#load("../../../assets/icons/game-icons.xml"))
 	if !testing.expect(t, rects != nil) do return
 	defer kenney_rects_dispose(rects)
 	testing.expectf(t, len(rects^) == 815, "默认图标应有 815 张，实际 %d", len(rects^))

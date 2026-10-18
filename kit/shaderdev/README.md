@@ -208,7 +208,7 @@ dev.dispose(&state.live)
 ## 验收
 
 ```bat
-odin test kit/shaderdev -collection:olib=. -vet
+odin run tools/check -- -only:kit/shaderdev
 odin run tools/check
 ```
 
@@ -225,7 +225,10 @@ include 修复后的像素变化、绑定数量变更拒绝、状态保留、真
 也验证 Odin 标签错误、字段新增/重排、参数迁移、中文标签、纹理替换/失败保留，
 以及运行中发现、编译、预览和移除第三个 Shader。
 日志中故意触发的 Shader 和 GPU 错误属于验收用例，最终以退出码和 PASS 为准。
-失败的临时源码保留供诊断；成功后清理。
+失败的私有临时源码保留供诊断；成功后只清理本次检查拥有的临时目录。
+需要长期留存的诊断副本放所属项目的 `library/tmp/`，截图放 `library/screenshots/`，
+遵循 [生成文件规则](../../prompts/new-project.md#生成文件与目录纪律)。这些既有示例检查按需运行，
+不要求新项目接入或为目录、文档、配置修改生成截图。
 
 shot 保存四种预览的最终合成 PNG；UI 在最终像素绘制，场景按预览实际像素渲染。
 截图在下一次 update 读取已提交的上一帧，不读取尚未提交的渲染命令。

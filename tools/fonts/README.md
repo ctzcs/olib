@@ -39,6 +39,8 @@ PNG 的 RGB 应包含不同的距离信息；不能换成 SDF 或把同一个距
 [UI 像素与采样约定](../../kit/ui/README.md#最终像素采样与清晰度验收)。
 
 源字体、许可证、字符集、生成器版本、完整参数和生成结果一起纳入资产版本管理。
+字体子集和图集是正式资源，不迁入 library；临时对比图与验收截图按
+[生成文件规则](../../prompts/new-project.md#生成文件与目录纪律) 分别放 library/tmp 与 library/screenshots。
 动态新增字符后重新生成并打包；离线资产不提供运行时 TTF 补字。
 
 ## 复现库内测试资产
@@ -46,8 +48,8 @@ PNG 的 RGB 应包含不同的距离信息；不能换成 SDF 或把同一个距
 在 olib 根目录运行：
 
 ```sh
-msdf-atlas-gen -font foster/tests/port_regression/fonts/Abel-Regular.ttf -charset kit/ui/testdata/abel-charset.txt -type msdf -format png -size 48 -pxrange 8 -yorigin top -seed 0 -imageout kit/ui/testdata/abel-msdf.png -json kit/ui/testdata/abel-msdf.json
-odin test kit/ui -collection:olib=.
+msdf-atlas-gen -font foster/tests/port_regression/fonts/Abel-Regular.ttf -charset tests/kit/ui/testdata/abel-charset.txt -type msdf -format png -size 48 -pxrange 8 -yorigin top -seed 0 -imageout tests/kit/ui/testdata/abel-msdf.png -json tests/kit/ui/testdata/abel-msdf.json
+odin run tools/check -- -only:kit/ui
 ```
 
 预期 95/95 字形、336×336 图集。CPU 测试读取真实 PNG/JSON，检查通道独立信息、字形

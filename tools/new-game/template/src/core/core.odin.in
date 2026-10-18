@@ -1,0 +1,61 @@
+package core
+
+import "core:encoding/json"
+
+import foster "olib:foster"
+
+// 分区：共享游戏实例 / 独立快照 / 更新与绘制。
+// 静态发布与 DLL 共用此包；这里不 import 热重载加载器。
+STATE_VERSION :: u64(1)
+State :: struct {
+	world: World,
+	pending: [dynamic]Commands,
+}
+Instance :: struct {
+	state: State,
+	view: View,
+}
+
+create :: proc(services: ^Services, bytes: []u8 = nil, version: u64 = 0) -> (^Instance, bool) {
+	s := new(Instance)
+	if version == 0 {
+		world_init(&s.state.world)
+	} else {
+		if version != STATE_VERSION || json.unmarshal(bytes, &s.state) != nil do return s, false
+		if !valid(&s.state.world) do return s, false
+	}
+	if !services.headless && !view_init(&s.view, &services.app.GraphicsDevice, services.font, services.texture) {
+		return s, false
+	}
+	return s, true
+}
+
+destroy :: proc(s: ^Instance) {
+	if s == nil do return
+	view_dispose(&s.view)
+	world_dispose(&s.state.world)
+	delete(s.state.pending)
+	free(s)
+}
+
+// JSON 编码字段内容，动态数组独立恢复；新增字段在 create 中设置恢复默认值。
+// bytes 归调用方 allocator 所有；不把 UI、地址或派生规则写入快照。
+encode :: proc(s: ^Instance, allocator := context.allocator) -> ([]u8, bool) {
+	bytes, err := json.marshal(s.state, allocator = allocator)
+	return bytes, err == nil
+}
+
+update :: proc(s: ^Instance, services: ^Services, dt: f64) {
+	for command in s.state.pending do apply(&s.state.world, command)
+	clear(&s.state.pending)
+	apply(&s.state.world, {add_point = services.input.add_point,
+		toggle_pause = services.input.pause, reset = services.input.reset})
+	step(&s.state.world, services.input.movement, f32(dt))
+}
+
+render :: proc(s: ^Instance, services: ^Services, dt: f64, viewport := foster.Rect{}) {
+	if services.headless do return
+	command := view_draw(&s.view, &s.state.world, foster.DrawableTargetFromWindow(&services.app.Window),
+		services.input.mouse, services.input.down, services.scale, f32(dt), viewport)
+	if command.add_point || command.toggle_pause || command.reset do append(&s.state.pending, command)
+}

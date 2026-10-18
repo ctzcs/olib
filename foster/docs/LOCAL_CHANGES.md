@@ -40,3 +40,4 @@
 | L-011 | 2026-10-15 | 修复 | graphics.odin / create_pipeline_for_draw_command | GraphicsDeviceSDL / 管线目标格式 | 窗口目标使用真实 SwapchainFormat 参与管线描述和缓存键，避免 Vulkan 的 BGRA 交换链复用 RGBA 离屏管线而触发验证错误 | 同步时重新评估 |
 | L-012 | 2026-10-17 | 新增 | graphics.odin / ShaderTryInit；olib_shader_reload.odin / ShaderPairTryReplace | 无 | 开发期 Shader 创建返回错误；候选顶点/片元及实际绘制管线全部成功后原位替换，失败保留旧资源与材质引用，支持 2D/3D 热重载 | 保留 |
 | L-013 | 2026-10-17 | 修复 | framework.odin / 默认 Shader 嵌入路径；assets/shaders/ | Framework/Content/Shaders | 原生产物统一移至 Compiled，保留字节内容；补回同步基线 06213b9 的 Batcher.hlsl，使 tools/shaders 能重建全部默认 Shader；Web GLSL 仍为手工适配源码 | 保留 |
+| L-014 | 2026-10-18 | 修复 | web.odin / web_relocate_app | 无（Odin Web App 堆迁移） | 搬移 App 时重绑默认材质的 Shader 指针及 Shader 的 GraphicsDevice，避免 main 返回后引用旧栈地址，修复 Web MSDF 文字不显示 | 保留 |

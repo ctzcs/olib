@@ -71,7 +71,7 @@ SetPointerState :: proc "c" (position: Vector2, pointerDown: bool) {
 				elementBox: BoundingBox = mapItem.boundingBox
 				elementBox.x -= (root.pointerOffset)[0]
 				elementBox.y -= (root.pointerOffset)[1]
-				if ((cast(i32)(_PointIsInsideRect(position, elementBox)) != 0) && ((clipElementId == 0) || (cast(i32)(_PointIsInsideRect(position, clipItem.boundingBox)) != 0))) {
+				if ((cast(i32)(_BackendPointInside(currentElement.id, position, elementBox, false)) != 0) && ((clipElementId == 0) || (cast(i32)(_BackendPointInside(cast(u32)(clipElementId), position, clipItem.boundingBox, true)) != 0))) {
 					if (mapItem.onHoverFunction != nil) {
 						mapItem.onHoverFunction(mapItem.elementId, ctx.pointerInfo, mapItem.hoverFunctionUserData)
 					}

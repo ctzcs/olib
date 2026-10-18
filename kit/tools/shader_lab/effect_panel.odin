@@ -3,6 +3,7 @@ package shader_lab
 // 效果选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 Odin 文件。
 import "core:fmt"
 import foster "olib:foster"
+import mat "olib:kit/material"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -11,7 +12,7 @@ preview_size_label :: proc(s: ^Session) -> string {
 		e := &s.effects[s.selected_effect]
 		for p, i in e.desc.passes {
 			if i == s.preview_pass || (s.preview_pass < 0 && p.output == e.desc.output) {
-				t := &e.targets[i].buffers[0]
+				t := &e.targets[mat.effect_is_material(e.desc) ? 0 : i].buffers[0]
 				if len(t.Attachments) == 0 do break
 				x := foster.TargetAttachment(t).SampleCount == .One ? 1 : 4
 				return fmt.tprintf("RT %d x %d / MSAA %dx", t.Width, t.Height, x)
@@ -28,7 +29,7 @@ effect_has_3d :: proc(s: ^Session, index: int) -> bool {
 bank_effect_has_3d :: proc(b: ^Parameter_Bank, index: int) -> bool {
 	if b.effects[index].desc.preview != "" do return b.effects[index].desc.preview == "3d"
 	for p in b.effects[index].desc.passes {
-		if p.draw == .Preview_Model && b.parameters[bank_index(b, string(p.params))].live.preview == "3d" do return true
+		if p.draw != .Fullscreen && b.parameters[bank_index(b, string(p.params))].live.preview == "3d" do return true
 	}
 	return false
 }
@@ -87,6 +88,9 @@ shader_folder :: proc(s: ^Session, index: int, id: string) {
 		}
 		if p.folder_closed do return
 		ui.ui_label_dim(&s.ctx, &s.small_theme, p.live.shader)
+		if s.file_dialogs && s.selected_effect >= 0 && mat.effect_is_material(s.effects[s.selected_effect].desc) {
+			ui.ui_label_dim(&s.ctx, &s.small_theme, "保存 / 载入整个材质")
+		}
 		if clay.UI()(ui.ui_row_decl(4)) {
 			if s.file_dialogs {
 				if lab_button(s, "preset-save", "保存", icon = "ui/save") do request_file(s, index, .Save_Preset)

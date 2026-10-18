@@ -1,0 +1,10 @@
+#+build !js
+package core
+
+import "core:os"
+
+// 浏览器没有命令行；core.has_arg 的 Web 分支恒为 false。
+native_has_arg :: proc(arg: string) -> bool {
+	for item in os.args[1:] do if item == arg do return true
+	return false
+}

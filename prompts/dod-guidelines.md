@@ -10,7 +10,7 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 
 ## 提示词开始
 
-你在一个以面向数据设计为核心的 Odin 游戏项目中工作，库为 olib（`olib:foster` 运行时、`olib:kit/*` 扩展、`olib:core/*` 数据结构）。目标是：模拟可确定、可在无窗口时用 `odin test` 测试；热点循环不分配；内容由数据驱动；各包边界清楚。写代码前先判断它属于哪个包、读写哪些数据列；规则不确定时先读项目的 `src/README.md` 和相关源码。代码风格与注释块（文件头、分区导航、线框）遵循 olib 的 `docs/CODE_STYLE.md` 第 2～5 节。
+你在一个以面向数据设计为核心的 Odin 游戏项目中工作，库为 olib（`olib:foster` 运行时、`olib:kit/*` 扩展、`olib:core/*` 数据结构）。目标是：模拟可确定、可在无窗口时用 `odin test` 测试；热点循环不分配；内容由数据驱动；各包边界清楚。写代码前先判断它属于哪个包、读写哪些数据列；规则不确定时先读项目的根 README 和相关源码。代码风格与注释块（文件头、分区导航、线框）遵循 olib 的 `docs/CODE_STYLE.md` 第 2～5 节。
 
 ### 1. 按数据形状选容器
 
@@ -39,29 +39,63 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 
 ### 2. 包与依赖方向
 
-固定采用 `def / data / logic / view / game` 五层，各层内按功能拆文件，需要独立边界或复用时再拆子包。需要编辑工具时按表增加可选的 `editor` 模块及工具入口，不改变模拟五层的职责。Odin 一个目录一个包，编译器禁止循环导入；import 检查约束依赖方向，数据读写职责还要通过调用位置和测试验证。本表及下方补充规则是层界规则的唯一来源，[新项目创建提示词](new-project.md) 与 [编辑工具开发约定](editor-guidelines.md) 引用此处，不另写一份允许导入表。
+默认从精简模板开始：`core` 一个包按文件容纳状态、规则、绘制和实例生命周期；不要求一项职责一个目录。Odin 一个目录一个包，编译器禁止循环导入。以下是默认布局的依赖边界，项目 tools/check 按真实布局检查。这里的项目 core 通过 `game:core` 导入，与 Odin 标准库 `core:*` 和 olib 库 `olib:core/*` 分开。
+
+| 包/入口 | 职责 | 游戏内依赖 |
+| --- | --- | --- |
+| `core` | 游戏状态、规则、UI、实例与快照；services.odin 定义共享服务和资源函数 | core 内子包及发布可用依赖；不导入 core_editor、入口、hotreload/devbuild |
+| `core_editor` | 可热替换的编辑会话、工具 UI 与 DLL 接入；和 core 编成一个 DLL | core 的公开接口及子包、core_editor 子包和开发 UI 依赖；不导入入口 |
+| `editor`（package main） | 常驻开发入口：App、资源、监听、DLL 切换与失败提示 | 只导入 core 获取服务类型和资源函数；不静态 import core_editor，不创建或调用游戏实例 |
+| `game`（package main） | Windows/Web 薄发布入口 | 只导入 core；不可达 editor、core_editor 或开发加载器 |
+
+游戏状态由实例拥有，规则函数显式接收数据和 dt，UI 只读状态并产生操作。即使在同一个包内也遵守这些职责；规则可无窗口测试。合包后 import 检查不再隔离每个业务职责，由函数调用位置与状态测试验证；不要为恢复机械的五层检查而重建目录。
+
+**旧布局与当前布局的对应：** 旧约定把 `def/data/logic/view` 放在 src 顶层，并让 game 承担业务组装；当前约定把这些职责归入共享 core，game 只保留发布启动与生命周期转发。不要混用两套目录定义。
+
+| 旧职责或目录 | 当前归属 |
+| --- | --- |
+| 类型定义与模拟数据（def/data） | 起步放 `src/core/world.odin` 等业务文件 |
+| 玩法规则（logic） | 起步放 `src/core/rules.odin` 等业务文件 |
+| 游戏 UI 与显示（view） | 起步放 `src/core/ui.odin` 等业务文件 |
+| 原 game 的业务组装、更新和快照 | `src/core/core.odin` |
+| App 启动与发布入口 | `src/game/main.odin`，调用共享 core |
+| 编辑器入口与实现 | 入口在 `src/editor/main.odin`，可热替换实现放 `src/core_editor/editor.odin` |
+| 游戏和编辑器热重载适配 | `src/core_editor/module.odin`，组装共享 core 与同包面板 |
+| 原 host 的服务协议、资源与 storage | `src/core/services.odin`；资源由 editor/game 入口持有 |
+
+**按需拆包：** 确需独立依赖边界时，在 `src/core/` 内拆出 `def/`、`data/`、`logic/`、`view/` 等子包，父包 core 保留组装与快照。例如 `src/core/logic` 通过 `game:core/logic` 导入；不重新生成顶层 `src/logic` 等平行业务目录。下表的短名均指 core 内子包，`core` 指父包 `game:core`；子包不能反向导入父包，避免循环依赖。它们不是模板必须生成的目录。
+
+模板 tools/check 已递归识别 core 内子包，按下表检查依赖，并从实际 package 声明自动收集 vet 包名。新增同类子包无需手工登记；只有新增依赖类别或改变边界时才修改规则和对应单元测试。core 的监听根递归覆盖其子包，无须另造热重载入口。已有项目按实际任务迁移并同步脚本和检查，不用生成器覆盖现有目录。
 
 | 包 | 回答的问题 | 可以 import |
 | --- | --- | --- |
 | `def` | 类型、固定映射、句柄、配置结构与默认值、命令和事件类型 | `core:*`、`olib:core/*`；不 import 其他游戏层、foster、kit |
-| `data` | 模拟实例的数据：标量、网格、批量数组、实体的句柄与 SoA 行、模拟缓存结构、版本号与存储生命周期 | `def`、`core:*`、`olib:core/*`；不 import logic、view、game、装载器、foster、kit |
-| `logic` 及其子包 | 状态转换、玩法规则、计算、查询、配置语义校验、模拟缓存重建与更新 | `data`、`def`、`core:*`、`olib:core/*`；不 import view、game、装载器、foster、kit、vendor |
-| `view` | 状态如何显示和播放；表现状态与 GPU 缓存 | `data`、`def`、`core:*`、`olib:core/*`、`olib:foster`、`olib:kit/*`；不 import logic（拆出的 `logic/query` 除外，见下）、game、装载器，不另存权威模拟状态 |
-| `game`（package main） | 输入转换、命令传递、实例创建与释放、系统组装与执行顺序 | 全部；不实现伤害、收入等玩法公式 |
-| `ids`（可选） | 内容 ID 常量（如 `CATAPULT :: "catapult"`），只给测试、工具、装载器和 `game` 的诊断命令 | `core:*`；`def`、`data`、`logic`、`view` 的非测试文件不得 import 它 |
-| `editor` 及其子包（可选） | 编辑文档、会话、工具交互、编辑事务与历史；独立编辑器和游戏开发模式共用实现 | `def`、`data`、`logic`、`view`、`ids`、装载器、`core:*`、`olib:core/*`、`olib:foster`、`olib:kit/*` 与开发 UI 依赖；不 import `game` 或工具入口 |
-| `tools/<name>`（`src/` 下可选的 package main） | 独立编辑工具入口：App 生命周期、组装与执行顺序 | 可组装上述可复用包及开发 UI 依赖；不 import `game` 或其他入口包 |
+| `data` | 模拟实例的数据：标量、网格、批量数组、实体的句柄与 SoA 行、模拟缓存结构、版本号与存储生命周期 | `def`、`core:*`、`olib:core/*`；不 import logic、view、core、装载器、foster、kit |
+| `logic` 及其子包 | 状态转换、玩法规则、计算、查询、配置语义校验、模拟缓存重建与更新 | `data`、`def`、`core:*`、`olib:core/*`；不 import view、core、装载器、foster、kit、vendor |
+| `view` | 状态如何显示和播放；表现状态与 GPU 缓存 | `data`、`def`、`core:*`、`olib:core/*`、`olib:foster`、`olib:kit/*`；不 import logic（拆出的 `logic/query` 除外，见下）、core、装载器，不另存权威模拟状态 |
+| `logic/query` 及其子包 | 可供显示层复用的只读查询 | def、data、同一 query 子树及纯 Odin 库；不反向 import 完整 logic 或其其他子包 |
+| `content` 及其子包 | 配置解码、迁移与装载，调用规则做语义校验 | def、ids、logic（含 query）、content 子包及发布可用依赖；不 import core 父包、core_editor 或入口 |
+| 其他 core 内功能子包（如 `core/combat`） | 按功能拆分的共享业务 | core 内其他子包及发布可用依赖；不 import core 父包、core_editor、入口或开发加载器；def/data/logic/view 不得反向依赖它以绕过各自边界 |
+| `core`（可复用包） | 输入映射、命令传递、实例创建释放、系统组装及快照 | core 内子包及发布可用依赖；不导入 core_editor/入口/开发加载器，不在组装函数中实现玩法公式 |
+| `ids`（可选） | 内容 ID 常量（如 `CATAPULT :: "catapult"`），只给测试、工具、装载器和 `core` 的诊断命令 | `core:*`；`def`、`data`、`logic`、`view` 的非测试文件不得 import 它 |
+| `core_editor` 及工具子包 | 编辑文档、会话、工具交互及历史 | core 中公开的编辑接口，或拆出的 def/data/logic/view、装载器及开发 UI 依赖；不 import 入口包 |
+| `tools/<name>`（`src/` 下可选的 package main） | 其他独立工具入口（不用于拆出第二个 Editor）：App 生命周期与组装 | 可组装上述可复用包及开发 UI 依赖；不 import 其他入口包 |
 
-- `def / data / logic / view` 及其子包不得 import `editor` 或其子包；装载器同样不反向依赖编辑器。编辑器使用的文档格式放在已有配置定义或独立的纯数据包中，不让装载器为读写格式依赖编辑会话。`game` 只在开发构建接入编辑器，发布构建通过独立入口或编译期文件选择排除编辑器及开发专用依赖，运行时隐藏面板不算隔离。
+- `def / data / logic / view` 及其子包不得 import `core_editor`、`editor` 或其子包；装载器同样不反向依赖编辑器。编辑器使用的文档格式放在已有配置定义或独立的纯数据包中，不让装载器为读写格式依赖编辑会话。`editor/main.odin` 是常驻 App 入口，`core_editor/module.odin` 与编辑工具同包，在 DLL 中组装共享游戏业务与编辑器 UI，发布构建通过独立入口或编译期文件选择排除编辑器及开发专用依赖，运行时隐藏面板不算隔离。
+- 热重载入口和共享服务的边界沿用上面的精简布局。拆出的 def/data/logic/view 与装载器不依赖 core 父包、core_editor、入口或开发加载器；core 的快照与生命周期代码继续由静态入口和 DLL 共用。完整恢复规则见 [新项目提示词](new-project.md#默认热重载与业务代码边界)。
 - 根目录 `tools/` 仍用于无界面的构建、转换、校验与生成，区别于 `src/tools/` 的交互工具入口。编辑生命周期、输入捕获、事务、撤销和保存的完整规则见 [编辑工具开发约定](editor-guidelines.md)，实现工具前阅读；编辑器接线不改变 `logic` 对模拟修改和语义校验的职责。
 - `data` 只维护存储一致性（分配、删除、扩容、版本号），不决定“是否合法”“收益多少”。
 - 规则写在 `logic`，签名显式接收状态和时间，例如 `step(world: ^data.World, dt: f32)`；`odin test` 中可以直接调用。
 - `logic` 可以根据规则修改传入的数据；涉及列、句柄或版本一致性时调用 `data` 的存储操作，不为每个字段机械地增加 setter。
-- `view` 直接读取 `data` 绘制（位置、血量、类型、已重建的规则数组），不修改它；操作形成 `def` 中的命令，由 `game` 交给 `logic`。
-- 依赖当前输入、又需要规则判断的预览（光标处能否放置、路径预览、升级后的数值）由 `game` 在 `RenderProc` 中调用 `logic` 的只读查询，填入 `view` 定义的输入结构（如 `view.Place_Preview`）后传给 `view`。执行命令的 logic proc 复用同一个检查（`place_building` 先调用 `place_check`），预览和结果不会分歧；`view` 只按结果显示、翻译拒绝原因，不自行判断合法性。开销大的查询（如寻路）由 `game` 缓存上次结果，输入变化时才重算。
-- 只读查询多到 `game` 难以维护时，可拆出 `logic/query` 子包并允许 `view` import；执行命令的 logic 也 import 它复用检查。Odin 没有只读指针，“查询不修改数据”靠约定与测试保证。查询只有少数几个时不拆。
-- 同一功能在对应层中使用一致的名称，例如 `def/units.odin`、`data/units.odin`、`logic/units.odin`、`view/units.odin`。文件装载按需独立为 `content` 或工具入口，不强制额外创建 `authoring` 包；装载器依赖 `def`，模拟各层不反向依赖装载器。
+- `view` 直接读取 `data` 绘制（位置、血量、类型、已重建的规则数组），不修改它；操作形成 `def` 中的命令，由 `core` 交给 `logic`。
+- 依赖当前输入、又需要规则判断的预览（光标处能否放置、路径预览、升级后的数值）由 `core` 在 `RenderProc` 中调用 `logic` 的只读查询，填入 `view` 定义的输入结构（如 `view.Place_Preview`）后传给 `view`。执行命令的 logic proc 复用同一个检查（`place_building` 先调用 `place_check`），预览和结果不会分歧；`view` 只按结果显示、翻译拒绝原因，不自行判断合法性。开销大的查询（如寻路）由 `core` 缓存上次结果，输入变化时才重算。
+- 只读查询多到 `core` 难以维护时，可拆出 `logic/query` 子包并允许 `view` import；执行命令的 logic 也 import 它复用检查。Odin 没有只读指针，“查询不修改数据”靠约定与测试保证。查询只有少数几个时不拆。
+- 同一功能在对应层中使用一致的名称，例如 `core/def/units.odin`、`core/data/units.odin`、`core/logic/units.odin`、`core/view/units.odin`。文件装载按需独立为 `core/content` 或工具入口，不强制额外创建 `authoring` 包；装载器依赖 `def`，模拟各层不反向依赖装载器。
 - 不用转发 proc、包级别名或“桥接包”掩盖跨层引用。层界由游戏 `tools/check` 里的层间依赖检查解析各包的 `import` 行验证（Odin 的 import 是文件顶部的字符串字面量，按行解析可靠）。检查只能看到 import，看不到引用了哪个符号，所以要禁止的符号必须放在单独的包里（如 `ids`）。`*_test.odin` 文件按测试规则单独检查，允许 import `ids`。
+
+同一职责可继续拆子包，同层引用仍遵守上述边界。默认 game/editor 入口只导入 core 父包，不直接组装业务子层；core_editor DLL 可调用 core 的公开接口并持有游戏实例，常驻入口不持有 DLL 内的 World/View 或业务 proc 指针。所有包不得导入 package main 的 editor 入口；开发入口通过 core 获得资源服务，但不能静态导入 core_editor 或调用 core 的游戏实例生命周期；实例始终只在 DLL 中运行。`ids` 的导入例外只适用于测试文件，不放宽其他依赖限制。
+
+下文及代码示例中的 data/logic/view 是职责名称；精简模板对应 core 包内的文件，拆包后才对应 `src/core/` 内的子目录。
 
 ### 3. 数据驱动的内容目录
 
@@ -73,7 +107,7 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 
 ### 4. 模拟实例与权威数据所有权
 
-- 每个模拟实例只有一份权威数据，推荐用 `data.World` 组装，由 `game` 创建、持有和释放，并显式传给 `logic` 与 `view`。允许同时存在多个世界；不要求 `data` 包中的全局单例。世界模式、地图尺寸、生效配置等跟随对应实例，不散落为独立的可变全局量。
+- 每个模拟实例只有一份权威数据，推荐用 `data.World` 组装，由 `core` 创建、持有和释放，并显式传给 `logic` 与 `view`。允许同时存在多个世界；不要求 `data` 包中的全局单例。世界模式、地图尺寸、生效配置等跟随对应实例，不散落为独立的可变全局量。
 - `data` 负责数据结构和存储生命周期，`logic` 决定规则并修改传入的数据。只读配置可以直接访问 `world.tuning.economy.cost`，不用散布转发 proc；需要维护存储一致性或变化记录的修改才收口到相应入口。
 - 快照与回滚：值类型直接复制；含堆数据时提供 `world_capture` / `world_restore`，不能把浅复制当独立快照，写明复制数据的所有者和释放责任。
 - 由配置派生的数据（规则数组、名称表、布局）在来源变化时**立即**重建，不惰性求值：安装配置的 logic 入口（如 `world_install_tuning`）在配置校验通过后替换配置、重建全部派生数据并递增 `tuning_version`。任何读取者（包括直接读 `data` 的 `view`）看到的都与当前配置一致，也不需要逐个手动失效；新增派生数据时只在这一个入口加一行重建。
@@ -90,7 +124,7 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 
 ### 6. 确定性与并行
 
-- 模拟以固定步长推进：foster `DefaultAppConfig` 默认固定 60 Hz 调用 `UpdateProc`，`app.Time.Delta` 即步长。暂停和倍速由 `game` 决定一帧执行几次 logic；logic 不读 foster 时钟、输入或 App。
+- 模拟以固定步长推进：foster `DefaultAppConfig` 默认固定 60 Hz 调用 `UpdateProc`，`app.Time.Delta` 即步长。暂停和倍速由 `core` 决定一帧执行几次 logic；logic 不读 foster 时钟、输入或 App。
 - 需要可重放时，随机数用显式种子的生成器（`core:math/rand` 的 `rand.create(seed)` 得到状态，经参数传给 logic），不用全局默认随机源。处理和提交都按槽位顺序进行，不依赖 `map` 的遍历顺序。
 - 并行只用于只读阶段（如批量索敌）：用 `core:thread.Pool` + `core:sync.Wait_Group`，工作线程读取稳定数据，只写自己的结果区间；句柄池、导航、视野和 GPU 只由主线程修改，并按原槽位顺序提交结果。每个线程的 `context.temp_allocator` 各自独立，线程结束前自行 `free_all`。
 - 表现动画不保存插值中间值，只记录事件发生时刻，绘制时用缓动曲线（`olib:core/tween` 的插值原语）算出姿态。
@@ -112,20 +146,20 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 
 ### 9. 验证
 
-- `logic` 及实际创建的子包配 `*_test.odin`（`#+test` + `@(test)`），直接调用 logic 并断言状态，`odin test src/logic -collection:olib=<olib> -collection:game=src` 无窗口运行；有子包时也逐包运行。画面与输入用游戏 exe 的 `shot` / `smoke` 参数：注入真实点击、渲染、写 PNG 后退出，再实际查看截图。
+- 为 core 的关键规则和状态及实际拆出的包维护 `*_test.odin`（`#+test` + `@(test)`），直接调用函数并断言状态；精简模板用 `odin test src/core -collection:olib=<olib> -collection:game=src` 无窗口运行。画面与输入直接运行游戏检查，不默认添加 shot/smoke、自动点击或截图测试模式。
 - 测试中的期望值从配置公式计算（例如 `wild.night_base_enemies + wild.night_growth_per_day`），不写死数字，以免调参导致误报。
 - 结构重构和性能优化要证明行为不变：用固定场景、`-o:speed` 构建压测，对比关键结果（如开火数、击杀数、被毁建筑数）完全一致，再比较耗时。
-- 调整层界或职责后运行层间依赖检查，并更新 `src/README.md` 中的职责表和“修改入口”表。
+- 调整层界或职责后运行层间依赖检查，并更新根 README 中的职责表和“修改入口”表；单纯目录/文档/配置调整不额外截图。截图和临时验证产物遵循 [生成文件规则](new-project.md#生成文件与目录纪律)，不在项目根另建输出目录。
 - 有编辑工具时，层间检查覆盖第 2 节的编辑器禁止导入，发布构建检查开发依赖不可达；事务、输入、保存与视觉验收按 [编辑工具开发约定第 9 节](editor-guidelines.md#9-新工具的交付与验收) 接入项目检查。
 
 ### 10. 改代码时的默认步骤
 
-1. 判断改动属于数据（新字段、新目录字段）、规则（logic）、接线（game）、显示（view）还是编辑工具（editor）。编辑工具先读 `prompts/editor-guidelines.md`；新数据先按第 1 节的形状选容器，不默认放进句柄池。
+1. 判断改动属于数据（新字段、新目录字段）、规则（logic）、接线（core）、显示（view）还是编辑工具（editor）。编辑工具先读 `prompts/editor-guidelines.md`；新数据先按第 1 节的形状选容器，不默认放进句柄池。
 2. 新行为优先做成目录能力字段 + 按能力查询，而不是新结构体类型或 ID 分支。
 3. 新的权威模拟状态放入 `data` 的对应模拟实例；表现状态放入 `view`。编辑内容由文档持有，选中、工具与历史由编辑会话持有，不塞进模拟实例。派生量注明来源、失效条件和所有者，不另建共享的可变全局量。
 4. 新缓存写明来源、失效条件和所有者。
 5. 热点路径不引入逐实体分配、proc 指针分发、反射或 `map` 迭代。
-6. 改完运行 `odin run tools/check` 和相关冒烟；修改默认数值时，同时更新代码默认值、JSON 和生成的 Schema。
+6. 改完运行 `odin run tools/check` 和必要的手动交互检查；修改默认数值时，同时更新代码默认值、JSON 和生成的 Schema。
 
 ## 提示词结束
 
@@ -136,7 +170,7 @@ Odin 本身就是面向数据的语言：没有类、虚方法和 GC，有 `#soa
 **网格：扁平数组**
 
 ```odin
-// 文件：src/data/grid.odin
+// 文件：src/core/data/grid.odin
 package data
 
 // 占用网格：一维数组，下标 y*w + x；0 为空，否则为建筑类型编号 + 1。
@@ -169,7 +203,7 @@ grid_index :: proc(grid: Grid, cell: [2]i32) -> int {
 **没人跨帧引用的批量数据：`#soa` + 交换删除**
 
 ```odin
-// 文件：src/data/projectiles.odin
+// 文件：src/core/data/projectiles.odin
 package data
 
 // 弹道不被其他数据跨帧引用，不需要句柄；0..<len 全部存活。
@@ -184,10 +218,10 @@ Projectiles :: #soa[dynamic]Projectile
 ```
 
 ```odin
-// 文件：src/logic/projectiles.odin
+// 文件：src/core/logic/projectiles.odin
 package logic
 
-import "game:data"
+import "game:core/data"
 
 // 先对整列做批量计算，再倒序删除到期弹道；被搬来的末行已处理过，不会跳过。
 projectiles_step :: proc(list: ^data.Projectiles, dt: f32) {
@@ -210,7 +244,7 @@ projectiles_step :: proc(list: ^data.Projectiles, dt: f32) {
 **实体（槽位对齐，起步布局）**
 
 ```odin
-// 文件：src/def/units.odin
+// 文件：src/core/def/units.odin
 package def
 
 import ha "olib:core/handle/array"
@@ -219,12 +253,12 @@ Unit_Handle :: distinct ha.Handle
 ```
 
 ```odin
-// 文件：src/data/units.odin
+// 文件：src/core/data/units.odin
 package data
 
 import ha "olib:core/handle/array"
 
-import "game:def"
+import "game:core/def"
 
 // 一个单位的全部属性；#soa 按字段拆成列。
 Unit :: struct {
@@ -276,12 +310,12 @@ units_destroy :: proc(units: ^Units) {
 ```
 
 ```odin
-// 文件：src/logic/units.odin
+// 文件：src/core/logic/units.odin
 package logic
 
 import ha "olib:core/handle/array"
 
-import "game:data"
+import "game:core/data"
 
 // 批量规则：遍历存活槽位，只读写列。
 units_regen :: proc(units: ^data.Units, regen_per_second: f32, dt: f32) {
@@ -296,7 +330,7 @@ units_regen :: proc(units: ^data.Units, regen_per_second: f32, dt: f32) {
 **实体（紧凑布局，数量大、遍历是热点时替换上面的版本）**
 
 ```odin
-// 文件：src/data/units.odin（紧凑版，替换槽位对齐版）
+// 文件：src/core/data/units.odin（紧凑版，替换槽位对齐版）
 package data
 
 // 单位存储（紧凑布局）：所有单位行连续存放，句柄经 index 映射到行号。
@@ -311,7 +345,7 @@ package data
 
 import ha "olib:core/handle/array"
 
-import "game:def"
+import "game:core/def"
 
 // ------------------------------------------------------------------------------
 // 单位 / 类型 — 行结构与句柄映射
@@ -377,10 +411,10 @@ unit_row :: proc(units: ^Units, h: def.Unit_Handle) -> (row: int, ok: bool) {
 ```
 
 ```odin
-// 文件：src/logic/units.odin（紧凑版）
+// 文件：src/core/logic/units.odin（紧凑版）
 package logic
 
-import "game:data"
+import "game:core/data"
 
 // 批量规则：对紧凑列做普通循环。
 // 读：hp；写：hp。各行独立，顺序无关，可以分段并行。
@@ -420,7 +454,7 @@ units_remove_dead :: proc(units: ^data.Units) {
 **能力字段 + 字段标签 + 预展开的规则数组**
 
 ```odin
-// 文件：src/def/buildings.odin
+// 文件：src/core/def/buildings.odin
 package def
 
 Attack_Kind :: enum u8 {
@@ -451,7 +485,7 @@ Place_Error :: enum u8 {
 ```
 
 ```odin
-// 文件：src/data/buildings.odin
+// 文件：src/core/data/buildings.odin
 package data
 
 // 从目录展开的能力数组，下标为 1 字节类型编号。
@@ -465,10 +499,10 @@ Building_Rules :: struct {
 **模拟实例与安装配置时立即重建的派生数据**
 
 ```odin
-// 文件：src/data/world.odin
+// 文件：src/core/data/world.odin
 package data
 
-import "game:def"
+import "game:core/def"
 
 // 当前生效的配置；目录由配置的所有者分配和释放，World 只引用。
 Tuning :: struct {
@@ -500,11 +534,11 @@ world_destroy :: proc(world: ^World) {
 ```
 
 ```odin
-// 文件：src/logic/tuning.odin
+// 文件：src/core/logic/tuning.odin
 package logic
 
-import "game:data"
-import "game:def"
+import "game:core/data"
+import "game:core/def"
 
 building_rules_build :: proc(catalog: ^def.Building_Catalog) -> data.Building_Rules {
 	assert(len(catalog.entries) <= 256) // 装载校验也须拒绝超出 u8 容量的目录。
@@ -527,14 +561,14 @@ world_install_tuning :: proc(world: ^data.World, validated: data.Tuning) {
 }
 ```
 
-**依赖输入的预览：game 查询，view 显示**
+**依赖输入的预览：core 查询，view 显示**
 
 ```odin
-// 文件：src/logic/place.odin
+// 文件：src/core/logic/place.odin
 package logic
 
-import "game:data"
-import "game:def"
+import "game:core/data"
+import "game:core/def"
 
 // 只读查询：预览和执行命令共用这一份规则。
 place_check :: proc(world: ^data.World, kind: u8, cell: [2]i32) -> def.Place_Error {
@@ -562,12 +596,12 @@ place_building :: proc(world: ^data.World, kind: u8, cell: [2]i32) -> def.Place_
 ```
 
 ```odin
-// 文件：src/view/place.odin
+// 文件：src/core/view/place.odin
 package view
 
-import "game:def"
+import "game:core/def"
 
-// view 需要的输入由 view 定义，game 填写后传入。
+// view 需要的输入由 view 定义，core 填写后传入。
 Place_Preview :: struct {
 	active: bool,
 	kind:   u8,
@@ -582,15 +616,15 @@ place_preview_color :: proc(preview: Place_Preview) -> [4]u8 {
 ```
 
 ```odin
-// 文件：src/game/main.odin（独立示例，不含窗口）
+// 文件：src/tools/preview/main.odin（独立示例，不含窗口）
 package main
 
-import "game:data"
-import "game:def"
-import "game:logic"
-import "game:view"
+import "game:core/data"
+import "game:core/def"
+import "game:core/logic"
+import "game:core/view"
 
-// game 持有实例，data 包没有全局单例；其他世界可以使用相同的数据类型。
+// core 持有实例，data 包没有全局单例；其他世界可以使用相同的数据类型。
 world: data.World
 
 main :: proc() {
@@ -636,8 +670,8 @@ main :: proc() {
 | 多个包里各写一个 `cost :: proc() -> int { return config.cost }` | 从显式传入的 `world.tuning.…` 读取 |
 | 全局 `rules_cache: Maybe(Rules)`，来源和失效条件不明 | 放进对应模拟实例，安装配置时立即重建 |
 | `data` 里存 `build: proc(...)`，首次读取时惰性重建 | `world_install_tuning` 中直接重建；`data` 不保存指向 logic 的 proc 指针 |
-| `view` 里写 `gold >= cost && tile_free(…)` 决定能否放置 | `game` 调用 `logic.place_check`，结果经 `view.Place_Preview` 传入 |
-| 在 `RenderProc` 或 UI 控件分支里扣金币、改实体 | UI 产生 `def` 中的操作请求，由 `game` 交给 logic 校验并修改 |
+| `view` 里写 `gold >= cost && tile_free(…)` 决定能否放置 | `core` 调用 `logic.place_check`，结果经 `view.Place_Preview` 传入 |
+| 在 `RenderProc` 或 UI 控件分支里扣金币、改实体 | UI 产生 `def` 中的操作请求，由 `core` 交给 logic 校验并修改 |
 | 测试里写 `testing.expect(t, enemies == 8)` | 用配置公式计算期望值 |
 | 工作线程直接 `ha.remove(&units.pool, h)` | 工作线程写结果区间，主线程按槽位顺序提交 |
 | 弹道、粒子、伤害事件也放进句柄池 | 没人跨帧引用就用 `#soa[dynamic]` + 交换删除，不要句柄 |

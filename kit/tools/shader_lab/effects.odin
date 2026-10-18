@@ -5,6 +5,7 @@ import "core:math"
 
 import foster "olib:foster"
 import mat "olib:kit/material"
+import rendering "olib:kit/rendering"
 import r3d "olib:kit/rendering3d"
 import world "olib:kit/world"
 
@@ -109,9 +110,11 @@ effect_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int
 	bank.shader_used = {}
 	for &e, effect_index in bank.effects {
 		if effect_index != selected do continue
+		model := mat.effect_is_material(e.desc)
 		changed := false
 		for p, i in e.desc.passes {
 			bank.shader_used[bank_index(bank, string(p.params))] = true
+			if model && i > 0 do continue
 			w, h := target_size(p.target, int(s.viewport.Width), int(s.viewport.Height))
 			if w > 8192 || h > 8192 {
 				bank_error(s, "RenderTexture exceeds 8192 pixels per axis")
@@ -123,12 +126,13 @@ effect_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int
 		next := make([]Pass_Target, len(e.targets))
 		valid := true
 		for p, i in e.desc.passes {
+			if model && i > 0 do continue
 			w, h := target_size(p.target, int(s.viewport.Width), int(s.viewport.Height))
 			next[i].history = e.targets[i].history
 			formats := [3]foster.TextureFormat{.Color, .R16G16B16A16_FLOAT, .R32G32B32A32_FLOAT}
 			samples: foster.SampleCount = .One
-			if p.target.samples == 4 || (p.target.samples == 0 && p.draw == .Preview_Model) do samples = .Four
-			depth := p.target.depth || (p.draw == .Preview_Model &&
+			if p.target.samples == 4 || (p.target.samples == 0 && p.draw != .Fullscreen) do samples = .Four
+			depth := p.target.depth || (p.draw != .Fullscreen &&
 				bank.parameters[bank_index(bank, string(p.params))].live.preview == "3d")
 			attachments := [2]foster.TargetAttachmentSpec{{formats[int(p.target.format)], samples}, {.Depth32, samples}}
 			for j in 0..<(next[i].history ? 2 : 1) {
@@ -181,15 +185,17 @@ step :: proc(s: ^Session) {
 pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: mat.Pass_Draw,
 	target: foster.DrawableTarget, pass: string, time: f32 = -1, dt: f32 = 0,
 	frame_index: u64 = 0) -> foster.DrawCommand {
-	preview3d := draw == .Preview_Model && bank.parameters[index].live.preview == "3d"
+	preview3d := draw != .Fullscreen && bank.parameters[index].live.preview == "3d"
 	mesh := preview3d ? (s.mode == 3 ? 2 : 1) : 0
 	command: foster.DrawCommand
-	foster.DrawCommandFromMesh(&command, target, &s.meshes[mesh], &bank.materials[index])
+	geometry := &s.meshes[mesh]
+	if draw == .Sprite do geometry = &s.sprite_renderer.mesh
+	foster.DrawCommandFromMesh(&command, target, geometry, &bank.materials[index])
 	command.DepthTestEnabled = preview3d
 	command.DepthWriteEnabled = preview3d
 	command.CullMode = preview3d ? .Back : .None
-	if draw == .Fullscreen do command.BlendMode = foster.BlendModeDisabled
-	if draw == .Preview_Model && s.custom_preview && s.preview_hooks.prepare != nil {
+	if draw != .Preview_Model && draw != .Sprite do command.BlendMode = foster.BlendModeDisabled
+	if draw != .Fullscreen && s.custom_preview && s.preview_hooks.prepare != nil {
 		custom: foster.DrawCommand
 		frame := Preview_Frame{device = s.device, target = target, material = &bank.materials[index],
 			group = bank.parameters[index].name, dimension = bank.parameters[index].live.preview,
@@ -235,6 +241,7 @@ pass_uniforms :: proc(s: ^Session, index: int, draw: mat.Pass_Draw, w, h: int,
 effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 	if e.clear_pending {
 		for p, i in e.desc.passes {
+			if mat.effect_is_material(e.desc) && i > 0 do continue
 			for j in 0..<(e.targets[i].history ? 2 : 1) {
 				target_clear(s, &e.targets[i].buffers[j], p.target.clear)
 			}
@@ -253,6 +260,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 	e.last_tick = s.tick_serial
 	e.last_clock = s.clock
 	s.step_requested = false
+	if mat.effect_is_material(e.desc) do return material_effect_render(s, e)
 	for i in e.order {
 		p := e.desc.passes[i]
 		index := bank_index(s.bank, string(p.params))
@@ -264,6 +272,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 		}
 		drawable := foster.DrawableTargetFromTarget(target)
 		command := pass_command(s, s.bank, index, p.draw, drawable, string(p.id), e.time, dt, e.frame)
+		rendering.pass_state_apply(&command, p.state)
 		pass_uniforms(s, index, p.draw, target.Width, target.Height, e.time, dt, e.frame)
 		parameters_bind(s, index)
 		parameter := &s.parameters[index]

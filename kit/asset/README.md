@@ -1,26 +1,31 @@
 # olib:kit/asset —— Foster 资源管线 v1
 
-`.meta` 管身份，`Library/` 管派生物，blob 是 Importer 与 Runtime 的边界，pak 将来只是 Storage 后端的变化。
+`.meta` 管身份，`library/assets/` 管资源派生物，blob 是 Importer 与 Runtime 的边界，pak 将来只是 Storage 后端的变化。
 
 ## 架构
 
 ```
 Project/
-├── Assets/                  # 人编辑的源资源
+├── assets/                  # 人编辑的源资源
 │   └── textures/
 │       ├── belt.png
 │       └── belt.png.meta    # {"guid": "31d0…"} —— 身份，进 Git，跟着文件走
-└── Library/                 # 机器生成，gitignore
-    └── 31d0a7c9.blob        # blob 名 = GUID；运行时按 guid 零表直查
+└── library/                 # 工具生成文件，不进版本控制
+    └── assets/              # 仅资源管线拥有的派生缓存
+        └── 31d0a7c9.blob    # blob 名 = GUID；运行时按 guid 零表直查
 
-     Assets/ 源文件 ──(import_all)──> Library/<guid>.blob ──(assets_load)──> Asset_Handle
+     assets/ 源文件 ──(import_all)──> library/assets/<guid>.blob ──(assets_load)──> Asset_Handle
 ```
 
 三条不变量（判断这套管线干不干净的标尺，均有测试覆盖）：
 
-1. **删除整个 `Library/` → `import_all` → 完整恢复**（Library 是纯派生缓存）
+1. **仅清理资源管线的 `library/assets/` → `import_all` → 从源资源与 `.meta` 完整恢复派生缓存**
 2. **移动源文件 + .meta → GUID 不变 → 不重新导入**（blob 按 GUID 定位，freshness 只看源 mtime+size）
 3. **源与 mtime/size 都没变 → 跳过导入**（改了导入逻辑则靠 importer version 强制重导）
+
+路径由调用方配置；以上是项目目录约定，不是 API 的硬编码路径。
+`library/` 还可能保存截图、生成素材候选与提示词，不能整体删除或打包。
+统一规则见[生成文件与目录纪律](../../prompts/new-project.md#生成文件与目录纪律)。
 
 ## 快速上手
 
@@ -29,7 +34,7 @@ Project/
 ```odin
 import asset "olib:kit/asset"
 
-stats, err := asset.import_all("Assets", "Library")
+stats, err := asset.import_all("assets", "library/assets")
 // stats: {scanned, imported, skipped, guid_generated, orphaned_meta}
 ```
 
@@ -38,8 +43,8 @@ stats, err := asset.import_all("Assets", "Library")
 ```odin
 m: asset.Asset_Manager
 asset.assets_init(&m, .{
-    assets_root  = "Assets",   // 打包发行时可留 ""（纯 manifest，见下）
-    library_root = "Library",
+    assets_root  = "assets",   // 打包发行时可留 ""（纯 manifest，见下）
+    library_root = "library/assets",
     device       = &app.GraphicsDevice, // 传入则 .Texture 自动建 GPU 贴图
 })
 defer asset.assets_dispose(&m)
@@ -52,22 +57,23 @@ foster.BatcherQuadTexture(&batcher, asset.assets_get_texture(&m, tex), …)
 
 Asset_Handle 带 `array` 代数，不依赖 ECS，任何 struct 里放一个即可引用资产。
 
-## manifest：打包零改动
+## manifest：开发与发布共用加载逻辑
 
 `import_all` 收尾会把全部 `path → GUID` 全量重写进**一个保留 GUID 的 Raw blob**
-（和其他派生物一样躺在 Library 里）。`assets_load_path` 先查它，查不到再回退读
+（和其他资源派生物一样存放在 `library/assets/`）。`assets_load_path` 先查它，查不到再回退读
 源文件旁的 `.meta`：
 
-- 开发期：两条路都在；新丢进 Assets 还没导入的文件自动落到 `.meta` 回退
-- 打包后：只发行 `Library/`（将来 pak），`assets_load_path` 原样工作——
-  `assets_root` 留空即可，**加载代码一行不用改**
+- 开发期：两条路都在；新丢进 `assets/` 还没导入的文件自动落到 `.meta` 回退
+- 打包后：将需要的 blob（含传递引用）与 manifest 复制到发布资源目录（将来可用 pak），
+  `assets_root` 留空、`library_root` 指向该目录，`assets_load_path` 的加载逻辑保持不变。
+  不得整体复制项目 `library/`；发布包不携带截图、生成素材候选和诊断文件
 - manifest 是纯派生物（从 .meta 推导），不进版本控制；用保留 GUID 的 blob
   而非散文件，是为了和其他 blob 共用同一条 `Asset_Storage` 通道，pak 后端
   不需要任何特殊处理
 
 ## .meta 纪律
 
-- `.meta` **进版本控制**（它是身份，不是缓存）；`Library/` 不进
+- `.meta` **进版本控制**（它是身份，不是缓存）；`library/` 不进
 - 移动/重命名源文件时**把 .meta 一起带走**，所有 GUID 引用不断
 - **绝不手动编辑 guid**；复制 .meta 会撞出 `Duplicate_Guid`（import_all 报错，绝不静默换 GUID——静默换会破坏既有引用）
 - 删除资产 = 源文件 + .meta 一起删；孤立的 .meta（源没了）import_all 只警告不删，防误删身份
@@ -111,7 +117,7 @@ blob 头含 `importer_version` 与源的 `mtime/size`；新鲜度 = 三者全部
 
 引用一律存 GUID（关卡/prefab 数据里写 32-hex 字符串，运行期
 `guid_from_string` + `assets_load`，开发/打包同一段代码——GUID 引用位置无关，
-被引用资产的 blob 就在同一个 Library/pak 里）。
+被引用资产的 blob 就在同一个已配置的派生资源目录或 pak 里）。
 
 **暂缓**：源格式内部的路径引用（gltf/tiled/aseprite 引用外部文件）。
 届时给 `Import_Proc` 签名加一个 `source_rel: string` 参数，导入器即可在导入时
@@ -127,12 +133,12 @@ blob 头含 `importer_version` 与源的 `mtime/size`；新鲜度 = 三者全部
 | `importer.odin` | import_all：扫描→发 GUID→查重→新鲜度→分派导入→孤儿警告→重写 manifest |
 | `manifest.odin` | path→GUID 寻址层（保留 GUID 的 Raw blob；打包后 load_path 零改动） |
 | `loader.odin` | Asset_Storage 后端（directory/map） |
-| `asset_test.odin` | 8 个测试，覆盖全部不变量（含打包形态：只带 Library、无 Assets） |
+| `tests/kit/asset/asset_test.odin` | 8 个测试，覆盖全部不变量（含打包形态：只带派生 blob、无源资源） |
 
 ## 构建与测试
 
 ```bash
-odin test kit/asset -collection:olib=.
+odin run tools/check -- -only:kit/asset
 ```
 
 v1 仅支持 native 目标（扫描/mtime 依赖 `core:os`）。web 路线：`storage_map` + `#load`

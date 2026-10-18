@@ -19,6 +19,7 @@
 - `clay_debug.odin`：完整的 v0.14 内置布局调试面板。
 - `clay_api.odin`：生命周期、输入、滚动和查询接口。
 - `clay_helpers.odin`：Odin 字符串、指针偏移和 C 表达式语义辅助函数。
+- `clay_backend.odin`：olib 后端扩展，提供布局身份/父级快照和可选命中回调。
 
 函数保留上游对应名称及 `clay.h` 行号，便于对照修复。第一版以行为兼容为目标，
 不同时重设计分配方式、接口或布局算法。原始 arena 由调用方持有；返回的命令、
@@ -32,6 +33,10 @@ Context 和测量回调也保留，因此仍不能并发调用或交错执行 be
 - 字符串 ID 按原有 Windows x64 C 二进制的有符号字节规则散列；中文和其他 UTF-8
   ID 也保持一致，并在 Odin 支持的平台上统一该规则。
 - `RenderCommandData.clip` 补全上游已有的裁剪数据；原有字段继续兼容。
+- `RenderCommand.elementId` 额外保留原布局元素身份（文字行、边框的 `id` 仍保持上游值）；
+  `GetLayoutElementInfo` 在 EndLayout 后复制身份、attachment parent、裁剪父级和布局矩形，
+  不向 UI 后端暴露内部树指针。`SetPointerHitTestFunction` 可覆盖矩形命中，nil 保持原行为。
+  这些扩展供 kit/ui 子树视觉变换使用，不改变 Clay 布局或默认命令顺序。
 - Context 内部布局不是稳定 ABI，`MinMemorySize()` 的数值不要求与 C 相同。
   应继续通过该函数申请内存，不硬编码 C 的结构大小。
 
@@ -41,7 +46,7 @@ Context 和测量回调也保留，因此仍不能并发调用或交错执行 be
 
 ```text
 odin test thirdparty/clay-odin/tests -vet
-odin test kit/ui -collection:olib=.
+odin run tools/check -- -only:kit/ui
 ```
 
 对照基准是 olib 历史提交 `a57cea853a46bf1b0a5662b80c0bb976154c635e`

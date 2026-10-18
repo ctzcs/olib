@@ -1,0 +1,14 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+if not defined OLIB set "OLIB=__OLIB__"
+if not exist build\publish\win-x64 mkdir build\publish\win-x64
+odin build src/game "-collection:olib=%OLIB%" -collection:game=src -o:speed -subsystem:windows -out:build/publish/win-x64/__PROJECT__.exe
+if errorlevel 1 exit /b 1
+for /f "delims=" %%R in ('odin root') do set "GAME_ODIN_DIR=%%R"
+copy /y "%GAME_ODIN_DIR%\vendor\sdl3\SDL3.dll" build\publish\win-x64\SDL3.dll >nul
+if errorlevel 1 exit /b 1
+copy /y assets\fonts\OFL.txt build\publish\win-x64\FONT-LICENSE.txt >nul
+if errorlevel 1 exit /b 1
+echo Published: build\publish\win-x64
+exit /b 0

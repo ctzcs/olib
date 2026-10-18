@@ -5,10 +5,10 @@
 // 旁侧 .meta：
 //
 //   开发期：两条路都在，新丢进的文件没导入过时自动落到 .meta 回退；
-//   打包后：只发行 Library/（将来 pak），manifest 随其他 blob 一起进包，
-//           assets_load_path 一行代码都不用改。
+//   打包后：将所需 blob 与 manifest 放入发布资源目录（将来 pak），
+//           配置 library_root 后复用 assets_load_path；不得整体打包项目 library。
 //
-// 为什么是保留 GUID 的 blob 而不是 Library 根下一个散文件：manifest 和
+// 为什么是保留 GUID 的 blob 而不是派生缓存目录下一个散文件：manifest 和
 // 其他派生物走同一条 Asset_Storage(Guid) 通道，pak 后端不需要任何特殊
 // 处理。manifest 是纯派生物（从 .meta 推导），不进版本控制、不承担身份。
 package asset

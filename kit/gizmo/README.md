@@ -150,7 +150,7 @@ labels := gizmo.translation_draw(&renderer, target, camera, accepted_position,
 ## 验证
 
 ```powershell
-odin test kit/gizmo -collection:olib=. -vet
+odin run tools/check -- -only:kit/gizmo
 odin run tools/check
 ```
 
@@ -159,7 +159,9 @@ UI 捕获、释放事件、取消后重新开始、相机/窗口变化及非有�
 统一工具还覆盖混合姿态与万向锁的世界轴旋转、跨 ±π 的多圈拖拽、局部与等比缩放、
 缩放上下限、返回原点恢复原值，以及三种模式的切换/取消/离焦/窗口变化。
 二维测试覆盖带偏移视口、相机旋转/zoom、轴约束/自由移动、多圈旋转、局部/等比缩放及中断捕获。
-实际绘制由接入项目或 gizmo2d 示例的最终画面截图验收。
+实际绘制改动由接入项目或 gizmo2d 示例的最终画面按需验收。必要截图归入所属项目的
+`library/screenshots/`，遵循 [生成文件规则](../../prompts/new-project.md#生成文件与目录纪律)；
+不为目录、文档或配置调整额外生成截图。
 
 项目编辑会话、事务取消和保存策略统一遵循 [编辑工具开发约定](../../prompts/editor-guidelines.md)，
 本包仅提供交互候选，不拥有项目文档或历史。当前 update 在 `down=false` 时直接结束；

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>__PROJECT__</title>
+	<style>
+		html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #101721; }
+		#foster { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+		#foster-log {
+			display: none; position: fixed; inset: 8px auto auto 8px; max-width: calc(100% - 32px);
+			max-height: 40vh; overflow: auto; padding: 8px; color: #bef0c5; background: #000c;
+			font: 12px monospace; white-space: pre-wrap; pointer-events: none;
+		}
+	</style>
+</head>
+<body>
+	<canvas id="foster" tabindex="0" aria-label="__PROJECT__ game"></canvas>
+	<div id="foster-log" role="status"></div>
+	<noscript>This game requires JavaScript and WebGL2.</noscript>
+	<script>window.FOSTER_WASM = "__PROJECT__.wasm";</script>
+	<script src="odin.js"></script>
+	<script src="foster.js"></script>
+</body>
+</html>

@@ -825,7 +825,7 @@ _CalculateFinalLayout :: proc "c" () {
 					}
 					break
 				}
-				_AddRenderCommand(RenderCommand{boundingBox = clipHashMapItem.boundingBox, userData = nil, id = _HashNumber(rootElement.id, cast(u32)((cast(i32)(rootElement.childrenOrTextContent.children.length) + 10))).id, zIndex = root.zIndex, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_SCISSOR_START)})
+				_AddRenderCommand(RenderCommand{elementId = root.clipElementId, boundingBox = clipHashMapItem.boundingBox, userData = nil, id = _HashNumber(rootElement.id, cast(u32)((cast(i32)(rootElement.childrenOrTextContent.children.length) + 10))).id, zIndex = root.zIndex, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_SCISSOR_START)})
 			}
 		}
 		_LayoutElementTreeNodeArray_Add(&dfsBuffer, _LayoutElementTreeNode{layoutElement = rootElement, position = rootPosition, nextChildOffset = Vector2{cast(f32)(rootElement.layoutConfig.padding.left), cast(f32)(rootElement.layoutConfig.padding.top)}})
@@ -906,7 +906,7 @@ _CalculateFinalLayout :: proc "c" () {
 				}
 				for elementConfigIndex: i32 = 0; (elementConfigIndex < currentElement.elementConfigs.length); elementConfigIndex += 1 {
 					elementConfig: ^ElementConfig = _ElementConfigArraySlice_Get(&currentElement.elementConfigs, (cast([^]i32)(&(sortedConfigIndexes)[0]))[elementConfigIndex])
-					renderCommand: RenderCommand = RenderCommand{boundingBox = currentElementBoundingBox, userData = sharedConfig.userData, id = currentElement.id}
+					renderCommand: RenderCommand = RenderCommand{elementId = currentElement.id, boundingBox = currentElementBoundingBox, userData = sharedConfig.userData, id = currentElement.id}
 					offscreen: bool = _ElementIsOffscreen(&currentElementBoundingBox)
 					shouldRender: bool = !(offscreen)
 					switch cast(i32)(elementConfig.type) {
@@ -946,7 +946,7 @@ _CalculateFinalLayout :: proc "c" () {
 							if (cast(i32)(textElementConfig.textAlignment) == CLAY_TEXT_ALIGN_CENTER) {
 								offset /= cast(f32)(2)
 							}
-							_AddRenderCommand(RenderCommand{boundingBox = BoundingBox{x = (currentElementBoundingBox.x + offset), y = (currentElementBoundingBox.y + yPosition), width = wrappedLine.dimensions.width, height = wrappedLine.dimensions.height}, renderData = RenderCommandData{text = TextRenderData{stringContents = StringSlice{length = wrappedLine.line.length, chars = wrappedLine.line.chars, baseChars = currentElement.childrenOrTextContent.textElementData.text.chars}, textColor = textElementConfig.textColor, fontId = textElementConfig.fontId, fontSize = textElementConfig.fontSize, letterSpacing = textElementConfig.letterSpacing, lineHeight = textElementConfig.lineHeight}}, userData = textElementConfig.userData, id = _HashNumber(cast(u32)(lineIndex), currentElement.id).id, zIndex = root.zIndex, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_TEXT)})
+							_AddRenderCommand(RenderCommand{elementId = currentElement.id, boundingBox = BoundingBox{x = (currentElementBoundingBox.x + offset), y = (currentElementBoundingBox.y + yPosition), width = wrappedLine.dimensions.width, height = wrappedLine.dimensions.height}, renderData = RenderCommandData{text = TextRenderData{stringContents = StringSlice{length = wrappedLine.line.length, chars = wrappedLine.line.chars, baseChars = currentElement.childrenOrTextContent.textElementData.text.chars}, textColor = textElementConfig.textColor, fontId = textElementConfig.fontId, fontSize = textElementConfig.fontSize, letterSpacing = textElementConfig.letterSpacing, lineHeight = textElementConfig.lineHeight}}, userData = textElementConfig.userData, id = _HashNumber(cast(u32)(lineIndex), currentElement.id).id, zIndex = root.zIndex, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_TEXT)})
 							yPosition += finalLineHeight
 							if (!(ctx.disableCulling) && ((currentElementBoundingBox.y + yPosition) > ctx.layoutDimensions.height)) {
 								break
@@ -968,7 +968,7 @@ _CalculateFinalLayout :: proc "c" () {
 					}
 				}
 				if emitRectangle {
-					_AddRenderCommand(RenderCommand{boundingBox = currentElementBoundingBox, renderData = RenderCommandData{rectangle = RectangleRenderData{backgroundColor = sharedConfig.backgroundColor, cornerRadius = sharedConfig.cornerRadius}}, userData = sharedConfig.userData, id = currentElement.id, zIndex = root.zIndex, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_RECTANGLE)})
+					_AddRenderCommand(RenderCommand{elementId = currentElement.id, boundingBox = currentElementBoundingBox, renderData = RenderCommandData{rectangle = RectangleRenderData{backgroundColor = sharedConfig.backgroundColor, cornerRadius = sharedConfig.cornerRadius}}, userData = sharedConfig.userData, id = currentElement.id, zIndex = root.zIndex, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_RECTANGLE)})
 				}
 				// Setup initial on-axis alignment
 				if !(_ElementHasConfig(currentElementTreeNode.layoutElement, cast(_ElementConfigType)(CLAY__ELEMENT_CONFIG_TYPE_TEXT))) {
@@ -1039,7 +1039,7 @@ _CalculateFinalLayout :: proc "c" () {
 					if !(_ElementIsOffscreen(&currentElementBoundingBox)) {
 						sharedConfig: ^SharedElementConfig = ((cast(i32)(_ElementHasConfig(currentElement, cast(_ElementConfigType)(CLAY__ELEMENT_CONFIG_TYPE_SHARED))) != 0) ? _FindElementConfigWithType(currentElement, cast(_ElementConfigType)(CLAY__ELEMENT_CONFIG_TYPE_SHARED)).sharedElementConfig : &SharedElementConfig_DEFAULT)
 						borderConfig: ^BorderElementConfig = _FindElementConfigWithType(currentElement, cast(_ElementConfigType)(CLAY__ELEMENT_CONFIG_TYPE_BORDER)).borderElementConfig
-						renderCommand: RenderCommand = RenderCommand{boundingBox = currentElementBoundingBox, renderData = RenderCommandData{border = BorderRenderData{color = borderConfig.color, cornerRadius = sharedConfig.cornerRadius, width = borderConfig.width}}, userData = sharedConfig.userData, id = _HashNumber(currentElement.id, cast(u32)(currentElement.childrenOrTextContent.children.length)).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_BORDER)}
+						renderCommand: RenderCommand = RenderCommand{elementId = currentElement.id, boundingBox = currentElementBoundingBox, renderData = RenderCommandData{border = BorderRenderData{color = borderConfig.color, cornerRadius = sharedConfig.cornerRadius, width = borderConfig.width}}, userData = sharedConfig.userData, id = _HashNumber(currentElement.id, cast(u32)(currentElement.childrenOrTextContent.children.length)).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_BORDER)}
 						_AddRenderCommand(renderCommand)
 						if ((cast(i32)(borderConfig.width.betweenChildren) > 0) && ((borderConfig.color)[3] > cast(f32)(0))) {
 							halfGap: f32 = cast(f32)((cast(i32)(layoutConfig.childGap) / 2))
@@ -1048,7 +1048,7 @@ _CalculateFinalLayout :: proc "c" () {
 								for i: i32 = 0; (i < cast(i32)(currentElement.childrenOrTextContent.children.length)); i += 1 {
 									childElement: ^LayoutElement = LayoutElementArray_Get(&ctx.layoutElements, (cast([^]i32)(currentElement.childrenOrTextContent.children.elements))[i])
 									if (i > 0) {
-										_AddRenderCommand(RenderCommand{boundingBox = BoundingBox{x = ((currentElementBoundingBox.x + (borderOffset)[0]) + (scrollOffset)[0]), y = (currentElementBoundingBox.y + (scrollOffset)[1]), width = cast(f32)(borderConfig.width.betweenChildren), height = currentElement.dimensions.height}, renderData = RenderCommandData{rectangle = RectangleRenderData{backgroundColor = borderConfig.color}}, userData = sharedConfig.userData, id = _HashNumber(currentElement.id, cast(u32)(((cast(i32)(currentElement.childrenOrTextContent.children.length) + 1) + i))).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_RECTANGLE)})
+										_AddRenderCommand(RenderCommand{elementId = currentElement.id, boundingBox = BoundingBox{x = ((currentElementBoundingBox.x + (borderOffset)[0]) + (scrollOffset)[0]), y = (currentElementBoundingBox.y + (scrollOffset)[1]), width = cast(f32)(borderConfig.width.betweenChildren), height = currentElement.dimensions.height}, renderData = RenderCommandData{rectangle = RectangleRenderData{backgroundColor = borderConfig.color}}, userData = sharedConfig.userData, id = _HashNumber(currentElement.id, cast(u32)(((cast(i32)(currentElement.childrenOrTextContent.children.length) + 1) + i))).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_RECTANGLE)})
 									}
 									(borderOffset)[0] += (childElement.dimensions.width + cast(f32)(layoutConfig.childGap))
 								}
@@ -1056,7 +1056,7 @@ _CalculateFinalLayout :: proc "c" () {
 								for i: i32 = 0; (i < cast(i32)(currentElement.childrenOrTextContent.children.length)); i += 1 {
 									childElement: ^LayoutElement = LayoutElementArray_Get(&ctx.layoutElements, (cast([^]i32)(currentElement.childrenOrTextContent.children.elements))[i])
 									if (i > 0) {
-										_AddRenderCommand(RenderCommand{boundingBox = BoundingBox{x = (currentElementBoundingBox.x + (scrollOffset)[0]), y = ((currentElementBoundingBox.y + (borderOffset)[1]) + (scrollOffset)[1]), width = currentElement.dimensions.width, height = cast(f32)(borderConfig.width.betweenChildren)}, renderData = RenderCommandData{rectangle = RectangleRenderData{backgroundColor = borderConfig.color}}, userData = sharedConfig.userData, id = _HashNumber(currentElement.id, cast(u32)(((cast(i32)(currentElement.childrenOrTextContent.children.length) + 1) + i))).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_RECTANGLE)})
+										_AddRenderCommand(RenderCommand{elementId = currentElement.id, boundingBox = BoundingBox{x = (currentElementBoundingBox.x + (scrollOffset)[0]), y = ((currentElementBoundingBox.y + (borderOffset)[1]) + (scrollOffset)[1]), width = currentElement.dimensions.width, height = cast(f32)(borderConfig.width.betweenChildren)}, renderData = RenderCommandData{rectangle = RectangleRenderData{backgroundColor = borderConfig.color}}, userData = sharedConfig.userData, id = _HashNumber(currentElement.id, cast(u32)(((cast(i32)(currentElement.childrenOrTextContent.children.length) + 1) + i))).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_RECTANGLE)})
 									}
 									(borderOffset)[1] += (childElement.dimensions.height + cast(f32)(layoutConfig.childGap))
 								}

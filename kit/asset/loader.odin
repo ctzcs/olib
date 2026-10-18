@@ -3,14 +3,14 @@
 // Runtime 从始至终只以 Guid 请求 blob，不知道也不需要知道
 // "31d0a7c9.blob" 这样的文件名；文件名/布局是后端实现细节：
 //
-//   开发期: guid -> Library/<guid>.blob        (storage_directory)
+//   开发期: guid -> library/assets/<guid>.blob        (storage_directory)
 //   测试/内嵌: guid -> 内存 map                 (storage_map)
 //   将来发布: guid -> pak 索引 -> offset/size   (再加一个后端即可)
 //
 // 注：read/exists 故意不是 contextless——directory 后端内部要走 Foster 的
 // storage 读路径（带隐式 context）；allocator 显式传入这一点保持不变。
 // 分区：
-//   Directory 后端 —— 开发期默认（Library/ 目录）
+//   Directory 后端 —— 调用方配置的派生资源目录
 //   Map 后端 —— 测试 / 将来 web 目标
 package asset
 

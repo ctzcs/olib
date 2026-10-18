@@ -1,6 +1,6 @@
 // blob 是 Importer 与 Runtime 的边界格式：
 //
-//   Assets/ 的源文件 --(Importer)--> Library/<guid>.blob --(Runtime Loader)--> 游戏对象
+//   assets/ 的源文件 --(Importer)--> library/assets/<guid>.blob --(Runtime Loader)--> 游戏对象
 //
 // Importer 认识 png/qoi/json 等源格式并产出 blob；Runtime 只认识 blob，
 // 完全不知道源文件的存在。将来的 pak 只是把 "按 guid 读一个 blob" 换成

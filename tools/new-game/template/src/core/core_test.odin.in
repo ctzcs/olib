@@ -1,0 +1,39 @@
+#+test
+package core
+
+import "core:testing"
+
+@(test)
+snapshot_owns_arrays_and_pending_commands :: proc(t: ^testing.T) {
+	services := Services{headless = true}
+	a, ok := create(&services)
+	defer destroy(a)
+	testing.expect(t, ok)
+	apply(&a.state.world, {add_point = true, toggle_pause = true})
+	append(&a.state.pending, {add_point = true})
+	bytes, saved := encode(a)
+	defer delete(bytes)
+	testing.expect(t, saved)
+	b, restored := create(&services, bytes, STATE_VERSION)
+	defer destroy(b)
+	testing.expect(t, restored)
+	testing.expect(t, b.state.world.paused && b.state.world.score == POINTS)
+	testing.expect(t, raw_data(a.state.world.history) != raw_data(b.state.world.history))
+	testing.expect(t, raw_data(a.state.pending) != raw_data(b.state.pending))
+	update(b, &services, 1)
+	update(b, &services, 1)
+	testing.expect(t, b.state.world.score == POINTS*2 && len(b.state.pending) == 0)
+	testing.expect(t, a.state.world.score == POINTS && b.state.world.elapsed == 0)
+	bad, accepted := create(&services, bytes, STATE_VERSION+1)
+	defer destroy(bad)
+	testing.expect(t, !accepted)
+}
+
+@(test)
+invalid_snapshot_fails_without_leak :: proc(t: ^testing.T) {
+	services := Services{headless = true}
+	invalid := `{"world":{"x":-1,"history":[1,2]}}`
+	s, ok := create(&services, transmute([]u8)invalid, STATE_VERSION)
+	defer destroy(s)
+	testing.expect(t, !ok)
+}

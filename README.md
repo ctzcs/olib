@@ -3,9 +3,14 @@
 Odin 游戏库集合，内置 `foster/`（Foster 框架的 Odin 移植，原 OFoster 仓库）。
 结构对位 [DragonLib](https://github.com/ctzcs/DragonLib)（C#/Foster）。
 
-让 AI 创建新游戏时，使用 [新项目创建提示词](prompts/new-project.md)：包含 def/data/logic/view/game 五层目录与依赖方向、kit/ui 界面、Odin 编码风格与中文注释、桌面/Web 发布和验证约定。新游戏默认放在 olib 的同级独立目录。日常开发中的数据布局、内容目录、模拟实例所有权、缓存失效与验证方式见 [面向数据开发约定](prompts/dod-guidelines.md)。
+让 AI 创建新游戏时，使用 [新项目创建提示词](prompts/new-project.md)：包含精简游戏模板与按需拆包的依赖约定、默认保留状态的桌面代码/UI 热重载、kit/ui 界面、Odin 编码风格与中文注释、桌面/Web 发布和验证约定。源码分为 core、core_editor、editor、game：core_editor 和 core 共用一个热重载 DLL，editor 是常驻开发入口；玩法与游戏 UI 复用于静态发布入口。新游戏默认放在 olib 的同级独立目录。日常开发中的数据布局、内容目录、模拟实例所有权、缓存失效与验证方式见 [面向数据开发约定](prompts/dod-guidelines.md)。
 
 开发编辑器、开发面板或交互工具时，遵循 [编辑工具开发约定](prompts/editor-guidelines.md)：统一编辑会话、工具输入、编辑事务、撤销与保存。它是项目组织与接入规则，不代表库已提供编辑器框架。
+
+新建 Windows 游戏可直接运行 `odin run tools/new-game -- ../MyGame MyGame`，进入新目录运行 `play.bat`。生成的[游戏模板](tools/new-game/README.md)已包含热重载宿主、共享 core 包、独立的 core_editor 实现与薄 editor 开发入口、可一起热重载的游戏与编辑器 UI、薄 game 发布入口、Windows/Web 静态发布、默认跨平台存储、字体资产与构建检查，无需从示例复制接线。
+
+生成截图、图像候选和临时报告时统一遵循 [生成文件与目录纪律](prompts/new-project.md#生成文件与目录纪律)：
+归入所属项目的 library 固定子目录，按需创建；目录或文档调整不额外截图。正式资源与构建产物另行维护。
 
 ## 布局
 
@@ -18,12 +23,14 @@ core/        基础库（无引擎依赖）
 ├── dasset/    .dasset 模型格式数据层（比特兼容 DragonLib v4，无渲染依赖）
 ├── tween/     补间系统（manager / sequence / 插值原语）
 ├── debug/     Tracking_Allocator 的 defer 包装
+├── hotreload/ 桌面游戏 DLL 热重载：后台编译、快照恢复、UI 重建与失败保留旧版
+├── devbuild/  开发期编译子进程互斥（游戏 / Shader / 参数生成共用）
 └── profiler/  作用域计时统计
 
 foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组织与 Git 历史）
 
 kit/         扩展层（kit）：依赖 foster/ 与 core/
-├── asset/       资源管线：.meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动
+├── asset/       资源管线：.meta 管身份、library/assets 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
 ├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Batcher 覆盖层，不持有场景对象
 ├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
@@ -31,7 +38,7 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── animation/   骨骼动画采样 / palette / 混合
 ├── material/    材质参数描述、独立实例值、稳定 ID 迁移与生成 GPU 布局
 ├── shaderdev/   Odin 字段标签生成参数面板数据；HLSL 热重载，2D/3D 共用
-├── storage/     资源根 / 用户存档路径策略
+├── storage/     跨平台资源根 / 用户存储路径策略
 ├── app/         CLI 参数 + 调试控制台（可选 cli_open 接入 foster.App）
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
 └── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
@@ -122,6 +129,10 @@ Web 上 `Run` 会把 App 拷贝到堆上并立即返回，但不会搬移游戏�
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
 内置 [默认图标图集](assets/icons/README.md) 提供 815 个白色图标，单张 4096×4096 PNG；
 通过 `rendering.builtin_icons_load` 加载，按名称取得 Subtexture，可直接用于 UI 或 Batcher。
+
+桌面开发期可接入 [游戏代码与 UI 热重载](core/hotreload/README.md)：常驻宿主保留窗口/设备，
+保存 Odin 后后台编译游戏 DLL，在安全帧边界通过快照恢复游戏数据并重建 UI。编译或候选初始化失败
+保留旧版。需要游戏实现模块入口与快照，并非给现有可执行程序加一个开关即可；发布/Web 继续静态构建。
 游戏 UI 示例见 [olib_sample](https://github.com/ctzcs/olib_sample) 的 `game_ui`（遗迹场景、HUD、技能冷却、格子背包、暂停菜单）；
 基础控件验收页见同仓库的 `ui_gallery`。
 
@@ -142,7 +153,7 @@ odin-imgui 的 foster 后端示例、校验 foster 本地修改清单；同级�
 单独测一个包：
 
 ```sh
-odin test kit/ui -collection:olib=.
+odin run tools/check -- -only:kit/ui
 ```
 
 Shader 的模块归属、源码与 `Compiled/` 分层及统一编译入口见 [Shader 归属与编译](tools/shaders/README.md)。

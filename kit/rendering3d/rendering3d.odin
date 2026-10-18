@@ -13,6 +13,8 @@
 //   shader3d.odin      字节码按驱动选择 + DebugLine3D 装载
 //   shaders/           DebugLine3D HLSL 源 + 编译脚本 + Compiled 二进制（入库）
 //   uniforms3d.odin    std140 写入 + 顶点矩阵块 + 骨骼 palette 打包
+//   material3d.odin    模型材质绑定与多 Pass 执行（与 Shader Lab 共用）
+//   公共材质资源位于 kit/rendering；material3d.odin 提供模型槽和矩阵接入
 //   debug_draw3d.odin  立即模式调试线
 //   lod3d.odin         屏幕高度 LOD 选择
 package rendering3d

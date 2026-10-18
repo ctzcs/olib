@@ -6,6 +6,11 @@
 原来的设置页和控件验收示例在同仓库的 `src/ui_gallery`。
 示例仓库需与 olib 同级检出，以下 `run.bat` 命令均在示例仓库根目录执行。
 
+需要保存 UI 的 Odin 代码后在运行中的游戏看到修改时，使用
+[游戏代码与 UI 热重载](../../core/hotreload/README.md)。UI 声明在游戏 DLL 内执行，
+每次成功切换都重建该 DLL 私有的 `UI_Context` 并重新注册字体；不要跨 DLL 保留 Clay 内存、
+测量回调或文字地址。背包开关等需保留的状态由游戏快照恢复，按住/拖动/焦点等瞬时交互重置。
+
 ## 最小帧流程
 
 初始化一次 `ui_init(&ctx, width, height)`，注册字体；退出时先释放 UI，再释放字体、
@@ -45,6 +50,56 @@ foster.BatcherRender(&batcher, target)
 需要自定义渲染时，可继续使用 `ui_end → ui_translate → ui_render`；`ui_translate`
 的结果由调用者 `delete`。`ui_translate_into` 可以复用自有缓冲。
 不要在 `ui_end` 之后再调用 `ui_draw`，它会重复结束布局。
+
+## 子树视觉变换与 Tween
+
+`ui_set_visual` 对稳定 ID 对应的整个子树应用位移、二维缩放、旋转与透明度。
+文字、图片、九宫格、圆角和边框一起变换；布局占位不变。每帧在 `ui_begin` 和
+`ui_end/ui_draw` 之间重新注册，不注册的帧恢复原样。注册复制值，不保存调用者指针。
+
+```odin
+// 跨帧状态，地址必须稳定；退出时先 manager_delete，再释放目标状态。
+visual := ui.UI_VISUAL_DEFAULT
+mgr := tween.manager_make() // import tween "olib:core/tween"
+
+// 只在事件发生时创建；若旧动画尚在运行，先 manager_kill 再从当前 visual 接续。
+target := ui.UI_VISUAL_DEFAULT
+target.offset = {0, -12}
+target.scale = {1.05, 1.05}
+target.rotation = -0.04
+handle := tween.manager_add_tween_to(&mgr,
+    tween.make_ex(visual, target, 0, {duration = 0.15, transition = .EaseOut}, ui.ui_visual_lerp),
+    &visual)
+
+// 每帧推进一次，然后声明 UI。
+tween.manager_update(&mgr, dt)
+ui.ui_begin(&ctx, dt)
+ui.ui_set_visual(&ctx, "play", visual)
+if ui.ui_button(&ctx, &theme, "play", "PLAY") {
+    // 触发游戏逻辑或下一段动画。
+}
+ui.ui_draw(&ctx, &batcher)
+```
+
+- 从 `UI_VISUAL_DEFAULT` 初始化；`UI_Visual{}` 的零缩放和零透明度不可见。
+  `offset` 为逻辑像素，`rotation` 为弧度（正值顺时针），`pivot` 为布局矩形的
+  归一化支点，默认中心 `{0.5, 0.5}`，底部中心为 `{0.5, 1}`。
+- 嵌套变换按父子关系合成，透明度相乘；浮动元素按其 attachment parent 继承。
+  `.Root` 浮层独立于声明位置的祖先变换。旋转插值直接插值弧度，不自动选最短路径。
+- `ui_visual_lerp` 可用于现有 Tween / Sequence。位置和缩放允许过冲，绘制时钳制透明度。
+  每个图元的预乘 RGB 与 alpha 同步衰减；这不是离屏合成的组透明度。
+- 点击沿用上一帧布局，并使用上一帧显示变换的逆矩阵；保留 Clay 浮层遮挡和模态规则。
+  内置滑条也使用逆变换指针，自定义拖动控件可调用 `ui_pointer_local`。
+  零缩放和零透明度不接受指针命中；键盘焦点与业务可交互性仍由 `disabled` / 模态控制。
+- 裁剪仍是屏幕轴对齐矩形。平移/轴对齐缩放后的裁剪准确；旋转裁剪容器使用变换后的
+  **轴对齐包围盒**，不支持精确旋转遮罩。固定滚动窗口中的内容可以自由旋转。
+- 动画期间不修改字体图集，不把 UI 先画成低分辨率纹理；字形几何在最终像素目标上变换。
+  退场时保留声明和输入隔离，动画完成后再移除元素。UI 时间应独立于暂停的世界时间。
+
+同级示例仓库运行 `run.bat ui_motion`：点击 ATTACK 看按压回弹、RELIC 看蓄力跳跃和
+落地挤压、REWARD 看弹窗进出；Tab/Enter 支持键盘确认。`shot` 自动点击、resize 并
+保存最终输出截图，可加 `scaled narrow` 验收 125% 和窄窗口。这是既有示例的可选检查，
+不要求新游戏接入，也不要求每次修改都运行。留存截图归入示例项目的 `library/screenshots/`。
 
 ## 离线 MSDF 字体（默认）
 
@@ -141,9 +196,14 @@ viewport、留边及命中坐标。只改变布局尺寸而不改变最终 UI �
 
 截图应在世界、后处理和 UI 合成完成之后读取最终输出，PNG 尺寸等于实际渲染像素。
 只保存固定分辨率的场景 Target 会漏掉窗口缩放造成的问题，不能作为最终画面的验收依据。
-至少检查默认窗口、窄窗口、非整数缩放（如 125%）、运行中 resize，以及中英文菜单与 HUD；
-记录窗口逻辑尺寸、实际渲染像素和 UI scale。先按 1:1 查看可读性，再放大看笔画边缘，
-同时验证点击与留边对齐。修改后重建实际运行的开发版/发布版，避免观察旧可执行文件。
+首次接入或修改全局布局、字体采样、DPI 换算时，检查默认窗口、窄窗口、非整数缩放（如 125%）、
+运行中 resize 和相关中英文菜单/HUD；局部变更只验证受影响场景。记录窗口逻辑尺寸、实际渲染像素
+和 UI scale。先按 1:1 查看可读性，再放大看笔画边缘，同时验证点击与留边对齐。
+修改后重建实际运行的开发版/发布版，避免观察旧可执行文件。
+
+截图只保存必要结果到所属项目的 `library/screenshots/`，同场景复用文件名；不要求每次生成
+所有尺寸、语言与状态的整套图片。目录、文档和配置调整不额外截图，完整规则见
+[生成文件与目录纪律](../../prompts/new-project.md#生成文件与目录纪律)。
 
 文字发虚时按以下顺序定位：最终缩放链路 → 字形实际像素大小与像素对齐 → 图集及 MSDF 参数 → 字体字重。
 3D 场景的斜边台阶与运动闪烁还需要单独检查场景分辨率、抗锯齿和细线尺度；
@@ -248,14 +308,14 @@ if show_dialog {
 `ui_image` 使用自己的 Custom 命令；其他 Custom 数据不会被当作图像解码。
 
 目前支持矩形嵌套裁剪、统一圆角填充；裁剪不是圆角遮罩，独立四角半径和圆角描边
-仍未完整实现。输入框/IME、Dropdown、富文本、拖放数据协议、列表虚拟化和过渡动画
-仍属于后续功能。
+仍未完整实现。输入框/IME、Dropdown、富文本、拖放数据协议、列表虚拟化、精确旋转遮罩
+和自动布局过渡仍属于后续功能。视觉变换与显式 Tween 动画见上文。
 
 ## 验证
 
 ```powershell
 # olib 根目录
-odin test kit/ui -collection:olib=.
+odin run tools/check -- -only:kit/ui
 
 # 示例仓库根目录（示例名之后的参数透传给程序）
 .\run.bat game_ui

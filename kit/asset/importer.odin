@@ -1,14 +1,15 @@
-// Importer —— 源文件到 Library blob 的导入层（编辑器/工具侧）。
+// Importer —— 源文件到资源派生 blob 的导入层（编辑器/工具侧）。
 //
-//   import_all("Assets", "Library")
-//     1. 递归扫描 Assets/（.meta 不算源文件）
+//   import_all("assets", "library/assets")
+//     1. 递归扫描 assets/（.meta 不算源文件）
 //     2. 每个源文件 meta_ensure：缺 .meta 就生成 GUID 写盘（新资产全自动入伙）
 //     3. GUID 查重：两个 .meta 持同一 GUID -> Duplicate_Guid 报错（绝不静默换）
 //     4. 新鲜度：blob 存在 且 源 mtime/size 相同 且 importer 版本相同 -> 跳过
-//     5. 过期/缺失 -> 按扩展名分派 Importer 产出 payload -> 写 Library/<guid>.blob
+//     5. 过期/缺失 -> 按扩展名分派 Importer 产出 payload -> 写 library/assets/<guid>.blob
 //     6. 孤儿 .meta（源文件没了）打警告，不删除
 //
-// Library 是纯派生缓存：删除整个 Library 再 import_all 即完整恢复。
+// 仅资源管线拥有的 library/assets 是可重建派生缓存；保留源资源与 .meta 后可重新导入。
+// 不得整体清理 library，其中还可能有截图、生成素材候选与提示词。
 // 本文件只在 native 目标可用（枚举/mtime 依赖 core:os）。
 // 分区：
 //   导入器 —— Importer 注册表与内建分派

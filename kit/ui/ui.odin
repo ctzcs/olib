@@ -5,6 +5,7 @@
 //   ui_text.odin     msdf 字体测量（clay 回调）与字形四边形生成
 //   ui_font_bake.odin Foster Font -> 位图图集、字形表与纹理
 //   ui_backend.odin  clay RenderCommand -> UI_Op 翻译（CPU 可测）+ Batcher 发射
+//   ui_visual.odin    子树视觉变换 / Tween 插值 / 变换命中
 //   ui_input.odin    鼠标捕获 / 导航焦点 / 禁用态 / 模态 / 输入消费
 //   ui_widgets.odin  主题、基础控件、图像、滑条、进度和容器
 //
@@ -39,6 +40,9 @@ UI_Context :: struct {
 	image_pool: []UI_Image_Data,
 	image_len: int,
 	ops: [dynamic]UI_Op,
+	visuals: map[u32]UI_Visual,
+	visual_elements: map[u32]UI_Visual_Element,
+	visual_layout: [dynamic]clay.LayoutElementInfo,
 
 	// 帧内 TextElementConfig bump 池：clay 把文本配置存裸指针、EndLayout
 	// 才回读，调用侧栈上 config 会悬垂（v1 踩过的坑），必须由 ctx 保活。
@@ -119,6 +123,9 @@ ui_init :: proc(ctx: ^UI_Context, width, height: f32, allocator := context.alloc
 	ctx.previous_widgets = make([dynamic]UI_Focus_Entry, allocator)
 	ctx.scrolls = make([dynamic]UI_Scroll_Entry, allocator)
 	ctx.ops = make([dynamic]UI_Op, allocator)
+	ctx.visuals = make(map[u32]UI_Visual, allocator)
+	ctx.visual_elements = make(map[u32]UI_Visual_Element, allocator)
+	ctx.visual_layout = make([dynamic]clay.LayoutElementInfo, allocator)
 
 	arena := clay.CreateArenaWithCapacityAndMemory(capacity, raw_data(memory))
 	ctx.clay_context = clay.Initialize(
@@ -127,6 +134,7 @@ ui_init :: proc(ctx: ^UI_Context, width, height: f32, allocator := context.alloc
 		{handler = ui_error_record, userData = ctx},
 	)
 	clay.SetMeasureTextFunction(ui_measure_trampoline, ctx)
+	clay.SetPointerHitTestFunction(ui_visual_hit, ctx)
 	return true
 }
 
@@ -153,6 +161,9 @@ ui_dispose :: proc(ctx: ^UI_Context, allocator := context.allocator) {
 	delete(ctx.previous_widgets)
 	delete(ctx.scrolls)
 	delete(ctx.ops)
+	delete(ctx.visuals)
+	delete(ctx.visual_elements)
+	delete(ctx.visual_layout)
 	delete(ctx.image_pool, ctx.allocator)
 	delete(ctx.text_config_pool, ctx.allocator)
 	delete(ctx.arena_memory, ctx.allocator)
@@ -207,6 +218,7 @@ ui_begin :: proc(ctx: ^UI_Context, delta_time: f32) {
 	clay.SetLayoutDimensions({ctx.width, ctx.height})
 	ctx.text_config_len = 0 // 文本配置池按帧重置（池内存跨帧保活，见结构体注释）
 	ctx.image_len = 0
+	clear(&ctx.visuals)
 	ctx.pool_overflow = false
 	ctx.scope_id = 0
 	ctx.active_seen = false
@@ -248,7 +260,14 @@ ui_text_config :: proc(ctx: ^UI_Context, config: clay.TextElementConfig) -> ^cla
 // 帧结束：返回 clay 的渲染命令数组（送 ui_translate / ui_render）。
 // 同时快照本帧的按住状态，作为下一帧 ui_clicked 的边沿依据。
 ui_end :: proc(ctx: ^UI_Context) -> clay.ClayArray(clay.RenderCommand) {
+	// 视觉变换可能把布局外元素移入视口，不能先按原布局剔除。
+	culling_disabled := ctx.clay_context.disableCulling
+	if len(ctx.visuals) > 0 {
+		clay.SetCullingEnabled(false)
+	}
 	commands := clay.EndLayout()
+	clay.SetCullingEnabled(!culling_disabled)
+	ui_visual_snapshot(ctx)
 	if !ctx.pointer_down || !ctx.active_seen {
 		ctx.active_id = 0
 	}

@@ -19,6 +19,7 @@ import clay "olib:thirdparty/clay-odin"
 
 Session :: struct {
 	device: ^foster.GraphicsDevice,
+	sprite_renderer: rendering.Sprite_Renderer,
 	font: ^foster.MsdfFont, // 借用宿主字体，宿主须在 dispose 后释放。
 	icons: ^rendering.Sprite_Atlas,
 	owned_icons: rendering.Sprite_Atlas,
@@ -49,6 +50,7 @@ Session :: struct {
 	color_picker: Color_Picker,
 	meshes: [3]foster.Mesh,
 	texture: foster.Texture,
+	sprite_texture: foster.Texture, // Sprite 预览帧采用预乘 Alpha，旧图像预览保持原输入。
 	output: foster.Target,
 	panel_active: bool,
 	retired_textures: [dynamic]^foster.Texture,
@@ -126,6 +128,7 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	dev.parameters_init(&s.parameter_watch, s.parameter_directory)
 	foster.BatcherInit(&s.batch, device)
 	foster.BatcherInit(&s.compose, device)
+	rendering.sprite_renderer_init(&s.sprite_renderer, device)
 	format := foster.VertexFormatMake([]foster.VertexElement{{0, .Float2, false},
 		{1, .Float2, false}}, size_of(Vertex2D))
 	defer foster.VertexFormatDispose(&format)
@@ -154,6 +157,8 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 		}
 	}
 	s.texture = foster.TextureFromImage(device, &image, "checker sprite")
+	foster.ImagePremultiply(&image)
+	s.sprite_texture = foster.TextureFromImage(device, &image, "premultiplied sprite frame")
 	world.camera3d_init(&s.camera, 960, 640)
 	assert(ui.ui_init(&s.ctx, 1280, 800))
 	s.theme = config.theme != nil ? config.theme^ : lab_theme()
@@ -175,11 +180,13 @@ dispose :: proc(s: ^Session) {
 	delete(s.bank_error)
 	dev.parameters_dispose(&s.parameter_watch)
 	for &mesh in s.meshes do foster.MeshDispose(&mesh)
+	rendering.sprite_renderer_dispose(&s.sprite_renderer)
 	foster.BatcherDispose(&s.batch)
 	foster.BatcherDispose(&s.compose)
 	ui.ui_dispose(&s.ctx)
 	rendering.atlas_dispose(&s.owned_icons)
 	foster.TextureDispose(&s.texture)
+	foster.TextureDispose(&s.sprite_texture)
 	texture_retire_flush(s)
 	delete(s.retired_textures)
 	foster.TargetDispose(&s.output)

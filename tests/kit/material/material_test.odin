@@ -2,6 +2,8 @@
 package material
 
 import "core:mem"
+import "core:fmt"
+import "core:os"
 import "core:strings"
 import "core:testing"
 
@@ -73,4 +75,61 @@ changed_type_uses_defaults :: proc(t: ^testing.T) {
 	values := values_make(next, old, previous)
 	defer values_dispose(values)
 	testing.expect(t, values[0].number == next.fields[0].initial)
+}
+
+
+@(test)
+resource_roundtrip_isolation_validation_and_atomic_file :: proc(t: ^testing.T) {
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	defer mem.tracking_allocator_destroy(&track)
+	context.allocator = mem.tracking_allocator(&track)
+	defer testing.expect_value(t, len(track.allocation_map), 0)
+	Params :: struct {
+		metallic: Scalar,
+		color: Color,
+		image: Texture_Path,
+	}
+	schema, reason := describe("Standard", "surface.hlsl", "3d", Params{color = {1,1,1,1}})
+	defer schema_dispose(&schema)
+	testing.expect_value(t, reason, "")
+	base := values_make(schema)
+	defer values_dispose(base)
+	base[0].number[0] = 0.7
+	changed, error := values_overlay(schema, base,
+		{{id = "color", kind = .Color, number = {0.1,0.8,0.3,1}}})
+	defer values_dispose(changed)
+	testing.expect(t, error == "" && base[1].number[0] == 1 && changed[1].number[0] == 0.1)
+	bytes, encode_error := resource_encode(schema, changed)
+	defer delete(bytes)
+	loaded, decode_error := resource_decode(schema, bytes)
+	defer values_dispose(loaded)
+	testing.expect(t, encode_error == "" && decode_error == "" && loaded[0].number[0] == 0.7)
+	packed: [32]u8
+	testing.expect(t, pack(schema, loaded, packed[:]))
+	for bad in ([]string{
+		"broken", `{"version":2,"group":"Standard"}`, `{"version":1,"group":"Other"}`,
+		`{"version":1,"group":"Standard","fields":[{"id":"metallic","kind":"Scalar","number":[2,0,0,0]}]}`,
+		`{"version":1,"group":"Standard","fields":[{"id":"metallic"},{"id":"metallic"}]}`,
+	}) {
+		invalid, message := resource_decode(schema, transmute([]u8)bad)
+		testing.expect(t, invalid == nil && message != "")
+	}
+	directory, dir_err := os.make_directory_temp("", "olib_material_", context.allocator)
+	testing.expect(t, dir_err == nil)
+	defer delete(directory)
+	defer _ = os.remove(directory)
+	path := fmt.tprintf("%s/material.json", directory)
+	defer _ = os.remove(path)
+	testing.expect_value(t, resource_save(schema, changed, path), "")
+	file_values, file_error := resource_load(schema, path)
+	defer values_dispose(file_values)
+	testing.expect(t, file_error == "" && file_values[1].number == changed[1].number)
+	changed[0].number[0] = 5
+	testing.expect(t, resource_save(schema, changed, path) != "")
+	again, again_error := resource_load(schema, path)
+	defer values_dispose(again)
+	testing.expect(t, again_error == "" && again[0].number[0] == 0.7)
+	missing, missing_error := resource_load(schema, fmt.tprintf("%s-missing", path))
+	testing.expect(t, missing == nil && missing_error != "")
 }

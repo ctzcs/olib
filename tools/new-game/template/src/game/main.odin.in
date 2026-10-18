@@ -1,0 +1,85 @@
+package main
+
+import foster "olib:foster"
+
+import "game:core"
+
+// 静态入口不 import 热重载；与 DLL 共用同一份 core 玩法/UI。
+Game :: struct {
+	services: core.Services,
+	resources: core.Resources,
+	instance: ^core.Instance,
+	failed: bool,
+}
+
+main :: proc() {
+	s := new(Game)
+	// Web 的 Run 注册浏览器帧循环后立即返回；状态由 shutdown 释放。
+	s.services.scale = core.has_arg("scaled") ? 1.25 : 1
+	config := foster.DefaultAppConfig("__PROJECT__", 960, 720)
+	if core.has_arg("narrow") do config.Width = 760
+	if core.has_arg("vulkan") do config.PreferredGraphicsDriver = .Vulkan
+	if core.has_arg("d3d12") do config.PreferredGraphicsDriver = .D3D12
+	app: foster.App
+	foster.InitApp(&app, config)
+	foster.AppSetUserData(&app, s)
+	app.StartupProc = startup
+	app.UpdateProc = update
+	app.RenderProc = render
+	app.ShutdownProc = shutdown
+	foster.Run(&app)
+	when ODIN_OS != .JS {
+		foster.Dispose(&app)
+		delete(app.GraphicsDevice.WindowRenderTarget.Attachments)
+		failed := s.failed
+		free(s)
+		exit_if_failed(failed)
+	}
+}
+
+startup :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Game)
+	s.services.app = app
+	if !core.resources_init(&s.resources, &s.services) {
+		s.failed = true
+		foster.Exit(app)
+		return
+	}
+	ok: bool
+	s.instance, ok = core.create(&s.services)
+	if !ok {
+		s.failed = true
+		foster.Exit(app)
+	}
+}
+
+update :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Game)
+	if s.failed do return
+	when ODIN_OS != .JS {
+		if foster.KeyboardPressed(&app.Input.State.Keyboard, .Escape) do foster.Exit(app)
+	}
+	s.services.input = core.read_input(app)
+	core.update(s.instance, &s.services, f64(app.Time.Delta))
+}
+
+render :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Game)
+	if s.failed || !app.GraphicsDevice.InFrame do return
+	target := foster.DrawableTargetFromWindow(&app.Window)
+	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, {16, 23, 33, 255})
+	core.render(s.instance, &s.services, f64(app.Time.Delta))
+}
+
+shutdown :: proc(app: ^foster.App) {
+	s := foster.AppGetUserDataAs(app, Game)
+	when ODIN_OS != .JS {
+		wait_for_gpu(app)
+	}
+	core.destroy(s.instance)
+	core.resources_dispose(&s.resources)
+	when ODIN_OS == .JS {
+		foster.AppSetUserData(app, nil)
+		free(s)
+	}
+}

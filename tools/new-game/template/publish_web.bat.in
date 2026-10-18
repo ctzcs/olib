@@ -1,0 +1,22 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+if not defined OLIB set "OLIB=__OLIB__"
+if not exist build\publish\web mkdir build\publish\web
+rem Foster Web only uses SDL types. No SDL functions may remain in the WASM imports.
+odin build src/game "-collection:olib=%OLIB%" -collection:game=src -target:js_wasm32 -define:SDL3_WASM_LIB=SDL3 -o:speed -out:build/publish/web/__PROJECT__.wasm
+if errorlevel 1 exit /b 1
+for /f "delims=" %%R in ('odin root') do set "GAME_ODIN_DIR=%%R"
+copy /y "%GAME_ODIN_DIR%\core\sys\wasm\js\odin.js" build\publish\web\odin.js >nul
+if errorlevel 1 exit /b 1
+copy /y "%OLIB%\foster\internal\web\foster.js" build\publish\web\foster.js >nul
+if errorlevel 1 exit /b 1
+copy /y index.html build\publish\web\index.html >nul
+if errorlevel 1 exit /b 1
+copy /y assets\fonts\OFL.txt build\publish\web\FONT-LICENSE.txt >nul
+if errorlevel 1 exit /b 1
+echo Published: build\publish\web
+if /i not "%~1"=="serve" exit /b 0
+echo Preview: http://127.0.0.1:8138/ - Ctrl+C to stop
+python -m http.server 8138 --bind 127.0.0.1 --directory build\publish\web
+exit /b %errorlevel%

@@ -1,0 +1,12 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+if not defined OLIB set "OLIB=__OLIB__"
+if not exist build\dev mkdir build\dev
+odin build src/editor "-collection:olib=%OLIB%" -collection:game=src -debug -out:build/dev/__PROJECT__.exe
+if errorlevel 1 exit /b 1
+for /f "delims=" %%R in ('odin root') do set "GAME_ODIN_DIR=%%R"
+copy /y "%GAME_ODIN_DIR%\vendor\sdl3\SDL3.dll" build\dev\SDL3.dll >nul
+if errorlevel 1 exit /b 1
+build\dev\__PROJECT__.exe %*
+exit /b %errorlevel%

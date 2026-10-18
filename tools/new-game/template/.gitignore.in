@@ -1,0 +1,7 @@
+build/
+library/
+*.exe
+*.pdb
+*.lib
+*.exp
+.olib-reload-*

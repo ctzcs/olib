@@ -5,9 +5,21 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 
-Pass_Draw :: enum { Fullscreen, Preview_Model }
+Pass_Draw :: enum { Fullscreen, Preview_Model, Model, Sprite }
 Pass_Frame :: enum { Current, Previous }
 Target_Format :: enum { Color, Float16, Float32 }
+
+// Default 保留调用方状态；Model 默认不透明、背面剔除、Less 深度读写。
+Pass_Cull :: enum { Default, None, Front, Back }
+Pass_Blend :: enum { Default, Opaque, Alpha, Additive, Premultiplied }
+Pass_Depth :: enum { Default, Off, Less, Less_Equal, Equal, Always }
+Pass_Write :: enum { Default, On, Off }
+Pass_State :: struct {
+	cull: Pass_Cull,
+	blend: Pass_Blend,
+	depth: Pass_Depth,
+	depth_write: Pass_Write,
+}
 
 Target_Desc :: struct {
 	// width/height 同时为 0 时跟随预览尺寸；scale=0 表示 1。
@@ -39,9 +51,26 @@ Pass_Desc :: struct {
 	disabled: bool, // 缺省启用；运行时 checkbox 不改写源声明。
 	draw: Pass_Draw,
 	inputs: []Pass_Input,
+	// Sprite 当前帧绑定到此 Texture 字段；空值表示不使用帧贴图，不占用隐式槽位。
+	sprite_texture: Field_Ref,
 	// 同一参数组可重复使用；如横/纵模糊分别覆盖 direction。
 	values: []Pass_Value,
 	target: Target_Desc,
+	state: Pass_State,
+}
+
+// Model 是可挂在网格上的有序材质 Pass，共享外部颜色/深度目标。
+// 图像效果仍使用 Preview_Model / Fullscreen 和各自独立的图目标。
+effect_is_model :: proc(e: Effect_Desc) -> bool {
+	return len(e.passes) > 0 && e.passes[0].draw == .Model
+}
+
+effect_is_sprite :: proc(e: Effect_Desc) -> bool {
+	return len(e.passes) > 0 && e.passes[0].draw == .Sprite
+}
+
+effect_is_material :: proc(e: Effect_Desc) -> bool {
+	return effect_is_model(e) || effect_is_sprite(e)
 }
 
 Effect_Desc :: struct {
@@ -59,10 +88,26 @@ effect_order :: proc(e: Effect_Desc, schemas: []Schema) -> (order: []int, error:
 		return nil, "Effect requires a name and 1..32 passes"
 	}
 	output_found := false
+	model := effect_is_model(e)
+	sprite := effect_is_sprite(e)
+	object := model || sprite
 	for p, i in e.passes {
+		if p.draw < .Fullscreen || p.draw > .Sprite do return nil, "Invalid pass draw kind"
+		if (p.draw == .Model) != model || (p.draw == .Sprite) != sprite {
+			return nil, "Model, Sprite and image graph passes cannot mix"
+		}
+		if p.state.cull < .Default || p.state.cull > .Back ||
+			p.state.blend < .Default || p.state.blend > .Premultiplied ||
+			p.state.depth < .Default || p.state.depth > .Always ||
+			p.state.depth_write < .Default || p.state.depth_write > .Off {
+			return nil, "Invalid pass render state"
+		}
+		if object && (p.output != e.output || len(p.inputs) != 0 || p.target != e.passes[0].target) {
+			return nil, "Material passes must share one target description and cannot sample graph targets"
+		}
 		if p.id == "" || p.output == "" do return nil, "Pass id/output cannot be empty"
 		for prior in e.passes[:i] {
-			if p.id == prior.id || p.output == prior.output {
+			if p.id == prior.id || (!object && p.output == prior.output) {
 				return nil, "Pass IDs and output targets must be unique"
 			}
 		}
@@ -72,6 +117,16 @@ effect_order :: proc(e: Effect_Desc, schemas: []Schema) -> (order: []int, error:
 			if candidate.name == string(p.params) do schema = &candidate
 		}
 		if schema == nil do return nil, fmt.tprintf("%s: unknown parameter group %s", p.id, p.params)
+		if model && (schema.preview != "3d" || e.preview == "2d") do return nil, "Model material requires 3d schemas and preview"
+		if sprite && (schema.preview != "2d" || e.preview == "3d") {
+			return nil, "Sprite material requires 2d schemas and preview"
+		}
+		if p.sprite_texture != "" {
+			field := field_index(schema^, string(p.sprite_texture))
+			if !sprite || field < 0 || schema.fields[field].kind != .Texture {
+				return nil, "sprite_texture requires a Sprite pass Texture field"
+			}
+		}
 		if e.preview == "2d" && p.draw == .Preview_Model && schema.preview == "3d" {
 			return nil, "2d effect cannot contain a 3d model pass"
 		}
@@ -156,6 +211,7 @@ effect_clone :: proc(e: Effect_Desc) -> Effect_Desc {
 		q := &r.passes[i]
 		q.id = Pass_Id(strings.clone(string(p.id)))
 		q.label = strings.clone(p.label)
+		q.sprite_texture = Field_Ref(strings.clone(string(p.sprite_texture)))
 		q.params = Params_Ref(strings.clone(string(p.params)))
 		q.output = Target_Ref(strings.clone(string(p.output)))
 		q.inputs = make([]Pass_Input, len(p.inputs))
@@ -176,6 +232,7 @@ effect_dispose :: proc(e: ^Effect_Desc) {
 	for p in e.passes {
 		delete(string(p.id))
 		delete(p.label)
+		delete(string(p.sprite_texture))
 		delete(string(p.params))
 		delete(string(p.output))
 		for input in p.inputs {

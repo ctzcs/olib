@@ -1,0 +1,24 @@
+package core
+
+// 权威进度由会话拥有；动态历史由 world_init/world_dispose 管理，不保存表现资源。
+World :: struct {
+	x: f32,
+	score: i64,
+	elapsed: f64,
+	paused: bool,
+	history: [dynamic]i64,
+}
+
+world_init :: proc(w: ^World) {
+	w^ = {x = 100, history = make([dynamic]i64)}
+}
+
+world_dispose :: proc(w: ^World) {
+	delete(w.history)
+	w^ = {}
+}
+
+// UI 操作由游戏实例排队，规则函数恰好执行一次。
+Commands :: struct {
+	add_point, toggle_pause, reset: bool,
+}

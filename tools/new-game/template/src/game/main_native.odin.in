@@ -1,0 +1,17 @@
+#+build !js
+package main
+
+import "core:os"
+
+import foster "olib:foster"
+
+import SDL "vendor:sdl3"
+
+// 桌面专用的 GPU 等待和进程退出；浏览器构建不导入这些依赖。
+wait_for_gpu :: proc(app: ^foster.App) {
+	_ = SDL.WaitForGPUIdle(app.GraphicsDevice.Device)
+}
+
+exit_if_failed :: proc(failed: bool) {
+	if failed do os.exit(1)
+}

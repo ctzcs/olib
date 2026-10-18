@@ -1,0 +1,112 @@
+# __PROJECT__
+
+由 olib `tools/new-game` 生成的 Windows 开发、Windows/Web 发布的游戏起点。窗口、游戏与编辑器 UI 热重载、运行时编辑器和静态发布已接通；计分、移动与暂停是可删除的最小业务，用来验证接入。
+
+## 目录
+
+```text
+src/
+  core/           游戏代码：状态、规则、UI、实例和快照
+    services.odin 共享服务协议、资源与跨平台 storage
+  core_editor/    编辑器实现：会话、工具 UI、组合快照与 DLL 接入
+  editor/         薄常驻开发入口：窗口、资源、监听、DLL 切换和失败提示
+  game/           Windows/Web 薄发布入口
+```
+
+开发时编译 src/editor 为 EXE，运行中把 src/core_editor 及其导入的 core 编为一个 DLL；游戏和编辑器 UI 一起热替换。发布时编译 src/game，只静态调用 core。没有独立 host 包，服务协议和资源函数放 core/services.odin，资源由入口持有；editor 不静态导入 core_editor，也不运行静态游戏实例。
+
+Windows 和 Web 都编译 src/game。桌面专用调用用 game/main_native.odin 和 core/args_native.odin 隔离。玩法起步不拆 def/data/logic/view 等包；确有独立依赖或复用需求时，在 src/core 内拆子包；tools/check 自动识别子包与 vet 包名，改变依赖边界时同步规则。build 由脚本生成，内容和文档目录按需增加。
+
+## 生成文件
+
+留存的临时产物统一放项目根的 `library/`，按需创建且不提交、不整体发布：
+截图用 `library/screenshots/`，图像候选、参考图、提示词和交付前压缩包用 `library/imagegen/`，
+临时脚本、报告和诊断日志用 `library/tmp/`。不在根目录按任务另建 output、screenshots 或日期目录。
+同场景截图复用文件名；仅在用户要求或画面/输入变化确需验收时生成，文档与配置调整不额外截图。
+从发布目录验收时也应显式指定项目根的输出位置；模板本身不提供截图模式。
+
+`build/` 保留构建、测试、发布产物和工具构建日志。正式采用的游戏资源归 `assets/`；
+预编译 Shader 放所属模块的 `shaders/Compiled/`，字体子集与图集保留，不作为临时缓存清理。
+已有素材归并前检查引用，不覆盖同名文件或未经要求批量删除。
+若接入资源导入管线，派生 blob/manifest 独立放 `library/assets/`，只挑选所需资源复制到发布目录；
+不能整体删除或打包 library。测试私有目录、编译器隔离目录与同目录原子保存文件仍按各自生命周期管理。
+
+## 直接运行
+
+需要 Odin、Windows 图形环境和 olib。默认库路径为 `__OLIB__`；搬动目录后用环境变量 `OLIB` 指向库，并同步 ols.json。
+
+```bat
+play.bat
+```
+
+A/D 或方向键移动，Enter/按钮加分，Space/按钮暂停，New game 重开，F1 显示/隐藏编辑器，F5 重试编译，Esc 退出。窗口标题显示编译状态。失败时宿主在窗口内显示红色、非阻塞的错误摘要，区分 Build failed 与 Reload failed；已有模块时说明仍在运行旧版及版本号，首次失败说明尚未加载游戏。
+
+完整错误写入终端和 `build/hotreload-last-error.txt`。保存修复自动重试，F5 手动重试；等待及重新编译期间保留失败提示，只有新 DLL 实际加载成功后才清除。最后一次错误日志仍保留供回看。游戏 DLL 编译失败时提示也可用，因为反馈 UI 由常驻 `src/editor/main.odin` 持有并借用宿主字体，不属于 Editor DLL；失败不暂停旧游戏。
+
+## 平时改哪里
+
+| 文件 | 修改内容 |
+| --- | --- |
+| src/core/world.odin | 这一局要保留的数据 |
+| src/core/rules.odin | 玩法；把 MOVE_SPEED 从 220 改成 440，保存即重编生效 |
+| src/core/ui.odin | 界面；改 TITLE 或 ACCENT，保存后保留进度更新画面 |
+| src/core_editor/editor.odin | 开发期运行时面板；改布局或 TITLE，保存后保留游戏进度和面板开关热重载 |
+| src/core/core.odin | 组装、命令队列、快照和恢复默认值；静态版与动态版共用 |
+
+规则/UI 是普通 Odin 函数，接入代码集中在 src/editor/main.odin 和 core_editor/module.odin。World 及未消费操作队列自动按 JSON 字段编码，动态数组独立恢复。新增字段要在恢复路径设置缺省值并验证；不兼容格式升级 STATE_VERSION 并实现迁移，否则保留旧模块、拒绝切换。不能静默清空游戏。宿主服务协议改变则升级 core.SERVICES_VERSION 并重启。
+
+默认保留位置、分数、历史、时间、暂停、面板开关和游戏/编辑器的待处理按钮操作。UI/Clay/GPU 对象重建，瞬时交互重置；以后新增相机、背包或设置状态时放入 core.State 的自有数据，并补快照测试。热重载不是磁盘存档，也不隔离游戏崩溃。
+
+监听范围在 src/editor/main.odin 的 Watch.roots：core_editor、core（递归含子包）。新增外部内容或 #load 资源时显式加入；editor 入口、core/services.odin 的服务协议/资源函数、core/args_native.odin、宿主字体、olib 和编译器改动需重启。服务 ABI 变化升级 core.SERVICES_VERSION，游戏快照版本为 core.STATE_VERSION，编辑器快照版本为 core_editor.EDITOR_STATE_VERSION；任一状态格式不兼容时拒绝切换，不能静默重开。热重载延迟包含检测和编译耗时。
+
+## 边玩边编辑
+
+开发版默认显示右侧 LIVE EDITOR，F1 可收起；游戏在左侧继续运行。面板可按步长修改位置、增减分数以及暂停/继续，操作在下一次 Update 经 core 的规则函数校验后生效。鼠标交互归属保持到松开，悬停编辑器时不触发游戏键盘快捷键；离焦或隐藏会取消瞬时输入；热重载重建游戏与编辑器 UI，取消瞬时捕获，按住的鼠标必须先松开才会接收新操作。
+
+core_editor 的 Session 持有编辑器 UI、待处理命令和面板开关，与游戏实例都归 DLL 所有。module.odin 的组合快照保存 core 编码的游戏数据以及编辑会话持久数据；UI、GPU 资源和指针不进入快照，恢复时独立分配并重建。游戏和编辑器的待处理命令各在下一次 Update 消费一次；候选 load 不消费旧命令、不改旧局面或入口资源。编译、恢复或版本校验失败时保留旧游戏和编辑器。
+
+这是当前运行局面的编辑面板，不是场景文件编辑器：没有磁盘保存、关卡文档或撤销历史。新增这类功能时按编辑工具约定补文档与事务。普通编辑器 UI 放在 src/core_editor，业务修改规则放在 core/rules.odin，不把编辑器引入 core 或发布入口。
+
+发布入口 src/game/main.odin 只组装 core；开发入口 src/editor 动态加载 core_editor DLL，模块组装 core 和编辑器实现。发布构建不包含 editor、core_editor 或开发加载器，tools/check 读取实际源码依赖清单检查隔离，也检查 editor 没有静态带入 core_editor。
+
+## 检查和发布
+
+```bat
+odin run tools/check
+publish.bat
+```
+
+check 自动发现单元测试，检查依赖边界，并编译宿主、动态库、桌面静态入口与 Web WASM，检查两种发布的依赖隔离与 Web 的 SDL 函数泄漏。直接运行 play.bat 可手动体验游戏规则、游戏 UI 和编辑器 UI 热重载；项目不包含自动改源码、点击或截图的测试模式。
+
+publish 输出 `build/publish/win-x64`，分发整个目录。静态入口复用同一份玩法/UI，字体嵌入，不依赖源码、Odin 或 Editor DLL；仅需随包的 SDL3.dll。可直接从发布目录启动游戏。
+
+## Web 静态发布
+
+```bat
+publish_web.bat
+publish_web.bat serve
+```
+
+输出 build/publish/web：游戏 WASM、index.html、odin.js、foster.js 和字体许可。分发这个目录的全部文件到静态 HTTP/HTTPS 站点；本地预览用 serve（需要 Python），打开 http://127.0.0.1:8138/，Ctrl+C 停止。不能双击 HTML 用 file:// 运行。普通发布只需要 Odin 与 olib，不需要 Python、Node 或 Emscripten。
+
+Web 与桌面复用 core，使用 Foster WebGL2 后端和嵌入的字体。浏览器需要支持 WebAssembly/WebGL2；已验证 Chromium。Web 不含 editor、core_editor、监听器、编译器进程或 DLL，也不支持热重载；重新发布后刷新页面会新开一局，不保留进度。用户存储已默认接通；这份最小业务尚未实现自动保存或恢复进度。
+
+main 的游戏状态在堆上，Web 的 Run 返回后继续存活，shutdown 释放游戏资源；不能在 main 返回时释放它。浏览器端没有桌面命令行参数，Esc 不退出游戏；刷新重新开始。调试日志默认隐藏，URL 加 ?debug=1 可查看，启动错误会显示。
+
+构建脚本使用 -define:SDL3_WASM_LIB=SDL3，避免新版 Odin 的 SDL 类型依赖尝试链接默认 env.o；这不会提供 SDL 实现，WASM 不得有 SDL 函数导入，tools/check 会验证。core.read_input 的 focus/F1 查询仅在桌面编译。后续玩法若引入文件系统、音频或自定义 Shader，仍需检查对应能力的 Web 支持；存储已统一使用 kit/storage 与 Foster 存储容器；业务不能直接导入 core:os。其他桌面平台尚未验证。
+
+## 默认存储
+
+core/services.odin 通过 `olib:kit/storage` 初始化根，editor/game 入口持有 `Services.assets`（资源只读容器）和 `Services.user_storage`（用户可写容器）。core/core_editor 业务借用容器，直接用 Foster 的 ReadAllBytes、WriteAllBytes 等 API 读写相对路径；每次写入检查返回值。
+
+例如 core 的保存操作收到 services 服务后，可使用 `foster.WriteAllBytes(services.user_storage, "save.json", bytes)`，其中 bytes 由业务编码产生；检查返回值并向用户报告失败，不把它当作自动存档。
+
+桌面资源根在开发期为项目目录、发布期为 exe 目录；Web 资源根为 Foster 虚拟 FS，不自动下载站点文件。嵌入字体继续使用 #load。Windows 用户数据位于 `%APPDATA%/__PROJECT__`，Web 位于当前源的 `/foster/__PROJECT__/` 虚拟命名空间并由 localStorage 保存；两者不互相同步。
+
+`core.STORAGE_ID` 不随窗口标题变化；开发版与桌面发布版共用此用户目录。根和容器在热重载期间由宿主持有，不写入游戏快照。存储不可用时初始化失败，不能退回当前目录写入。模板不自动写入存档；按业务实现保存/恢复、格式校验与迁移，不在候选 load 或模块 unload 中自动保存。
+
+## 所有权
+
+Editor App 持有窗口、设备、字体、存储容器和监听器；DLL 借用这些资源，持有游戏实例、编辑会话、游戏/编辑器 UI 和 Batcher。切换在帧更新开头等待 GPU idle 后发生；失败候选也完整释放。新增任务/回调时，在卸载前注销、停止并 join，外部注册仅在成功 activate 后进行。
+
+模板生成后源码归本项目维护，不自动覆盖升级。olib 是唯一库依赖，不依赖 olib_sample 或模板生成器。字体来源、字符集与许可见 assets/fonts。

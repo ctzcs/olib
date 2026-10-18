@@ -430,6 +430,19 @@ web_relocate_app :: proc(app: ^App) -> ^App {
 	heap_app.FileSystem.App = heap_app
 
 	device := &heap_app.GraphicsDevice
+	// [olib L-014] 默认材质与 Shader 内部引用也必须指向堆副本，不能保留 main 的栈地址。
+	defaults := &device.Defaults
+	for shader in ([]^Shader{&defaults.VertexShader, &defaults.FragmentShader,
+		&defaults.TexturedVertexShader, &defaults.TexturedFragmentShader,
+		&defaults.MsdfVertexShader, &defaults.MsdfFragmentShader}) {
+		shader.GraphicsDevice = device
+	}
+	defaults.BatchMaterial.Vertex.Shader = &defaults.VertexShader
+	defaults.BatchMaterial.Fragment.Shader = &defaults.FragmentShader
+	defaults.TexturedMaterial.Vertex.Shader = &defaults.TexturedVertexShader
+	defaults.TexturedMaterial.Fragment.Shader = &defaults.TexturedFragmentShader
+	defaults.MsdfMaterial.Vertex.Shader = &defaults.MsdfVertexShader
+	defaults.MsdfMaterial.Fragment.Shader = &defaults.MsdfFragmentShader
 	if device.HasWindowRenderTarget {
 		device.WindowRenderTarget.GraphicsDevice = device
 		for i in 0 ..< len(device.WindowRenderTarget.Attachments) {

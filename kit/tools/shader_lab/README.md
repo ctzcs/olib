@@ -84,8 +84,12 @@ lab.dispose(&editor.lab)
 
 ## 预设与文件接入
 
-- Save/Load 保存或读取当前 Shader 组的参数预设；Reset all 恢复整组，每个字段右侧 R 恢复单项。
+- 图像效果的 Save/Load 保存或读取当前 Shader 组的参数预设；模型 `.Model` 效果的同一组按钮
+  保存/载入**整个材质**（version=2：Effect 名、所有参数组及贴图），面板会显示范围提示。
+  Reset all 仍只恢复当前参数组，每个字段右侧 R 恢复单项。
   默认值来自当前成功加载的 Odin 声明。也可直接调用 `save_preset / load_preset / reset_defaults`。
+  整材质的显式 API 是 `save_material / load_material`，传入 Effect 索引。
+  全部参数和 GPU 贴图准备成功才原子替换；失败保留旧材质。异步文件请求同时绑定 Effect 名和布局版本。
 - 预设 JSON 由工具生成，无需手写。内容包含版本、组名、字段 ID/类型/值；图片尽量保存为相对
   预设文件的路径。加载按稳定 ID 匹配：新字段取默认值，已删除字段忽略，类型冲突拒绝加载。
   文件无效或新图片加载失败保留原值；保存使用同目录临时文件替换，失败保留原文件。
@@ -125,7 +129,8 @@ prepare_preview :: proc(data: rawptr, frame: lab.Preview_Frame, command: ^foster
 省略 `draw` 时工具直接绘制该命令；需要自定义相机或时间输入时，可在 draw 回调覆盖 b0，再调用
 `GraphicsDeviceDraw(frame.device, command)`。回调使用 prepare 描述的管线配置，不清空宿主目标。
 生成参数仍由工具绑定到片段 b1，Shader 入口/资源布局遵循当前 Shader Lab 协议。
-回调作用于效果中的 `.Preview_Model` Pass；`.Fullscreen` 使用内置全屏网格。
+回调作用于效果中的 `.Preview_Model`、`.Model` 和 `.Sprite` Pass；`.Fullscreen` 使用内置全屏网格。
+对象材质的显式 `state` 在 prepare 后应用，候选管线探测和实际绘制遵循相同规则。
 `Preview_Frame.pass` 为声明的 Pass ID，尺寸是该 Pass 的实际目标尺寸；
 实际绘制回调还提供效果时间、delta_time 和 frame_index。顶部 Host 按钮可切换内置/宿主模型。
 
@@ -189,6 +194,8 @@ HLSL 继续使用生成的 `_source / _history` 和对应 Sampler；不需要手
 | --- | --- |
 | `draw = .Fullscreen`（默认） | 全屏四边形，参数组采用现有 2d 顶点接口；禁用混合，完整写入目标 |
 | `draw = .Preview_Model` | 按参数组 2d/3d 使用当前模型或宿主回调；3D 自动带深度附件 |
+| `draw = .Sprite` | 游戏精灵材质 Pass；共享单个目标，使用 kit/rendering 的 Sprite 接口、默认预乘 Alpha |
+| `draw = .Model` | 可用于游戏模型的材质 Pass；整个 Effect 共用一个颜色/深度目标，按声明顺序绘制 |
 | `inputs[].frame = .Current`（默认） | 读取本帧生产者结果，自动按依赖排序，不要求声明顺序正确 |
 | `inputs[].frame = .Previous` | 读取上一模拟帧，目标自动启用双缓冲，允许跨帧循环 |
 | `target.width / height` | 同时指定固定像素尺寸；均为 0 时跟随预览尺寸 |
@@ -213,7 +220,19 @@ folder 标题前缀。均支持中文，字形须包含在宿主 MSDF 图集中�
 工作区只显示对应维度的效果，分别记住效果、Pass、最终/中间输出、预览载体、相机和页签。
 `X_Preview :: mat.Preview_Mode.Two_D / Three_D` 指定整个效果的工作区；它不改变各 Pass 的顶点接口。
 旧的 `"2d" / "3d"` 仍兼容，`.Auto` 与省略效果 Preview 一样按模型 Pass 推断。
-省略时兼容旧声明：含 3D `.Preview_Model` Pass 的效果归 3D，其余归 2D。
+省略时兼容旧声明：含 3D `.Preview_Model` 或 `.Model` Pass 的效果归 3D，其余归 2D。
+
+### 模型材质 / 本体 + 描边
+
+`olib_sample` 的 `Outlined_Passes` 使用两个 `.Model` Pass：本体背面剔除并写深度，描边
+外扩顶点、正面剔除、只读深度。二者必须使用同一个 output 和 target 描述，不接受图目标输入。
+库会调用 `rendering3d.model_material_draw`；游戏里的 `material3d` 示例也使用它。
+这里的“当前 Pass”显示从首个 Pass 累积绘制到选中 Pass 的结果，关闭某 Pass 只跳过绘制，
+不会清除其他 Pass 的颜色/深度。旧图像效果仍保留独立目标、输入拓扑和历史帧机制。
+
+保存后的材质 JSON 可由 `material.instance_load` 直接装载。游戏需要一起提供同一 Effect 定义和
+预编译 Shader；参数文件本身不是 Shader 包。Pass 定义、预览启停和相机不会写进材质 JSON。
+示例的描边颜色可在面板修改；宽度目前是 HLSL 常量，可以修改源码热重载，不是材质数值字段。
 3D 效果可以包含使用 2D 顶点接口的全屏模糊、合成和反馈，它们不会被拆到 2D 工作区；
 显式声明为 2D 的效果不能包含 3D 模型 Pass。`select_workspace(session, 0 / 1)` 可从宿主切换。
 首次加载默认进入 2D，打开其中第一个已声明效果；该维度没有效果则显示空工作区。
@@ -263,6 +282,9 @@ Odin 参数声明、HLSL、图片和字体资产归项目；库仅提供工具�
 `generated_directory` 通常设为项目的 `library/shader_dev`。每组生成
 `<组名>/params.generated.hlsli`，HLSL 使用相对于自身的 include 路径，保留 IDE 可读副本。
 传空字符串时只生成编译快照中的临时头文件，HLSL 应使用 `#include "params.generated.hlsli"`。
+截图归入所属项目的 `library/screenshots/`，需要留存的诊断副本归入 `library/tmp/`；
+同目录预设替换文件和编译器私有快照仍由工具按生命周期管理。完整规则见
+[生成文件约定](../../../prompts/new-project.md#生成文件与目录纪律)。
 默认最多 16 组；Odin 参数布局和效果整包成功后统一切换，失败保留上一版。
 
 ## 示例与检查入口
@@ -270,7 +292,8 @@ Odin 参数声明、HLSL、图片和字体资产归项目；库仅提供工具�
 在 `olib_sample` 运行 `run.bat shader_lab`。可追加 `embedded` 查看带偏移的嵌入区域；
 `source / params / cache` 参数指定项目路径。示例只负责启动接线，预览素材仍属于示例项目。
 截图与故障注入代码位于示例仓库的 `tools/shader_lab_checks`，提供 `shot / colors / smoke / features / multipass`
-入口；它们不进入库的工具包，也不是运行工具的必需依赖。
+入口；它们不进入库的工具包，也不是运行工具的必需依赖。仅选择与本次改动相关的检查，
+不把这些示例作为新项目默认任务；旧入口若写到其他位置，留存产物应归并到上述固定目录。
 
 `features embedded d3d12` 集中检查预设往返、默认值、失败回滚、过期文件请求、图片热更新、
 自定义预览和侧栏布局；不重复 smoke 的完整故障注入。原生对话框的实际选择由手动操作验收。
@@ -287,3 +310,11 @@ Odin 参数声明、HLSL、图片和字体资产归项目；库仅提供工具�
 `targets embedded d3d12` 集中检查仅选中效果持有目标、2D/3D 切换释放/重建、深度/MSAA、多 Pass resize、
 反馈重置与参数保留、候选包按当前选择热重载、空效果包和恢复声明，以及实际点击 Texture Clear 后恢复棋盘格；
 不跑完整 UI 点击序列或故障注入。
+
+### 精灵材质 / 阴影 + 本体
+
+`olib_sample` 的 `SpriteShadow_Passes` 使用 `.Sprite`：偏移阴影 + 本体。2D 工作区可选择该效果，
+预览直接调用 `rendering.sprite_material_draw`，游戏示例在 `src/material2d`。
+`.Sprite` 和旧 `.Preview_Model` 的顶点 uniform 接口不同；不能只改 draw 类型而沿用旧 Shader。
+整材质保存/载入同时适用于 Model 和 Sprite，按 Effect 名匹配，失败保留整个旧材质。
+Shader 接口与业务接入见 [kit/rendering](../../rendering/README.md)。

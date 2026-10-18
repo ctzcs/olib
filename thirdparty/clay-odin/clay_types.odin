@@ -3,6 +3,9 @@
 package clay
 
 Context :: struct {
+	// Optional olib backend hit testing; nil preserves upstream behavior.
+	pointerHitTest: PointerHitTest,
+	pointerHitTestUserData: rawptr,
 	maxElementCount: i32,
 	maxMeasureTextCacheWordCount: i32,
 	warningsEnabled: bool,

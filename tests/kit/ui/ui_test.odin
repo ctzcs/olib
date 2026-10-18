@@ -6,6 +6,7 @@ import "core:math"
 import "core:sync"
 import "core:testing"
 
+import tween "olib:core/tween"
 import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
 
@@ -13,13 +14,266 @@ import clay "olib:thirdparty/clay-odin"
 @(private)
 clay_test_mutex: sync.Mutex
 
+// ------------------------------------------------------------------------------
+// 子树视觉变换 —— 真实布局、绘制顶点、命中和 Tween 生命周期
+// ------------------------------------------------------------------------------
+
+@(private)
+visual_test_frame :: proc(ctx: ^UI_Context, visual: UI_Visual, enabled := true) -> UI_Interaction {
+	ui_begin(ctx, 1.0 / 60)
+	if enabled {
+		ui_set_visual(ctx, "visual-parent", visual)
+	}
+	state := ui_interact(ctx, "visual-child")
+	if clay.UI()(clay.ElementDeclaration{
+		id = clay.ID("visual-parent"),
+		layout = {sizing = {width = clay.SizingFixed(100), height = clay.SizingFixed(60)},
+			padding = clay.PaddingAll(10)},
+		backgroundColor = {200, 100, 50, 255},
+		border = {color = {255, 255, 255, 255}, width = {left = 2}},
+	}) {
+		if clay.UI()(clay.ElementDeclaration{
+			id = clay.ID("visual-child"),
+			layout = {sizing = {width = clay.SizingFixed(40), height = clay.SizingFixed(20)}},
+			backgroundColor = {255, 255, 255, 255},
+		}) {}
+	}
+	ui_translate_into(ctx, ui_end(ctx), &ctx.ops)
+	return state
+}
+
+@(test)
+visual_subtree_render_and_pointer_follow_last_display :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	ui_set_viewport(&ctx, {17, 23, 1000, 750}, 1.25)
+	v := UI_VISUAL_DEFAULT
+	v.offset = {200, 50}
+	v.pivot = {0, 0}
+	v.scale = {2, 2}
+	v.rotation = math.PI / 2
+	v.opacity = 0.5
+	visual_test_frame(&ctx, v)
+	bb := clay.GetElementData(clay.ID("visual-child")).boundingBox
+	testing.expect(t, bb == clay.BoundingBox{10, 10, 40, 20}, "visuals must not change layout")
+	testing.expect(t, len(ctx.ops) == 3, "parent, child, deferred border")
+	for op in ctx.ops {
+		testing.expect(t, op.transformed && op.color.A == 127, "border must inherit opacity too")
+	}
+	batch: foster.Batcher
+	foster.BatcherInit(&batch, nil)
+	defer foster.BatcherDispose(&batch)
+	foster.BatcherPushMatrixPosition(&batch, {999, 999})
+	saved := batch.Matrix
+	ui_render(&ctx, &batch, &ctx.ops)
+	testing.expect(t, batch.Vertices[0].Pos == foster.Vec2{267, 85.5})
+	testing.expect(t, batch.Matrix == saved && len(batch.MatrixStack) == 1)
+	// Child center (30,20) -> (160,110), then viewport conversion.
+	ui_set_pointer(&ctx, 217, 160.5, true)
+	pressed := visual_test_frame(&ctx, v)
+	testing.expect(t, pressed.pressed && pressed.hovered)
+	ui_set_pointer(&ctx, 217, 160.5, false)
+	released := visual_test_frame(&ctx, v)
+	testing.expect(t, released.clicked && released.released)
+	ui_set_pointer(&ctx, 54.5, 48, true)
+	testing.expect(t, !visual_test_frame(&ctx, v).hovered, "old untransformed bounds must not hit")
+	// Registration is frame-local; removing it restores both render and next-frame input.
+	visual_test_frame(&ctx, v, false)
+	testing.expect(t, len(ctx.visual_elements) == 0 && !ctx.ops[0].transformed)
+	testing.expect(t, visual_test_frame(&ctx, v, false).hovered)
+}
+
+@(test)
+visual_nested_text_image_clip_and_offscreen_entry :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 300, 200))
+	defer ui_dispose(&ctx)
+	font_image := foster.ImageFromEncoded(#load("testdata/abel-msdf.png"))
+	font := foster.MsdfFontMake(font_image, #load("testdata/abel-msdf.json"))
+	font.OwnsImage = true
+	defer foster.MsdfFontDispose(&font)
+	tex := foster.Texture{Width = 128, Height = 128}
+	ui_register_font(&ctx, &font, tex, .MSDF)
+	ui_begin(&ctx, 0)
+	outer := UI_VISUAL_DEFAULT
+	outer.offset = {60, 30}
+	outer.opacity = 0.5
+	inner := UI_VISUAL_DEFAULT
+	inner.offset = {5, 0}
+	inner.opacity = 0.5
+	ui_set_visual(&ctx, "clip-parent", outer)
+	ui_set_visual(&ctx, "image-child", inner)
+	if clay.UI()(clay.ElementDeclaration{
+		id = clay.ID("clip-parent"),
+		layout = {sizing = {width = clay.SizingFixed(100), height = clay.SizingFixed(60)}},
+		clip = {horizontal = true, vertical = true},
+	}) {
+		decl := ui_nine_slice_decl(&ctx, &tex, 12, 6)
+		decl.id = clay.ID("image-child")
+		decl.layout.sizing = {width = clay.SizingFixed(80), height = clay.SizingFixed(40)}
+		if clay.UI()(decl) {
+			theme := UI_THEME_DARK
+			ui_label(&ctx, &theme, "AV")
+		}
+	}
+	// Layout outside the viewport can still animate into view.
+	entry := UI_VISUAL_DEFAULT
+	entry.offset = {-400, 0}
+	ui_set_visual(&ctx, "offscreen", entry)
+	if clay.UI()(clay.ElementDeclaration{
+		id = clay.ID("offscreen"),
+		floating = {attachTo = .Root, offset = {450, 100}},
+		layout = {sizing = {width = clay.SizingFixed(20), height = clay.SizingFixed(20)}},
+		backgroundColor = {255, 255, 255, 255},
+	}) {}
+	ui_translate_into(&ctx, ui_end(&ctx), &ctx.ops)
+	text_count, nine_count := 0, 0
+	entry_found := false
+	for op in ctx.ops {
+		if op.kind == .Scissor_Start {
+			testing.expect(t, op.clip_x == 60 && op.clip_y == 30)
+		} else if op.msdf {
+			text_count += 1
+			testing.expect(t, op.transform.M31 == 65 && op.color.A == 63)
+		} else if op.texture != nil {
+			nine_count += 1
+			testing.expect(t, op.transform.M31 == 65 && op.color.A == 63)
+		} else if op.kind == .Quad && op.x0 == 450 {
+			entry_found = true
+			testing.expect(t, ui_visual_point(op.transform, {op.x0, op.y0}) == foster.Vec2{50, 100})
+		}
+	}
+	testing.expect(t, text_count == 2 && nine_count == 9 && entry_found)
+	ui_set_pointer(&ctx, 70, 40, false)
+	ui_begin(&ctx, 0)
+	testing.expect(t, clay.PointerOver(clay.ID("image-child")))
+	ui_end(&ctx)
+}
+
+@(test)
+visual_tween_interrupt_and_singular_input :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	visual := UI_VISUAL_DEFAULT
+	mgr := tween.manager_make()
+	defer tween.manager_delete(&mgr)
+	target := visual
+	target.offset = {100, 0}
+	h := tween.manager_add_tween_to(&mgr,
+		tween.make_ex(visual, target, 0, {duration = 1, transition = .Linear}, ui_visual_lerp), &visual)
+	tween.manager_update(&mgr, 0.5)
+	testing.expect(t, visual.offset.x == 50)
+	tween.manager_kill(&mgr, h)
+	tween.manager_add_tween_to(&mgr,
+		tween.make_ex(visual, UI_VISUAL_DEFAULT, 0, {duration = 0.2}, ui_visual_lerp), &visual)
+	tween.manager_update(&mgr, 0.2)
+	testing.expect(t, visual == UI_VISUAL_DEFAULT)
+	visual.scale = {0, 1}
+	visual_test_frame(&ctx, visual)
+	ui_set_pointer(&ctx, 50, 20, true)
+	testing.expect(t, !visual_test_frame(&ctx, visual).hovered)
+}
+
+@(private)
+visual_slider_frame :: proc(ctx: ^UI_Context, value: ^f32) {
+	ui_begin(ctx, 0)
+	v := UI_VISUAL_DEFAULT
+	v.offset = {200, 50}
+	v.pivot = {0, 0}
+	v.rotation = math.PI / 2
+	ui_set_visual(ctx, "slider-parent", v)
+	theme := UI_THEME_DARK
+	if clay.UI()(clay.ElementDeclaration{
+		id = clay.ID("slider-parent"),
+		layout = {sizing = {width = clay.SizingFixed(200), height = clay.SizingFixed(24)}},
+	}) {
+		ui_slider(ctx, &theme, "visual-slider", value)
+	}
+	ui_end(ctx)
+}
+
+@(test)
+visual_slider_drag_uses_inverse_transform :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	value: f32
+	visual_slider_frame(&ctx, &value)
+	ui_set_pointer(&ctx, 188, 150, true)
+	visual_slider_frame(&ctx, &value)
+	testing.expect(t, abs(value - 0.5) < 0.001 && ctx.active_id != 0)
+	ui_set_pointer(&ctx, 188, 500, true)
+	visual_slider_frame(&ctx, &value)
+	testing.expect(t, value == 1, "captured drag outside transformed bounds")
+	ui_set_pointer(&ctx, 188, 58, false)
+	visual_slider_frame(&ctx, &value)
+	testing.expect(t, abs(value) < 0.001 && ctx.active_id == 0)
+}
+
+@(private)
+visual_clip_frame :: proc(ctx: ^UI_Context) {
+	ui_begin(ctx, 0)
+	v := UI_VISUAL_DEFAULT
+	v.offset = {100, 50}
+	ui_set_visual(ctx, "clip-outer", v)
+	if clay.UI()(clay.ElementDeclaration{
+		id = clay.ID("clip-outer"),
+		layout = {sizing = {width = clay.SizingFixed(100), height = clay.SizingFixed(100)}},
+		clip = {horizontal = true, vertical = true},
+	}) {
+		// 浮动子树继承 attachment parent，且裁剪超出祖先的部分。
+		if clay.UI()(clay.ElementDeclaration{
+			id = clay.ID("clip-inner"),
+			floating = {attachTo = .Parent, offset = {60, 0}, zIndex = 2, clipTo = .AttachedParent},
+			layout = {sizing = {width = clay.SizingFixed(100), height = clay.SizingFixed(100)}},
+			clip = {horizontal = true, vertical = true},
+		}) {
+			if clay.UI()(clay.ElementDeclaration{
+				id = clay.ID("clip-target"),
+				layout = {sizing = {width = clay.SizingFixed(100), height = clay.SizingFixed(100)}},
+				backgroundColor = {1, 1, 1, 1},
+			}) {}
+		}
+	}
+	ui_translate_into(ctx, ui_end(ctx), &ctx.ops)
+}
+
+@(test)
+visual_floating_ancestry_and_nested_clip_match_input :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	visual_clip_frame(&ctx)
+	ui_set_pointer(&ctx, 180, 80, false)
+	ui_begin(&ctx, 0)
+	testing.expect(t, clay.PointerOver(clay.ID("clip-target")))
+	ui_end(&ctx)
+	visual_clip_frame(&ctx)
+	ui_set_pointer(&ctx, 230, 80, false)
+	ui_begin(&ctx, 0)
+	testing.expect(t, !clay.PointerOver(clay.ID("clip-target")), "outer clip must still reject input")
+	ui_end(&ctx)
+}
+
 // ---------------------------------------------------------------------------
 // 真实字体：CPU 烘焙与资源所有权（无 GPU）
 // ---------------------------------------------------------------------------
 
 @(test)
 font_bake_ascii_atlas :: proc(t: ^testing.T) {
-	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	data :: #load("../../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
 	source := foster.FontMake(data)
 	defer foster.FontDispose(&source)
 	font, ok := ui_font_bake_image(&source, 48)
@@ -45,7 +299,7 @@ font_bake_ascii_atlas :: proc(t: ^testing.T) {
 
 @(test)
 font_bake_default_and_explicit_ascii_have_codepoint_kerning :: proc(t: ^testing.T) {
-	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	data :: #load("../../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
 	source := foster.FontMake(data)
 	defer foster.FontDispose(&source)
 	points: [95]int
@@ -78,7 +332,7 @@ font_bake_default_and_explicit_ascii_have_codepoint_kerning :: proc(t: ^testing.
 
 @(test)
 font_bake_custom_charset_grows_atlas :: proc(t: ^testing.T) {
-	data :: #load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
+	data :: #load("../../../foster/tests/port_regression/fonts/Abel-Regular.ttf")
 	source := foster.FontMake(data)
 	defer foster.FontDispose(&source)
 	points: [95]int
@@ -622,7 +876,7 @@ offline_msdf_atlas_and_layout :: proc(t: ^testing.T) {
 		testing.expect(t, pixel.A == 255)
 	}
 	testing.expect(t, colored > 1000, "MSDF must carry independent RGB distances, not replicated SDF")
-	source := foster.FontMake(#load("../../foster/tests/port_regression/fonts/Abel-Regular.ttf"))
+	source := foster.FontMake(#load("../../../foster/tests/port_regression/fonts/Abel-Regular.ttf"))
 	defer foster.FontDispose(&source)
 	scale := foster.FontGetScale(&source, font.Size)
 	for ch in font.Characters {

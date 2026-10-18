@@ -70,6 +70,10 @@ main :: proc() {
 	// ---- 包检查：core/ 与 kit/ 下所有包（含没有测试的包），以及 tools/ 下的工具 ----
 	packages := discover_packages(c.root, {"core", "kit"})
 	for p in packages {
+		if p.has_tests {
+			report(&c, fmt.tprintf("layout %s", p.path), false,
+				"Move package tests into tests/<package path>; source packages must not contain @(test).")
+		}
 		run(&c, fmt.tprintf("check  %s", p.path),
 			"odin", "check", p.path, "-collection:olib=.", "-no-entry-point", "-vet",
 			fmt.tprintf("-vet-packages:%s", p.name))
@@ -80,15 +84,15 @@ main :: proc() {
 			"odin", "check", p.path, "-vet", fmt.tprintf("-vet-packages:%s", p.name))
 	}
 
-	// ---- 单元测试：core/ 与 kit/ 下含 @(test) 的包 ----
-	for p in packages {
-		if !p.has_tests do continue
-		exe_name, _ := strings.replace_all(p.path, "/", "_", context.temp_allocator)
-		run(&c, fmt.tprintf("test   %s", p.path),
-			"odin", "test", p.path, "-collection:olib=.", "-vet",
-			fmt.tprintf("-vet-packages:%s", p.name),
-			fmt.tprintf("-out:%s/test_%s%s", c.out, exe_name, EXE))
+	// ---- 集中单元测试：tests/core、tests/kit，与对应生产包在隔离目录中编译 ----
+	for p in discover_packages(c.root, {"tests/core", "tests/kit", "tests/tools"}) {
+		if p.has_tests do run_unit(&c, p)
 	}
+
+	// ---- 新游戏模板：全新生成、覆盖保护、游戏三种入口编译 ----
+	run(&c, "test   new-game template generation and builds",
+		"odin", "run", "tests/new_game", "-vet", "-vet-packages:main",
+		fmt.tprintf("-out:%s/new_game_regression%s", c.out, EXE))
 
 	// ---- foster：包检查 + 自带回归程序编译 ----
 	// foster/ 的实际 package 声明为 foster_framework，vet 必须按包名选择。
@@ -126,6 +130,14 @@ main :: proc() {
 				run(&c, fmt.tprintf("sample %s", s.name),
 					"odin", "build", s.path, fmt.tprintf("-collection:olib=%s", c.root),
 					fmt.tprintf("-out:%s/sample_%s%s", c.out, s.name, EXE))
+				if s.name == "hotreload" {
+					extension := ODIN_OS == .Windows ? "dll" : ODIN_OS == .Darwin ? "dylib" : "so"
+					run(&c, "sample hotreload game DLL",
+						"odin", "build", path_join(s.path, "game"), "-build-mode:dll",
+						fmt.tprintf("-collection:olib=%s", c.root), "-vet",
+						"-vet-packages:game,view,logic,data,def,contract",
+						fmt.tprintf("-out:%s/sample_hotreload_game.%s", c.out, extension))
+				}
 				if s.has_tests {
 					run(&c, fmt.tprintf("test   sample %s", s.name),
 						"odin", "test", s.path, fmt.tprintf("-collection:olib=%s", c.root),

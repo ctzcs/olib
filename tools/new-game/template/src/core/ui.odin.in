@@ -1,0 +1,70 @@
+package core
+
+import "core:fmt"
+
+import foster "olib:foster"
+import ui "olib:kit/ui"
+import clay "olib:thirdparty/clay-odin"
+
+// 分区：外观 / 生命周期 / 声明与最终像素绘制。
+TITLE :: "__PROJECT__"
+ACCENT :: foster.Color{100, 229, 185, 255}
+
+View :: struct {
+	ctx: ui.UI_Context,
+	batcher: foster.Batcher,
+	theme: ui.UI_Theme,
+}
+
+view_init :: proc(v: ^View, device: ^foster.GraphicsDevice, font: ^foster.MsdfFont,
+	texture: foster.Texture) -> bool {
+	if !ui.ui_init(&v.ctx, 960, 720) do return false
+	foster.BatcherInit(&v.batcher, device, "game")
+	v.theme = ui.UI_THEME_DARK
+	v.theme.body_font_id = u16(ui.ui_register_font(&v.ctx, font, texture, .MSDF))
+	v.theme.body_font_size = 18
+	v.theme.heading_font_size = 32
+	v.theme.primary = ACCENT
+	return true
+}
+
+view_dispose :: proc(v: ^View) {
+	ui.ui_dispose(&v.ctx)
+	foster.BatcherDispose(&v.batcher)
+}
+
+// 只读取世界，返回操作；游戏实例在下一次更新处理，不在 Render 改模拟。
+view_draw :: proc(v: ^View, w: ^World, target: foster.DrawableTarget,
+	mouse: foster.Vec2, down: bool, scale, dt: f32, region := foster.Rect{}) -> (commands: Commands) {
+	ctx := &v.ctx
+	viewport := region
+	if viewport.Width <= 0 {
+		viewport = {0, 0, f32(target.WidthInPixels), f32(target.HeightInPixels)}
+	}
+	ui.ui_set_viewport(ctx, viewport, scale)
+	ui.ui_set_pointer(ctx, mouse.x, mouse.y, down)
+	ui.ui_begin(ctx, dt)
+	root := ui.ui_column_decl(16)
+	root.layout.padding = clay.PaddingAll(24)
+	if clay.UI()(root) {
+		ui.ui_heading(ctx, &v.theme, TITLE)
+		ui.ui_label(ctx, &v.theme, "游戏 / Game")
+		ui.ui_label_ex(ctx, &v.theme, fmt.tprintf("Score: %d", w.score), ACCENT, 28)
+		ui.ui_label(ctx, &v.theme, fmt.tprintf("Time: %.1f    Position: %.1f", w.elapsed, w.x))
+		buttons := ctx.width < 420 ? ui.ui_column_decl(8) : ui.ui_row_decl(12)
+		if clay.UI()(buttons) {
+			commands.add_point = ui.ui_button_ex(ctx, &v.theme, "add", "Add point", .Primary)
+			commands.toggle_pause = ui.ui_button(ctx, &v.theme, "pause", w.paused ? "Resume" : "Pause")
+			commands.reset = ui.ui_button(ctx, &v.theme, "reset", "New game")
+		}
+		ui.ui_label_dim(ctx, &v.theme, "A/D: move   Space: pause   Enter: point")
+	}
+	foster.BatcherClear(&v.batcher)
+	ui.ui_draw(ctx, &v.batcher)
+	// 世界示意与 UI 都直接输出到最终像素目标。
+	fit := min(viewport.Width/640, 1)
+	foster.BatcherRect(&v.batcher, {viewport.X+20*fit, viewport.Y+viewport.Height-60, 600*fit, 2}, ACCENT)
+	foster.BatcherCircle(&v.batcher, {viewport.X+w.x*fit, viewport.Y+viewport.Height-80}, 12, 24, ACCENT)
+	foster.BatcherRender(&v.batcher, target)
+	return
+}

@@ -8,11 +8,13 @@
 | `queue3d.odin` | `Render_Queue($T)`：payload 由游戏定义，不透明从前到后、透明从后到前排序 |
 | `shader3d.odin` | `shader3d_pick_code`：按图形驱动选 spv / dxil / msl 字节码 |
 | `uniforms3d.odin` | `std140_write_matrix` / `std140_write_vec4`、WVP + World 顶点矩阵块、骨骼 palette 打包 |
+| `material3d.odin` | 模型材质的参数绑定、Pass 状态与有序绘制；与 Shader Lab 共用 |
+| `../rendering/material_library.odin` | 2D/3D 共用的材质加载与缓存；模型槽见 material3d |
 | `debug_draw3d.odin` | 立即模式调试线（线、盒、球、视锥、网格、骨架） |
 | `lod3d.odin` | 按屏幕高度选 LOD |
 | `shaders/` | DebugLine3D 的 HLSL 与编译产物；编译工具是 olib 根目录的 `tools/shaders` |
 
-光照模型、材质、阴影、后处理都**不在这里**，由游戏自己写。参考实现是同级仓库
+光照/材质的具体外观、阴影和后处理由游戏自己写；本包只提供材质执行机制。参考实现是同级仓库
 olib_sample 里的 `src/forward3d`（Standard PBR 前向渲染器：方向光、点光、聚光、半透明排序），
 复制到游戏里按画风改写即可。
 
@@ -191,3 +193,82 @@ for item in queue.items {
   用 `foster.BlendModeNonPremultiplied` 等预设则不用管。
 - **`shader3d_pick_code` 不传 msl 时，Metal 驱动拿到空字节码**，`foster.ShaderInit` 取 `Code[0]` 时会越界崩溃；要支持 Mac 就三种都传。
 - **Web 不适用**：Web 后端是 WebGL + 手写 GLSL ES（命名 uniform，不用 UBO），shadercross 不输出 GLSL。
+
+## 模型材质加载与使用
+
+材质加载与缓存位于公共包 [kit/rendering](../rendering/README.md)，2D/3D 共用。
+一般游戏从 `rendering.Material_Library` 接入。它把材质文件里的 Effect 名解析为已登记的效果，
+自动加载参数/贴图、创建 Shader 和绑定；业务不需要组装 `rendering.Material_Binding`。
+
+```odin
+// 场景/资源初始化：resources 为已有的 Foster StorageContainer。
+materials := rendering.Material_Library{device = device, storage = &resources}
+// 每种效果登记一次；schemas 和预编译代码按组对应。
+reason := rendering.materials_register(&materials, effect, schemas, shader_code)
+// 检查 reason，再继续。
+model := r3d.Model{mesh = &mesh}
+model.material, reason = rendering.material_load(&materials, "materials/hero.json")
+
+// 每帧；view 包含场景目标、相机 VP、时间。
+ok := r3d.model_draw(model, transform, view)
+// 场景退出：先停止绘制所有借用该库的模型，再释放。
+rendering.materials_dispose(&materials)
+```
+
+一次登记放在资源初始化代码，参考 `olib_sample/src/material3d/shaders.odin`。
+库复制 Effect/Schema，借用当前后端的 Shader 字节码（通常 #load）；按需创建 GPU 资源。
+`material_load` 每次创建**独立参数实例**，同一效果的 Shader/底层 Material、同路径的贴图共享。
+默认贴图为白色。所有 IO 直接通过同一个 `StorageContainer`，兼容其目录、ZIP/虚拟文件后端；
+根目录由项目按 `kit/storage` 的策略选择，或显式指定资产根，不绕开存储层读取系统文件。
+
+材质文件路径相对于存储根，贴图路径相对于材质文件；两者使用相对逻辑路径。
+Shader Lab 导出跨盘绝对贴图路径时，应先把贴图纳入游戏资产根并改为相对路径。
+`. / .. / 反斜杠` 会规范化，使相同逻辑贴图复用缓存。
+
+- `material_set_number(material, group, field, value)` 按稳定 ID 修改实例参数，检查类型、范围和有限值；
+  不影响其他实例。贴图/布局等资源改变通过重新加载材质文件处理。
+- `material_reload(&materials, model.material)` 重新读原文件，也可指定新文件；先准备完整候选，失败保留
+  原实例，成功保持对象地址，所有引用该实例的模型槽同时看到结果。
+- reload 只刷新材质内容；同路径贴图复用缓存，不自动监听或刷新 Shader/贴图文件。
+- 库拥有所有返回的材质和缓存，统一由 `materials_dispose` 释放，目前不逐项卸载或自动淘汰。
+  建议按场景/资源会话划分库；释放后不可再用模型中的旧指针。不要浅复制拥有数据的库或材质。
+- 库、设备和存储的地址、存储根及 Shader 字节码在使用期间保持稳定；所有 GPU 操作在主线程、
+  合法设备生命周期内进行，加载/重载放在提交绘制之外。
+
+`Model` 表示一个静态网格/primitive 的材质槽，不是新的场景或模型导入器；多 primitive 模型可持有多项。
+场景仍负责网格、变换、相机、颜色/深度目标以及绘制排序。
+
+## 模型材质执行
+
+以下是渲染器/Shader Lab 需要的底层接口，普通业务使用上面的 `material_load` 和 `model_draw`。
+
+`model_material_draw(device, effect, bindings, draw)` 把一个静态网格的所有 `.Model` Pass
+依次画到同一个外部颜色/深度目标。先用 `material.effect_order` 或 `instance_make` 校验定义；
+执行器借用资源，不加载文件、不清屏，也不决定场景排序。
+
+```odin
+// 每组一个绑定；samplers 按 Schema 中 Texture 字段顺序，空路径也要绑定默认纹理。
+bindings := []rendering.Material_Binding{
+    {instance.groups[0].schema, instance.groups[0].values, &surface_gpu, surface_samplers},
+    {instance.groups[1].schema, instance.groups[1].values, &outline_gpu, outline_samplers},
+}
+ok := r3d.model_material_draw(device, effect, bindings, {
+    mesh = &model_mesh, target = scene_target,
+    world_matrix = model_transform, view_projection = camera_view_projection,
+    time = elapsed,
+})
+```
+
+每次提交重新绑定数值、纹理和 Pass 覆盖，因此不同实例可顺序复用同一批 `foster.Material`。
+调用期间所有指针保持有效；Shader/Material 地址不能在初始化后因容器扩容而移动。
+空 `enabled` 使用声明值，`pass_limit=0` 绘制全部。预览用 prepare/submit 回调扩展网格和绘制，
+显式 Pass.state 在 prepare 后应用；Shader Lab 的候选管线探测也使用相同状态。
+
+这一条路径的 Shader 接口为静态顶点格式、vertex b0 的 WVP+World（128B）、fragment b0 的
+Clock/Pointer/Tint（48B）、fragment b1 的 material.pack 参数，以及 space2 的纹理。
+Clock=(time, delta_time, frame, 0)，Pointer=(normalized x/y, target width/height)，Tint=白色。
+须提供有效世界矩阵和 VP，不能把零矩阵当单位阵。
+
+首版不提供蒙皮、阴影 Pass 调度、透明物排序、顶点材质参数或逐模型后处理。
+示例描边沿顶点法线外扩，宽度是 HLSL 常量，颜色属于材质参数；硬边/非均匀缩放的法线和描边策略由 Shader 作者处理。
+发布游戏使用预编译 Shader，不 import Shader Lab 或 shaderdev。Web Shader 仍需单独适配 GLSL。

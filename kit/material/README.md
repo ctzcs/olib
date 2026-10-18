@@ -59,8 +59,11 @@ HLSL 参数名统一添加 `_` 前缀：Odin 的 `strength` 对应 `_strength`�
 支持 `Scalar / Vector2 / Vector3 / Color / Texture_Path`，兼容旧基础类型 + ui 标签；暂不支持矩阵、通用数组、整数、
 嵌套结构体或 vertex 材质参数。
 
-这个包没有实现材质存档格式/资源管线导入器。Shader Lab 支持显式导出预览参数快照，
-不把预览会话当成宿主材质文档，也不改写 Odin 默认值。
+`resource_encode/decode` 提供单参数组 JSON（version=1，兼容 Shader Lab 预设）；
+`instance_encode/decode` 提供模型材质 JSON（version=2，包含 Effect 名和全部参数组）。
+字节接口没有文件系统依赖，可以接 `kit/storage`；桌面另有原子文件保存与相对贴图路径处理的
+`resource_save/load`、`instance_save/load`。这不是资产导入器；GPU 纹理仍由游戏资产系统加载。
+Shader Lab 显式导出当前参数，不自动修改 Odin 默认值或宿主材质文档。
 
 ## 多 Pass 声明
 
@@ -69,3 +72,44 @@ HLSL 参数名统一添加 `_` 前缀：Odin 的 `strength` 对应 `_strength`�
 `Previous` 边跨帧，不参与排序；错误文本借用至临时分配器重置。
 `effect_clone / effect_dispose` 复制和释放全部嵌套数据。
 声明和 GPU 执行示例见 [Shader Lab](../tools/shader_lab/README.md#odin-多-pass-与历史帧)。
+
+## 挂在对象上的多 Pass 材质
+
+层级为 **材质实例 → Effect 定义 → Pass → Shader**。`foster.Material` 仍是单次绘制的底层
+绑定；模型使用的 `material.Instance` 拥有各参数组的值和贴图路径，多份实例可以共享 Effect 和 GPU Shader。
+
+把每个 Pass 声明为 `draw = .Model`，全部 `output` 指向 Effect.output，`target` 描述相同：
+
+```odin
+passes := []mat.Pass_Desc{
+    {id = "body", params = "Surface", draw = .Model, output = "color",
+        state = {cull = .Back, blend = .Opaque, depth = .Less, depth_write = .On}},
+    {id = "outline", params = "Outline", draw = .Model, output = "color",
+        state = {cull = .Front, blend = .Opaque, depth = .Less_Equal, depth_write = .Off}},
+}
+```
+
+- 模型 Pass 按声明顺序绘制**同一网格**，共享外部目标的颜色和深度，每 Pass 之间不清屏。
+  `target` 用于 Shader Lab 建预览目标；游戏渲染器提供自己的场景目标。
+- `state` 支持剔除、混合、深度比较和深度写入。Model 默认不透明、背面剔除、Less 深度读写；
+  显式 `Default` 保留执行器/宿主状态。Alpha 是非预乘，Additive 是 One+One。
+- `values` 是 Pass 固定覆盖，临时应用，不修改材质实例；面板的 Pass 启停只是预览状态。
+- Model 不能混用 Fullscreen/Preview_Model，也不能使用图目标输入或历史帧；这些仍由图像效果执行。
+  图像效果继续要求输出唯一，不能靠重名输出叠加模型。
+
+`instance_make(effect, schemas)` 校验定义并独立拥有 Schema/Value；`instance_dispose` 释放。
+`instance_load(effect, schemas, path)` 返回独立候选，失败不改原实例。文件保存 Effect 的稳定名和
+参数值，**不打包 Shader 或 Pass 定义**；运行时资源表必须能把这个名字解析为随游戏发布的同一份定义。
+多个 Pass 引用相同参数组时共用该组数值，可用 Pass.values 固定区分。
+
+GPU 执行见 [rendering3d](../rendering3d/README.md#模型材质执行)。完整实例见
+`olib_sample/src/material3d`，Shader/参数的唯一来源是 `olib_sample/src/shader_lab`。
+游戏业务默认使用 [Material_Library](../rendering/README.md#公共材质资源)：
+`material_load` 自动解析效果并加载 Shader/纹理，赋给 `Model.material` 后调用 `model_draw`。
+这里的 Instance 编解码接口留给资源层和工具使用，不要求每个游戏手动组装 GPU 绑定。
+
+2D 使用 `.Sprite` Pass，与 `.Model` 共用 Instance、资源格式和公共加载器。
+一个 Effect 内不能混合 Sprite、Model 或图像效果；Sprite 使用 2d 参数组，Model 使用 3d。
+Sprite 的 `sprite_texture` 指定当前帧覆盖的 Texture 字段，无隐式贴图槽。
+Sprite 默认预乘 Alpha、无剔除和深度读写；`.Premultiplied` 可显式声明预乘混合。
+2D 接口及示例见 [材质 Sprite](../rendering/README.md#材质-sprite)。

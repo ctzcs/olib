@@ -1,0 +1,51 @@
+#+test
+package main
+
+// 无窗口测试：失败信息跨编译阶段保留，加载成功才清除，日志不因恢复而丢失。
+import "core:fmt"
+import "core:mem"
+import "core:os"
+import "core:strings"
+import "core:testing"
+
+import reload "olib:core/hotreload"
+
+@(test)
+feedback_retains_failure_until_install_and_keeps_full_log :: proc(t: ^testing.T) {
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	defer mem.tracking_allocator_destroy(&track)
+	context.allocator = mem.tracking_allocator(&track)
+	defer testing.expect_value(t, len(track.allocation_map), 0)
+	temp, err := os.make_directory_temp("", "game_feedback_", context.allocator)
+	testing.expect(t, err == nil)
+	defer delete(temp)
+	defer _ = os.remove(temp)
+	f := Feedback{log_path = fmt.aprintf("%s/error.txt", temp)}
+	defer feedback_dispose(&f)
+	defer _ = os.remove(f.log_path)
+	error1 := "Game build failed\nmain.odin(9:2) Error: Undeclared name: missing\nsource detail"
+	feedback_update(&f, .Error, error1)
+	testing.expect_value(t, f.summary, "Error: Undeclared name: missing")
+	for status in ([]reload.Build_Status{.Waiting, .Compiling, .Ready}) {
+		feedback_update(&f, status, "")
+		testing.expect_value(t, f.diagnostic, error1)
+	}
+	feedback_update(&f, .Error, "Second build error")
+	testing.expect_value(t, f.diagnostic, "Second build error")
+	feedback_update(&f, .Error, "Candidate rejected state", load_failed = true)
+	testing.expect(t, f.load_failed)
+	feedback_update(&f, .Error, "Candidate rejected state")
+	testing.expect(t, f.load_failed)
+	feedback_update(&f, .Live, "", installed = true)
+	testing.expect(t, f.diagnostic == "" && f.summary == "" && !f.load_failed)
+	log, read_err := os.read_entire_file(f.log_path, context.temp_allocator)
+	testing.expect(t, read_err == nil && string(log) == "Candidate rejected state")
+}
+
+@(test)
+feedback_summary_is_short_and_preserves_utf8 :: proc(t: ^testing.T) {
+	long := strings.repeat("错误", 100, context.temp_allocator)
+	summary := feedback_summary(long)
+	testing.expect_value(t, summary, fmt.tprintf("%s...", strings.repeat("错误", 70, context.temp_allocator)))
+}

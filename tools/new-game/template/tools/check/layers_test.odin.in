@@ -1,0 +1,149 @@
+#+test
+package main
+
+import "core:fmt"
+import "core:os"
+import "core:testing"
+
+@(test)
+forbidden_dependencies_and_static_isolation :: proc(t: ^testing.T) {
+	for pair in ([][2]string{{"core", "game:editor"}, {"core", "game:core_editor"},
+		{"game", "game:core_editor"}, {"editor", "game:core_editor"}, {"core_editor", "game:editor"},
+		{"game", "game:core_editor/inspector"}, {"editor", "game:core_editor/inspector"},
+		{"core_editor", "game:game"}, {"core_editor", "game:host"}, {"host", "game:core"},
+		{"host", "game:editor"}, {"editor", "game:editor/play"}, {"editor/play", "game:editor"},
+		{"game", "game:editor"}, {"core", "game:game"}, {"editor", "game:development"},
+		{"game", "olib:core/hotreload"}, {"core", "olib:core/devbuild"},
+		{"core", "olib:foster/internal/foo"}, {"core", "../editor"}}) {
+		testing.expectf(t, !allowed(pair[0], pair[1], false), "must reject %v", pair)
+	}
+	testing.expect(t, allowed("game", "game:core", false))
+	testing.expect(t, allowed("core_editor", "game:core", false))
+	testing.expect(t, allowed("core_editor", "olib:core/hotreload", false))
+	testing.expect(t, !allowed("core", "game:host", false))
+	testing.expect(t, allowed("core", "olib:kit/storage", false))
+	testing.expect(t, !allowed("host", "olib:kit/ui", false))
+	testing.expect(t, !allowed("editor", "game:host", false))
+	testing.expect(t, allowed("editor", "olib:core/hotreload", false))
+	testing.expect(t, !allowed("editor", "game:editor", false))
+	testing.expect(t, !allowed("editor/play", "game:core", false))
+	testing.expect(t, allowed("editor", "game:core", false))
+}
+
+@(test)
+split_core_dependencies_preserve_pure_layers :: proc(t: ^testing.T) {
+	allowed_pairs := [][2]string{
+		{"core", "game:core/logic/combat"},
+		{"core/def/units", "game:core/def/common"},
+		{"core/data/units", "game:core/def/units"},
+		{"core/logic/combat", "game:core/data/units"},
+		{"core/logic/combat", "game:core/logic/query/path"},
+		{"core/logic/query/path", "game:core/data/grid"},
+		{"core/view/hud", "game:core/logic/query"},
+		{"core/view/hud", "game:core/logic/query/path"},
+		{"core/view/hud", "olib:kit/ui"},
+		{"core/content/maps", "game:core/def/maps"},
+		{"core/content/maps", "game:core/logic/validation"},
+		{"core/content/maps", "game:core/ids"},
+		{"core/combat", "game:core/logic/combat"},
+		{"core/combat", "game:core/effects"},
+		{"core_editor/inspector", "game:core/data/units"},
+		{"core_editor/inspector", "game:core/ids"},
+		{"tools/map_editor", "game:core_editor/inspector"},
+		{"core/ids", "core:strings"},
+	}
+	for pair in allowed_pairs {
+		testing.expectf(t, allowed(pair[0], pair[1], false), "must allow %v", pair)
+	}
+	for source in ([]string{"core/def/units", "core/data/units", "core/logic/combat",
+		"core/logic/query/path", "core/view/hud", "core/content/maps", "core/combat"}) {
+		for dep in ([]string{"game:core", "game:host", "game:game", "game:core_editor/inspector",
+			"olib:core/hotreload", "olib:core/devbuild/process", "olib:kit/shaderdev",
+			"olib:thirdparty/odin-imgui", "olib:foster/internal/foo"}) {
+			testing.expectf(t, !allowed(source, dep, false), "%s must reject %s", source, dep)
+		}
+	}
+	for source in ([]string{"core/def/units", "core/data/units", "core/logic/combat", "core/logic/query/path"}) {
+		for dep in ([]string{"olib:foster", "olib:kit/ui", "vendor:sdl3", "game:core/content",
+			"game:core/view/hud", "game:core/combat"}) {
+			testing.expectf(t, !allowed(source, dep, false), "%s must stay pure: %s", source, dep)
+		}
+		testing.expect(t, allowed(source, "olib:core/handle/array", false))
+	}
+	for pair in ([][2]string{
+		{"core/def", "game:core/data"}, {"core/data", "game:core/logic"},
+		{"core/view/hud", "game:core/logic"}, {"core/view/hud", "game:core/logic/combat"},
+		{"core/view/hud", "game:core/logic/query2"}, {"core/logic/query", "game:core/logic/combat"},
+		{"core/logic/query", "game:core/logic"}, {"core/ids", "game:core/def"},
+		{"core/ids", "olib:core/handle/array"}, {"game", "game:core/logic/combat"},
+	}) {
+		testing.expectf(t, !allowed(pair[0], pair[1], false), "must reject %v", pair)
+	}
+}
+
+@(test)
+ids_exception_is_limited_to_tests :: proc(t: ^testing.T) {
+	for source in ([]string{"core/def/units", "core/data/units", "core/logic/combat",
+		"core/logic/query/path", "core/view/hud"}) {
+		testing.expect(t, !allowed(source, "game:core/ids/units", false))
+		testing.expect(t, allowed(source, "game:core/ids/units", true))
+		testing.expect(t, !allowed(source, "game:editor", true))
+		testing.expect(t, !allowed(source, "game:core", true))
+	}
+}
+
+@(test)
+source_paths_and_import_boundaries :: proc(t: ^testing.T) {
+	testing.expect_value(t, source_package("src"), "")
+	testing.expect_value(t, source_package("src/core/logic/combat"), "core/logic/combat")
+	testing.expect_value(t, source_package("src\\core\\view\\hud"), "core/view/hud")
+	testing.expect_value(t, source_package("other/core"), "")
+	testing.expect_value(t, package_role(source_package("src/core/logic/query/path")), "query")
+	testing.expect_value(t, package_role(source_package("src/core/logic/query2")), "logic")
+	for path in ([]string{"../editor", "game:core/logic/../../editor", "game:core//ids",
+		"game:core/./ids", "game:core\\ids", "game:/core/ids", "other:core/ids"}) {
+		testing.expectf(t, !allowed("core", path, false), "noncanonical import: %s", path)
+	}
+	testing.expect(t, !allowed("logic/combat", "core:fmt", false))
+	for source in ([]string{"tools/editor", "tools/editor/panels", "editor/play", "host", "host/nested"}) {
+		testing.expect_value(t, package_role(source), "")
+		testing.expect(t, !allowed(source, "core:fmt", false))
+	}
+	testing.expect(t, allowed("tools/map_editor", "core:fmt", false))
+	testing.expect(t, !allowed("core/../editor", "core:fmt", false))
+}
+
+@(test)
+vet_discovers_nested_package_declarations :: proc(t: ^testing.T) {
+	root, err := os.make_directory_temp("", "olib_layer_packages_", context.temp_allocator)
+	testing.expect(t, err == nil)
+	if err != nil do return
+	defer os.remove(root)
+	src := fmt.tprintf("%s/src", root)
+	core_dir := fmt.tprintf("%s/core", src)
+	logic_dir := fmt.tprintf("%s/logic", core_dir)
+	nested := fmt.tprintf("%s/combat", logic_dir)
+	assert(os.make_directory_all(nested) == nil)
+	defer os.remove(src)
+	defer os.remove(core_dir)
+	defer os.remove(logic_dir)
+	defer os.remove(nested)
+	entry := fmt.tprintf("%s/main.odin", src)
+	business := fmt.tprintf("%s/rules.odin", nested)
+	unit := fmt.tprintf("%s/rules_test.odin", nested)
+	assert(os.write_entire_file(entry, "package main\n") == nil)
+	defer os.remove(entry)
+	assert(os.write_entire_file(business, "// Rules\npackage combat_rules // actual name\n") == nil)
+	defer os.remove(business)
+	assert(os.write_entire_file(unit, "#+test\npackage combat_rules\n") == nil)
+	defer os.remove(unit)
+	names := make([dynamic]string, context.temp_allocator)
+	collect_package_names(root, "src", &names)
+	testing.expect_value(t, len(names), 2)
+	main_found, rules_found: bool
+	for name in names {
+		main_found = main_found || name == "main"
+		rules_found = rules_found || name == "combat_rules"
+	}
+	testing.expect(t, main_found && rules_found)
+}

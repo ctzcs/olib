@@ -1,0 +1,46 @@
+package core
+
+import "core:math"
+
+// 修改这些常量后保存；代码更新不重置玩家进度。
+MOVE_SPEED :: f32(220)
+POINTS :: i64(1)
+
+apply :: proc(w: ^World, command: Commands) {
+	if command.reset {
+		world_dispose(w)
+		world_init(w)
+	}
+	if command.toggle_pause do w.paused = !w.paused
+	if command.add_point {
+		w.score += POINTS
+		append(&w.history, w.score)
+	}
+}
+
+step :: proc(w: ^World, movement, dt: f32) {
+	if w.paused do return
+	w.elapsed += f64(dt)
+	w.x = math.clamp(w.x + movement * MOVE_SPEED * dt, 20, 580)
+}
+
+valid :: proc(w: ^World) -> bool {
+	return !math.is_nan(w.x) && !math.is_inf(w.x) && !math.is_nan(w.elapsed) && !math.is_inf(w.elapsed) &&
+		w.x >= 20 && w.x <= 580 && w.elapsed >= 0 && w.score >= 0
+}
+
+// 运行时属性修改统一校验，供编辑器或其他游戏操作使用。
+set_position :: proc(w: ^World, x: f32) -> bool {
+	if math.is_nan(x) || math.is_inf(x) || x < 20 || x > 580 do return false
+	w.x = x
+	return true
+}
+
+set_score :: proc(w: ^World, score: i64) -> bool {
+	if score < 0 || score > 1_000_000 do return false
+	if w.score != score {
+		w.score = score
+		append(&w.history, score)
+	}
+	return true
+}

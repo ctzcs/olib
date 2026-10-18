@@ -88,9 +88,9 @@ if err != nil {
 在仓库根目录运行，每个子包单独测试：
 
 ```text
-odin test core/handle/array -collection:olib=.
-odin test core/handle/fixed -collection:olib=.
-odin test core/handle/growing -collection:olib=.
-odin test core/handle/virtual -collection:olib=.
-odin test core/tween -collection:olib=.
+odin run tools/check -- -only:core/handle/array
+odin run tools/check -- -only:core/handle/fixed
+odin run tools/check -- -only:core/handle/growing
+odin run tools/check -- -only:core/handle/virtual
+odin run tools/check -- -only:core/tween
 ```

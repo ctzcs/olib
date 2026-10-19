@@ -35,9 +35,9 @@ model_material_draw :: proc(device: ^foster.GraphicsDevice, effect: mat.Effect_D
 		pack_vertex_matrix_block(matrices[:], world.matrix4_multiply(draw.world_matrix, draw.view_projection), draw.world_matrix)
 	}
 	frame: [48]u8
-	std140_write_vec4(frame[:], 0, {draw.time, draw.delta_time, f32(draw.frame), 0})
-	std140_write_vec4(frame[:], 16, {draw.pointer[0], draw.pointer[1], f32(draw.target.WidthInPixels), f32(draw.target.HeightInPixels)})
-	std140_write_vec4(frame[:], 32, {1, 1, 1, 1})
+	mat.std140_write_vec4(frame[:], 0, {draw.time, draw.delta_time, f32(draw.frame), 0})
+	mat.std140_write_vec4(frame[:], 16, {draw.pointer[0], draw.pointer[1], f32(draw.target.WidthInPixels), f32(draw.target.HeightInPixels)})
+	mat.std140_write_vec4(frame[:], 32, {1, 1, 1, 1})
 	request := mat.Material_Draw{
 		mesh = draw.mesh, target = draw.target, kind = .Model,
 		vertex_uniform = matrices[:], frame_uniform = frame[:],

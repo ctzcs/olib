@@ -84,10 +84,8 @@ vertex_matrix_block_pack_layout :: proc(t: ^testing.T) {
 	}
 	testing.expect(t, world_back == (w))
 
-	// 越界拒绝；std140_write_vec4 越界不写
+	// 越界拒绝
 	testing.expect(t, !pack_vertex_matrix_block(buf[:64], wvp, w))
-	std140_write_vec4(buf[:8], 0, {9, 9, 9, 9})
-	testing.expect(t, read_vec4(buf, 0) == wvp.c0)
 }
 
 @(private)
@@ -124,7 +122,7 @@ joint_palette_fills_identity_beyond_count :: proc(t: ^testing.T) {
 }
 
 @(test)
-shader_blobs_embedded_and_driver_pick :: proc(t: ^testing.T) {
+shader_blobs_embedded :: proc(t: ^testing.T) {
 	// 内嵌 blob 编译期存在且非空（#load 保证，运行时兜底断言）
 	testing.expect(t, len(debugline_vertex_spv) > 4 && len(debugline_vertex_dxil) > 4)
 	// SPIR-V 魔数 0x07230203（小端 03 02 23 07）
@@ -133,19 +131,8 @@ shader_blobs_embedded_and_driver_pick :: proc(t: ^testing.T) {
 	// DXIL 容器魔数 "DXBC"
 	dxil := debugline_vertex_dxil
 	testing.expect(t, dxil[0] == 'D' && dxil[1] == 'X' && dxil[2] == 'B' && dxil[3] == 'C')
-
-	// 驱动分发
-	testing.expect(t, shader3d_driver_supported(.Vulkan))
-	testing.expect(t, shader3d_driver_supported(.D3D12))
-	testing.expect(t, shader3d_driver_supported(.Metal))
-	testing.expect(t, !shader3d_driver_supported(.None))
-	d3d_pick := shader3d_pick_code(.D3D12, debugline_vertex_spv, debugline_vertex_dxil)
-	testing.expect(t, len(d3d_pick) == len(debugline_vertex_dxil) && d3d_pick[0] == debugline_vertex_dxil[0])
-	vk_pick := shader3d_pick_code(.Vulkan, debugline_vertex_spv, debugline_vertex_dxil)
-	testing.expect(t, len(vk_pick) == len(debugline_vertex_spv) && vk_pick[0] == debugline_vertex_spv[0])
-	metal_pick := shader3d_pick_code(.Metal, debugline_vertex_spv, debugline_vertex_dxil, debugline_vertex_msl)
-	testing.expect(t, len(metal_pick) == len(debugline_vertex_msl) && metal_pick[0] == '#') // MSL 源码以 #include 开头
-	testing.expect(t, len(shader3d_pick_code(.Metal, debugline_vertex_spv, debugline_vertex_dxil)) == 0)
+	// MSL 是源码，以 #include 开头
+	testing.expect(t, len(debugline_vertex_msl) > 0 && debugline_vertex_msl[0] == '#')
 }
 
 // ---------------------------------------------------------------------------

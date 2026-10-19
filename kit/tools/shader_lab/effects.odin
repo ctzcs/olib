@@ -215,16 +215,16 @@ pass_uniforms :: proc(s: ^Session, index: int, draw: mat.Pass_Draw, w, h: int,
 	material := &s.materials[index]
 	sprite := draw == .Preview_Model && s.mode == 1
 	block: [48]u8
-	r3d.std140_write_vec4(block[:], 0, {time, dt, f32(frame), sprite ? 1 : 0})
-	r3d.std140_write_vec4(block[:], 16, {(s.pointer.x-s.viewport.X)/s.viewport.Width,
+	mat.std140_write_vec4(block[:], 0, {time, dt, f32(frame), sprite ? 1 : 0})
+	mat.std140_write_vec4(block[:], 16, {(s.pointer.x-s.viewport.X)/s.viewport.Width,
 		(s.pointer.y-s.viewport.Y)/s.viewport.Height, f32(w), f32(h)})
-	r3d.std140_write_vec4(block[:], 32, {1, 1, 1, 1})
+	mat.std140_write_vec4(block[:], 32, {1, 1, 1, 1})
 	foster.MaterialStageSetUniformBuffer(&material.Fragment, block[:])
 	if draw == .Fullscreen || s.parameters[index].live.preview != "3d" {
 		view: [16]u8
 		scale: f32 = sprite ? 0.7 : 1
 		xscale := sprite ? scale*f32(h)/f32(w) : scale
-		r3d.std140_write_vec4(view[:], 0, {xscale, scale, 0, 0})
+		mat.std140_write_vec4(view[:], 0, {xscale, scale, 0, 0})
 		foster.MaterialStageSetUniformBuffer(&material.Vertex, view[:])
 	} else {
 		world.camera3d_set_viewport(&s.camera, w, h)

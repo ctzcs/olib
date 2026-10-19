@@ -3,7 +3,7 @@ package gizmo
 import "core:math"
 
 import foster "olib:foster"
-import r3d "olib:kit/rendering/3d"
+import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
 
 // 分区：资源生命周期 / 世界空间网格 / 三维绘制
@@ -25,16 +25,16 @@ Renderer3D :: struct {
 // ==============================================================================
 
 renderer3d_init :: proc(r: ^Renderer3D, device: ^foster.GraphicsDevice) -> bool {
-	if device == nil || !r3d.shader3d_driver_supported(device.Driver) do return false
+	if device == nil || !mat.shader_driver_supported(device.Driver) do return false
 	d := device.Driver
 	foster.ShaderInit(&r.vertex, device, {Stage = .Vertex, EntryPoint = "vertex_main",
-		UniformBufferCount = 1, Code = r3d.shader3d_pick_code(d,
+		UniformBufferCount = 1, Code = mat.shader_pick(d, {
 			#load("shaders/Compiled/Gizmo3D.vertex.spv"), #load("shaders/Compiled/Gizmo3D.vertex.dxil"),
-			#load("shaders/Compiled/Gizmo3D.vertex.msl"))}, "Gizmo3D vertex")
+			#load("shaders/Compiled/Gizmo3D.vertex.msl")})}, "Gizmo3D vertex")
 	foster.ShaderInit(&r.fragment, device, {Stage = .Fragment, EntryPoint = "fragment_main",
-		UniformBufferCount = 1, Code = r3d.shader3d_pick_code(d,
+		UniformBufferCount = 1, Code = mat.shader_pick(d, {
 			#load("shaders/Compiled/Gizmo3D.fragment.spv"), #load("shaders/Compiled/Gizmo3D.fragment.dxil"),
-			#load("shaders/Compiled/Gizmo3D.fragment.msl"))}, "Gizmo3D fragment")
+			#load("shaders/Compiled/Gizmo3D.fragment.msl")})}, "Gizmo3D fragment")
 	if r.vertex.Resource == nil || r.fragment.Resource == nil {
 		renderer3d_destroy(r)
 		return false
@@ -188,7 +188,7 @@ transform_draw :: proc(r: ^Renderer3D, target: foster.DrawableTarget, camera: ^w
 	foster.MeshSetVertexCount(&r.mesh, len(r.vertices))
 	foster.MeshSetVertices(&r.mesh, raw_data(r.vertices), len(r.vertices))
 	matrix_bytes: [64]u8
-	r3d.std140_write_matrix(matrix_bytes[:], 0, world.camera3d_view_projection(camera))
+	mat.std140_write_matrix(matrix_bytes[:], 0, world.camera3d_view_projection(camera))
 	foster.MaterialStageSetUniformBuffer(&r.material.Vertex, matrix_bytes[:], 0)
 	command: foster.DrawCommand
 	foster.DrawCommandFromMesh(&command, target, &r.mesh, &r.material)
@@ -204,7 +204,7 @@ transform_draw :: proc(r: ^Renderer3D, target: foster.DrawableTarget, camera: ^w
 		AlphaOperation = .Add, AlphaSource = .One, AlphaDestination = .OneMinusSrcAlpha, Mask = .RGBA}
 	for occluded in ([2]bool{true, false}) {
 		tint: [16]u8
-		r3d.std140_write_vec4(tint[:], 0, {1, 1, 1, occluded ? 0.12 : 1})
+		mat.std140_write_vec4(tint[:], 0, {1, 1, 1, occluded ? 0.12 : 1})
 		foster.MaterialStageSetUniformBuffer(&r.material.Fragment, tint[:], 0)
 		command.DepthCompare = occluded ? .Greater : .LessOrEqual
 		foster.GraphicsDeviceDraw(r.mesh.GraphicsDevice, &command)

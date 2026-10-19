@@ -165,7 +165,7 @@ GPU 命令、Batcher、UI 文本和帧临时数据消费完成后才能切换。
 
 字体与 UI 仍按 [最终像素采样约定](../../kit/ui/README.md#最终像素采样与清晰度验收) 绘制。
 热重载不会改变分辨率、采样或字体质量策略，也不把游戏资源热更新自动等同于代码热更新。
-HLSL 继续走 `kit/shaderdev`；宿主中的 Shader、参数生成器与游戏编译器通过 `core/devbuild` 串行启动/执行子进程，
+HLSL 继续走 `kit/rendering/shader/dev`；宿主中的 Shader 与游戏编译器通过 `core/devbuild` 串行启动/执行子进程，
 避免当前 Odin `process_start` 的句柄继承并发问题。游戏帧不等待这个编译锁。
 
 ## 验证

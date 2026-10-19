@@ -4,9 +4,8 @@ package shader_lab
 import "core:math"
 
 import foster "olib:foster"
-import mat "olib:kit/material"
-import rendering "olib:kit/rendering"
-import r3d "olib:kit/rendering3d"
+import r3d "olib:kit/rendering/3d"
+import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
 
 Pass_Target :: struct {
@@ -272,7 +271,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 		}
 		drawable := foster.DrawableTargetFromTarget(target)
 		command := pass_command(s, s.bank, index, p.draw, drawable, string(p.id), e.time, dt, e.frame)
-		rendering.pass_state_apply(&command, p.state)
+		mat.pass_state_apply(&command, p.state)
 		pass_uniforms(s, index, p.draw, target.Width, target.Height, e.time, dt, e.frame)
 		parameters_bind(s, index)
 		parameter := &s.parameters[index]

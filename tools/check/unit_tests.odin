@@ -83,7 +83,15 @@ unit_source_paths :: proc(source, path: string) -> (string, bool) {
 			value, _, ok := strconv.unquote_string(token.text, context.temp_allocator)
 			if !ok do return "", false
 			if !filepath.is_abs(value) && !strings.contains(value, ":") {
-				replacement = fmt.tprintf("%q", path_clean(path_join(directory, value)))
+				resolved := path_clean(path_join(directory, value))
+				// Windows 盘符不能用于 Odin import；借用检查入口已配置的 collection。
+				if import_path {
+					root := path_clean(path_join(#directory, "../.."))
+					resolved, _ = filepath.rel(root, resolved, context.temp_allocator)
+					resolved, _ = strings.replace_all(resolved, "\\", "/", context.temp_allocator)
+					resolved = fmt.tprintf("olib:%s", resolved)
+				}
+				replacement = fmt.tprintf("%q", resolved)
 			}
 			import_path = false
 		}

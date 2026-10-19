@@ -2,18 +2,17 @@ package shader_lab
 
 // 宿主负责窗口、输入路由和 MSDF 资产；工具只持有独立的预览会话。
 import foster "olib:foster"
-import rendering "olib:kit/rendering"
+import r2d "olib:kit/rendering/2d"
 import ui "olib:kit/ui"
 
 Config :: struct {
-	source_root, parameter_directory: string,
-	// 通常为项目 library/shader_dev；空值只生成临时头文件。
-	generated_directory: string,
+	// source_root 递归发现 .oshader。
+	source_root: string,
 	// 借用至 dispose；必须是真正的距离场，工具始终以 .MSDF 注册。
 	font: ^foster.MsdfFont,
 	font_texture: foster.Texture,
 	// 可选，借用宿主已上传的内置图标图集；nil 时工具自行加载和释放。
-	icons: ^rendering.Sprite_Atlas,
+	icons: ^r2d.Sprite_Atlas,
 	// 可选，init 时复制；nil 使用工具默认主题。
 	theme: ^ui.UI_Theme,
 	paused: bool,

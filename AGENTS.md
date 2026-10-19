@@ -21,8 +21,8 @@
 
 ## 测试组织
 
-- 第一方单元测试集中放 `tests/<被测包路径>/`，例如 `tests/kit/material/`；core/kit 不放测试文件或测试专用资产。
-- 通过 `odin run tools/check` 执行；单包使用 `-- -only:kit/material`。检查工具在独占临时目录组装被测包，保留私有函数测试能力；详见 [tests/README](tests/README.md)。
+- 第一方单元测试集中放 `tests/<被测包路径>/`，例如 `tests/kit/rendering/material/`；core/kit 不放测试文件或测试专用资产。
+- 通过 `odin run tools/check` 执行；单包使用 `-- -only:kit/rendering/material`。检查工具在独占临时目录组装被测包，保留私有函数测试能力；详见 [tests/README](tests/README.md)。
 - Foster 移植回归和第三方配套测试保留各自已有的独立 tests 目录，不混入业务源码。
 
 ## 提交前

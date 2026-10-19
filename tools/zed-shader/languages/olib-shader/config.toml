@@ -1,0 +1,12 @@
+name = "olib Shader"
+grammar = "olib_shader"
+path_suffixes = ["oshader"]
+line_comments = ["// "]
+block_comment = ["/* ", " */"]
+tab_size = 4
+hard_tabs = true
+brackets = [
+    { start = "{", end = "}", close = true, newline = true },
+    { start = "[", end = "]", close = true, newline = false },
+    { start = "(", end = ")", close = true, newline = false },
+]

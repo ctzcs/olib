@@ -1,0 +1,236 @@
+# 材质系统
+
+本包统一提供材质参数、效果描述、实例值、GPU 布局、资源加载和 Pass 执行。
+使用同一个 `mat` import；各部分按职责分文件，不另设运行时子包。
+GPU 资源使用 Foster，解析、编解码与布局函数不需要创建窗口或 GPU 设备。
+本包不依赖 UI、编辑器或 Shader 开发工具。
+
+## 文件与概念地图
+
+| 文件 | 内容 |
+| --- | --- |
+| `declarations.odin` | `Scalar / Color / Texture_Path / Pass_Id` 等声明用的 distinct 类型 |
+| `parameters.odin` | `Schema / Field / Value`：参数声明、实例数值、迁移与 GPU 布局（`hlsl` / `pack`） |
+| `schema.odin` | `describe`：由 Odin 结构体反射出 `Schema` |
+| `effect.odin` | `Effect_Desc / Pass_Desc`：多 Pass 声明，`effect_validate` 校验、`effect_sort` 拓扑排序，clone / dispose |
+| `instance.odin`、`resource.odin` | 实例 / 单参数组的 JSON 编解码（纯字节，不碰文件与 GPU） |
+| `material_library.odin` | `Material_Library`：登记 Effect、惰性创建 Shader、贴图缓存 |
+| `shader_code.odin` | `Shader_Binaries / Pass_Binaries`、`shader_pick`、`material_register_manifest`：按驱动选字节码并一次登记 |
+| `material.odin` | `Material`：`material_load / reload / set_number` |
+| `draw.odin` | `Material_Binding / Draw_Options / Draw_Error / material_draw`：选取 Pass、上传参数、提交 DrawCommand |
+
+包含关系（名字里的 Material 容易混，按这张图读）：
+
+```
+Material_Library ─┬─ Material_Effect ─ Effect_Desc（Pass 列表）+ []Schema + 预编译 Shader + []foster.Material（GPU）
+                  ├─ Material_Texture（按路径缓存）
+                  └─ Material（一个对象的实例）
+                       ├─ Instance：每个参数组一份 Schema + []Value（数值与贴图路径）
+                       └─ Material_Binding：Schema + Value + 指向 Effect 的 foster.Material + 采样器
+```
+
+一次绘制（精灵为例，模型同理）：
+
+```
+sprite_draw / sprite_draw_pass        业务入口（sprite_draw.odin），只传 Sprite_Instance、变换、视图
+  └ sprite_draw_selected              取出材质的 Effect 与 Binding
+    └ sprite_material_draw            （sprite_material_draw.odin）组装投影/帧 uniform；无回调时进入合批
+      └ mat.material_draw             逐 Pass：覆盖值 → pack → 绑纹理 → 应用 Pass_State
+        └ submit 回调（合批）或 GraphicsDeviceDraw（立即绘制）
+```
+
+`Draw_Options { enabled, pass_id, user_data, prepare, submit }` 是 2D、3D 绘制请求共用的
+选择与工具扩展字段，分别内嵌在 `Material_Draw`、`Sprite_Material_Draw`、`Model_Material_Draw` 的
+`options` 里；业务代码只会用到 `pass_id`。
+
+## 单次覆盖与 per-instance 合批
+
+**Property_Block**（`property_block.odin`）是调用方持有的普通值，类似 Unity 的 MaterialPropertyBlock：
+同一个共享 `Material` 画不同变体时不必为每种取值再建材质实例。
+
+```odin
+tinted: mat.Property_Block
+mat.block_set(&tinted, "hue", {0.7, 0, 0, 0})              // 所有包含 hue 的 Pass
+mat.block_set_group(&tinted, "Sprite_body", "opacity", {0.5, 0, 0, 0}) // 只覆盖一个参数组
+r2d.sprite_draw_frame(&renderer, material, frame, transform, view, properties = &tinted)
+```
+
+覆盖优先级：材质实例值 < Property_Block < Pass 的固定 `values`。数值按字段范围钳制，
+未知字段、贴图字段和非有限数值被忽略；字符串只借用，调用期间须保持有效。
+不修改共享材质，已排队的批次也不受之后修改的影响。容量 `MAX_BLOCK_ENTRIES`（16）。
+
+**`[Instance]` 字段**（`Field.instance`）把数值字段从 uniform 移到每个对象的顶点里，
+使取值不同的对象仍能合成一次 Draw（Property_Block 的覆盖值同样如此）。仅 Sprite 效果支持，
+最多 `MAX_INSTANCE_FIELDS`（4）个；`Effect_Desc.instanced` 必须为 true（lang 自动设置）。
+`uniform_size / pack / hlsl` 都已跳过这些字段，`hlsl(schema, instanced)` 生成 `OlibInstance`，
+着色器写法见 [lang 的 HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。
+回调 `prepare / submit` 多一个 `^Instance_Values`，是该 Pass 已套用全部覆盖后的实例数值。
+模型效果同样可以 instanced：每个实例的世界矩阵、tint 和字段来自调用方持有的
+[Instance_Buffer](../3d/README.md#模型实例化)，一次 Draw 画出全部实例；这时 Property_Block 不起作用，
+数据以实例缓冲为准。非 instanced 的模型只能用 Property_Block（仍是 uniform，每个模型一次 Draw）。
+
+## 约定
+
+- **错误返回**：绘制路径返回 `Draw_Error` 枚举（出错时不提交任何 Draw）；声明、解析、加载和登记返回
+  `reason: string`，空串表示成功，因为这些错误需要带上 Pass / 字段名等具体信息。文本借用至本帧
+  `temp_allocator` 重置，需要保留时自行克隆。`describe`、`effect_validate`、`material_load` 等均遵循这一规则。
+- **上限常量**：`MAX_PASSES`（32）、`MAX_TEXTURES`（16）、`MAX_UNIFORM_BYTES`（16384）、
+  `MAX_TARGET_SIZE`（8192）、`MAX_RESOURCE_BYTES`（1 MiB）、`MAX_RESOURCE_FIELDS`（256）；
+  数值只在对应常量处修改。
+- **字符串所有权**：`Schema` 用 `schema_clone / schema_dispose`，`Effect_Desc` 用
+  `effect_clone / effect_dispose`（内部通过 `clone_text / delete_text` 统一处理 `distinct string`）。
+  新增拥有字符串或切片的字段时，须同步对应的 clone、dispose（Schema 另有 `schema_equal`）。
+
+## 公共材质资源
+
+```odin
+import mat "olib:kit/rendering/material"
+
+materials := mat.Material_Library{device = device, storage = &resources}
+// 清单与各 Pass 的 spv / dxil / msl 都由 tools/shaders 生成；库按驱动选择后端并登记。
+reason := mat.material_register_manifest(&materials, #load("Hero.shader.json"), passes)
+material, reason := mat.material_load(&materials, "materials/hero.json")
+// 检查 reason 后将 material 赋给 Sprite_Instance.material 或 r3d.Model.material。
+```
+
+`passes` 是 `[]mat.Pass_Binaries`，与清单里的 Pass 一一对应（见 `olib_sample/src/material3d/shaders.odin`）。
+已经自己持有 Effect、Schema 和字节码时，用底层的 `material_register(&materials, effect, schemas, code)`，
+其中 `code` 用 `shader_pick(driver, binaries)` 按驱动取字节码。
+
+每次 load 创建独立参数实例，共享同一效果的 Shader 和同路径贴图。
+Effect/Schema 由库深复制，当前后端预编译字节码借用至 `material_library_dispose`。
+材质和贴图使用同一个 Foster StorageContainer；材质路径相对容器根，贴图路径相对材质文件。
+游戏统一使用此入口，不直接读取桌面文件。参数编解码函数处理 Storage 读取的字节；
+ShaderLab 的本机路径适配属于工具内部实现，底层同样使用 Storage，不是另一套游戏加载接口。
+库、device、storage 的地址及存储根在使用期间须保持稳定。
+
+`material_set_number(material, group, field, value)` 检查类型和范围后修改单个实例。
+`material_reload(&materials, material)` 完整候选成功后替换，失败保留旧值，材质指针不变。
+它只重载材质文件，同路径贴图仍使用缓存，不自动热重载 Shader/贴图。
+停止绘制后用 `material_library_dispose` 统一释放全部材质、Shader 和贴图；不浅复制资源对象。
+加载和重载在主线程、合法 GPU 生命周期内、提交绘制之外进行。缓存按库统一释放，
+目前不逐项卸载，建议按场景或资源会话划分库。
+路径中的 `.`、`..`、反斜杠会规范化；导出文件含绝对贴图路径时，应先将贴图纳入资产根并改为相对路径。
+
+## 渲染器与工具接入
+
+`material_library.odin` 提供 `Material_Library`，`material.odin` 提供 `Material` 和游戏材质加载入口。
+`draw.odin` 提供 `Material_Binding`、`Material_Draw`、`Draw_Options`、`material_draw` 和 `pass_state_apply`，
+负责选取 Pass、验证绑定、上传参数、绑定纹理、应用状态并提交 DrawCommand。
+2D/3D 绘制入口与 Shader Lab 使用同一套实现；业务通常从 `sprite_draw` 或 `model_draw` 接入。
+所有绘制入口返回 `Draw_Error`：`.None` 表示成功（可能全部 Pass 被禁用，不提交任何 Draw），
+其余值说明被拒绝的原因，`draw_error_text(error)` 得到可读文本。拒绝时不会发出任何 Draw。
+
+Shader Lab 的参数作者使用 [.oshader 的 Properties](../shader/lang/README.md)。
+运行时代码也可通过 `describe` 反射创建 Schema；手工构造 Schema 的调用方
+须保证字段 ID 唯一、字段名可用于 HLSL、范围有效以及类型/默认值匹配。
+
+## 数据与所有权
+
+声明专用类型定义在 [declarations.odin](declarations.odin)：
+
+| 类型 | 用途 |
+| --- | --- |
+| `Scalar` | 单个 f32 数值，默认用滑条编辑；无需 `ui:"slider"` |
+| `Vector2 / Vector3` | 两/三分量数值控件；无需 `ui:"vector"` |
+| `Color` | 四分量 RGBA 调色板；无需 `ui:"color"` |
+| `Texture_Path` | 参数里的图片路径；自动生成 Texture 控件，无需 `ui:"texture"` |
+| `Shader_Path` | 程序资源路径 |
+| `Params_Ref` | `Pass_Desc.params`，引用 Schema 名称 |
+| `Target_Ref` | Pass 输出、输入目标和 Effect 最终输出 |
+| `Field_Ref` | Texture 输入和数值覆盖的字段稳定 ID |
+| `Pass_Id` | Pass 自身的稳定 ID |
+| `Preview_Mode` | `.Two_D / .Three_D`；效果可用 `.Auto` 推断工作区 |
+
+路径和引用类型是 `distinct string`；数值控件类型是独立的 f32 或 f32 数组类型。
+字面量可直接赋值，但不同用途的已命名值不能混用。
+推荐把重复引用声明为具名常量，例如 `Scene_Color :: mat.Target_Ref("scene_color")`，
+输入和输出都使用 `Scene_Color`，由 IDE 补全。专用类型不自动发现文件或字段；
+参数组/字段/目标是否存在仍由生成器校验。标签、显示名、folder 保持普通 string。
+`Texture_Path` 仍只是路径，不加载 GPU 资源，不改变 HLSL 布局或增加渲染开销。
+数值类型同样不改变现有字段 Kind、HLSL 布局或热重载迁移规则。`label / id / min / max / step`
+标签仍可选；默认范围 0..1、步长 0.01，默认值取 Odin 零值（Color 也不会自动设为白色）。
+专用类型允许省略 ui；如果显式写 ui，必须与类型匹配。旧基础类型 + ui 标签继续兼容。
+
+- `Schema`：组名、Shader 路径、预览维度、字段列表。
+- `Field`：稳定 ID、HLSL 字段名、界面标签、类型、范围、默认数值/贴图路径。
+- `Value`：一份材质实例的数值和图片路径；字符串路径不是 GPU 纹理。
+- `schema_clone` 深复制，`schema_dispose` 释放；`values_make` 分配实例，
+  `values_dispose` 释放。调用方使用同一 allocator 创建和销毁，不浅复制拥有的数据。
+- `values_make(new_schema, old_schema, old_values)` 按 ID + 类型迁移；新增字段和类型
+  变化使用默认值，范围收窄时钳制。没有 `id` 标签时 ID 默认为字段名；改名要保留旧 ID。
+
+## GPU 布局
+
+`hlsl(schema)` 返回拥有的字符串，调用方负责 delete。shader/lang 将它直接放入每个
+Pass 的候选 HLSL，无需生成或 include 参数头文件。数值参数从 fragment `b1, space3` 开始，
+**每字段独占 16 字节**，标量/向量分别取 x/xy/xyz/xyzw；不复制 Odin 结构体本身。
+HLSL 参数名统一添加 `_` 前缀：Odin 的 `strength` 对应 `_strength`，纹理 `image` 对应 `_image`。
+纹理字段按声明顺序分配 `t0/s0, t1/s1, …`，使用 `space2`，采样器名字为
+`_字段名Sampler`。引擎公共输入使用 fragment b0，顶点输入由宿主决定。
+
+用 `uniform_size` 分配缓冲，然后 `pack` 写入，将字节交给
+`foster.MaterialStageSetUniformBuffer(&material.Fragment, bytes, 1)`。
+宿主负责把图片路径加载为纹理并设置 Foster material 的 sampler。
+支持 `Scalar / Vector2 / Vector3 / Color / Texture_Path`，兼容旧基础类型 + ui 标签；暂不支持矩阵、通用数组、整数、
+嵌套结构体或 vertex 材质参数。
+
+`resource_encode/decode` 提供单参数组 JSON（version=1，兼容 Shader Lab 预设）；
+`instance_encode/decode` 提供 2D/3D 完整材质 JSON（version=2，包含 Effect 名和全部参数组）。
+这些编解码函数只处理字节与数据校验；文件读取由本包的材质加载器负责。
+游戏统一通过 [Material_Library](README.md#公共材质资源) 的 `material_load/reload`
+从 Foster StorageContainer 读取材质与贴图，再由本包解码；自定义资源层也应通过 Storage 获取字节。
+ShaderLab 内部的 [material_files.odin](../../tools/shader_lab/material_files.odin)
+负责桌面文件路径和相对贴图路径换算，通过 Storage 读取与原子保存，对外使用
+`save_preset/load_preset` 或 `save_material/load_material`。游戏不依赖这套工具文件接口。
+ShaderLab 显式导出当前参数，不自动修改 Odin 默认值或宿主材质文档，JSON 格式保持兼容。
+
+## 多 Pass 声明
+
+`effect.odin` 的 `Pass_Desc / Target_Desc / Effect_Desc` 是纯数据类型；
+`effect_order` = `effect_validate`（逐 Pass 检查参数组、目标、纹理输入、覆盖值与输出唯一性）
++ `effect_sort`（当前帧依赖拓扑排序，检出循环），返回拥有的拓扑顺序。
+`Previous` 边跨帧，不参与排序；错误文本借用至临时分配器重置。
+`effect_clone / effect_dispose` 复制和释放全部嵌套数据。
+声明和 GPU 执行示例见 [Shader Lab](../../tools/shader_lab/README.md#odin-多-pass-与历史帧)。
+
+## 挂在对象上的多 Pass 材质
+
+层级为 **材质实例 → Effect 定义 → Pass → Shader**。`foster.Material` 仍是单次绘制的底层
+绑定；模型使用的 `material.Instance` 拥有各参数组的值和贴图路径，多份实例可以共享 Effect 和 GPU Shader。
+
+把每个 Pass 声明为 `draw = .Model`，全部 `output` 指向 Effect.output，`target` 描述相同：
+
+```odin
+passes := []mat.Pass_Desc{
+    {id = "body", params = "Surface", draw = .Model, output = "color",
+        state = {cull = .Back, blend = .Opaque, depth = .Less, depth_write = .On}},
+    {id = "outline", params = "Outline", draw = .Model, output = "color",
+        state = {cull = .Front, blend = .Opaque, depth = .Less_Equal, depth_write = .Off}},
+}
+```
+
+- 模型 Pass 按声明顺序绘制**同一网格**，共享外部目标的颜色和深度，每 Pass 之间不清屏。
+  `target` 用于 Shader Lab 建预览目标；游戏渲染器提供自己的场景目标。
+- `state` 支持剔除、混合、深度比较和深度写入。Model 默认不透明、背面剔除、Less 深度读写；
+  显式 `Default` 保留执行器/宿主状态。Alpha 是非预乘，Additive 是 One+One。
+- `values` 是 Pass 固定覆盖，临时应用，不修改材质实例；面板的 Pass 启停只是预览状态。
+- Model 不能混用 Fullscreen/Preview_Model，也不能使用图目标输入或历史帧；这些仍由图像效果执行。
+  图像效果继续要求输出唯一，不能靠重名输出叠加模型。
+
+`instance_make(effect, schemas)` 校验定义并独立拥有 Schema/Value；`instance_dispose` 释放。
+`instance_decode(effect, schemas, bytes)` 返回独立候选，失败不改原实例。文件保存 Effect 的稳定名和
+参数值，**不打包 Shader 或 Pass 定义**；运行时资源表必须能把这个名字解析为随游戏发布的同一份定义。
+多个 Pass 引用相同参数组时共用该组数值，可用 Pass.values 固定区分。
+
+GPU 执行见 [rendering3d](../3d/README.md#模型材质执行)。完整实例见
+`olib_sample/src/material3d`，Shader/参数的唯一来源是 `olib_sample/src/shader_lab`。
+游戏业务默认使用 [Material_Library](README.md#公共材质资源)：
+`material_load` 自动解析效果并加载 Shader/纹理，赋给 `Model.material` 后调用 `model_draw`。
+这里的 Instance 编解码接口留给资源层和工具使用，不要求每个游戏手动组装 GPU 绑定。
+
+2D 使用 `.Sprite` Pass，与 `.Model` 共用 Instance、资源格式和公共加载器。
+一个 Effect 内不能混合 Sprite、Model 或图像效果；Sprite 使用 2d 参数组，Model 使用 3d。
+Sprite 的 `sprite_texture` 指定当前帧覆盖的 Texture 字段，无隐式贴图槽。
+Sprite 默认预乘 Alpha、无剔除和深度读写；`.Premultiplied` 可显式声明预乘混合。
+2D 接口及示例见 [精灵绘制](../2d/README.md#精灵绘制)。

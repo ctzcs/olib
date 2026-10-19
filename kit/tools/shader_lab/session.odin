@@ -10,19 +10,19 @@ import "core:math"
 import "core:strings"
 
 import foster "olib:foster"
-import rendering "olib:kit/rendering"
-import r3d "olib:kit/rendering3d"
-import dev "olib:kit/shaderdev"
+import r2d "olib:kit/rendering/2d"
+import r3d "olib:kit/rendering/3d"
+import dev "olib:kit/rendering/shader/dev"
 import ui "olib:kit/ui"
 import world "olib:kit/world"
 import clay "olib:thirdparty/clay-odin"
 
 Session :: struct {
 	device: ^foster.GraphicsDevice,
-	sprite_renderer: rendering.Sprite_Renderer,
+	sprite_renderer: r2d.Sprite_Renderer,
 	font: ^foster.MsdfFont, // 借用宿主字体，宿主须在 dispose 后释放。
-	icons: ^rendering.Sprite_Atlas,
-	owned_icons: rendering.Sprite_Atlas,
+	icons: ^r2d.Sprite_Atlas,
+	owned_icons: r2d.Sprite_Atlas,
 	delta_time: f32,
 	region: foster.Rect,
 	input: Input,
@@ -44,7 +44,6 @@ Session :: struct {
 	scroll_restores: [dynamic]ui.UI_Scroll_Entry,
 	tick_serial: u64,
 	step_requested: bool,
-	parameter_directory, generated_directory: string,
 	parameter_watch: dev.Parameter_Watch,
 	fonts_dirty: bool,
 	color_picker: Color_Picker,
@@ -91,12 +90,12 @@ Vertex2D :: struct {
 init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> bool {
 	if s.initialized || device == nil || config.font == nil || config.font_texture.Resource == nil do return false
 	if config.font.Size <= 0 || config.font.DistanceRange <= 0 do return false
-	if config.source_root == "" || config.parameter_directory == "" do return false
+	if config.source_root == "" do return false
 	if config.icons != nil {
 		if !config.icons.has_upload || config.icons.texture.Resource == nil do return false
 		s.icons = config.icons
 	} else {
-		if !rendering.builtin_icons_load(&s.owned_icons, device) do return false
+		if !r2d.builtin_icons_load(&s.owned_icons, device) do return false
 		s.icons = &s.owned_icons
 	}
 	s.device = device
@@ -108,8 +107,6 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	s.scroll_offsets = make(map[u32]clay.Vector2)
 	s.font = config.font
 	s.source_root = strings.clone(config.source_root)
-	s.parameter_directory = strings.clone(config.parameter_directory)
-	s.generated_directory = strings.clone(config.generated_directory)
 	s.distance = 4
 	s.yaw = 0.4
 	s.pitch = 0.25
@@ -125,10 +122,10 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	}
 	s.sidebar_width = 312
 	s.clock = 1
-	dev.parameters_init(&s.parameter_watch, s.parameter_directory)
+	dev.parameters_init(&s.parameter_watch, s.source_root)
 	foster.BatcherInit(&s.batch, device)
 	foster.BatcherInit(&s.compose, device)
-	rendering.sprite_renderer_init(&s.sprite_renderer, device)
+	r2d.sprite_renderer_init(&s.sprite_renderer, device)
 	format := foster.VertexFormatMake([]foster.VertexElement{{0, .Float2, false},
 		{1, .Float2, false}}, size_of(Vertex2D))
 	defer foster.VertexFormatDispose(&format)
@@ -167,7 +164,7 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	s.small_theme = s.theme
 	if config.theme == nil do s.small_theme.small_font_size = 14
 	s.initialized = true
-	fmt.println("Shader Lab: save Odin/HLSL to reload. Sources:", s.source_root)
+	fmt.println("Shader Lab: save .oshader/HLSLI to reload. Sources:", s.source_root)
 	return true
 }
 
@@ -180,19 +177,17 @@ dispose :: proc(s: ^Session) {
 	delete(s.bank_error)
 	dev.parameters_dispose(&s.parameter_watch)
 	for &mesh in s.meshes do foster.MeshDispose(&mesh)
-	rendering.sprite_renderer_dispose(&s.sprite_renderer)
+	r2d.sprite_renderer_dispose(&s.sprite_renderer)
 	foster.BatcherDispose(&s.batch)
 	foster.BatcherDispose(&s.compose)
 	ui.ui_dispose(&s.ctx)
-	rendering.atlas_dispose(&s.owned_icons)
+	r2d.atlas_dispose(&s.owned_icons)
 	foster.TextureDispose(&s.texture)
 	foster.TextureDispose(&s.sprite_texture)
 	texture_retire_flush(s)
 	delete(s.retired_textures)
 	foster.TargetDispose(&s.output)
 	delete(s.source_root)
-	delete(s.parameter_directory)
-	delete(s.generated_directory)
 	for &workspace in s.workspaces do workspace_dispose(&workspace)
 	delete(s.scroll_offsets)
 	delete(s.scroll_restores)
@@ -219,7 +214,6 @@ update :: proc(s: ^Session, delta_time: f32) {
 
 	for &shader, i in s.shaders[:s.shader_count] {
 		if !s.parameters[i].available do continue
-		dev.update(&shader, f64(s.delta_time))
 		if shader.status != s.last_status[i] {
 			fmt.printf("%s: %v (revision %d)\n", s.parameters[i].name, shader.status, shader.revision)
 			if shader.status == .Error && shader.diagnostic != "" do fmt.eprintln(shader.diagnostic)

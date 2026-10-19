@@ -1,0 +1,13 @@
+id = "olib-shader"
+name = "olib Shader"
+version = "0.1.0"
+schema_version = 1
+authors = ["olib contributors"]
+description = "olib single-file shaders with embedded HLSL highlighting"
+repository = "https://github.com/ctzcs/olib"
+languages = ["languages/olib-shader"]
+
+[grammars.olib_shader]
+repository = "https://github.com/ctzcs/olib"
+rev = "local-prebuilt"
+path = "tools/zed-shader"

@@ -11,6 +11,7 @@
 package main
 
 import "core:fmt"
+import tokenizer "core:odin/tokenizer"
 import "core:os"
 import "core:path/filepath"
 import "core:slice"
@@ -207,7 +208,7 @@ report :: proc(c: ^Checker, name: string, ok: bool, log: string) {
 
 Package :: struct {
 	path:      string, // 相对 olib 根目录，用 / 分隔（示例为绝对路径）
-	name:      string, // 目录名，即 -vet-packages 的包名
+	name:      string, // 源码 package 声明，即 -vet-packages 的包名（示例为目录名）
 	has_tests: bool,   // core/kit 包：含 @(test)；示例：含 *_test.odin
 }
 
@@ -229,6 +230,7 @@ collect_packages :: proc(root, rel: string, result: ^[dynamic]Package) {
 	if err != nil do return
 
 	has_odin, has_tests := false, false
+	name := ""
 	for e in entries {
 		if e.type == .Directory {
 			collect_packages(root, strings.concatenate({rel, "/", e.name}), result)
@@ -236,13 +238,34 @@ collect_packages :: proc(root, rel: string, result: ^[dynamic]Package) {
 		}
 		if !strings.has_suffix(e.name, ".odin") do continue
 		has_odin = true
-		if !has_tests {
+		if !has_tests || name == "" {
 			data, read_err := os.read_entire_file(e.fullpath, context.temp_allocator)
-			has_tests = read_err == nil && strings.contains(string(data), "@(test)")
+			if read_err == nil {
+				has_tests = has_tests || strings.contains(string(data), "@(test)")
+				if name == "" do name = source_package_name(string(data), e.fullpath)
+			}
 		}
 	}
 	if has_odin {
-		append(result, Package{path = rel, name = filepath.base(rel), has_tests = has_tests})
+		append(result, Package{path = rel, name = strings.clone(name), has_tests = has_tests})
+	}
+}
+
+// 目录名可以是 2d/3d，工具目录也不一定叫 main；vet 始终使用实际包名。
+@(private)
+source_package_name :: proc(source, path: string) -> string {
+	lexer: tokenizer.Tokenizer
+	tokenizer.init(&lexer, source, path)
+	found := false
+	for {
+		token := tokenizer.scan(&lexer)
+		if token.kind == .EOF do return ""
+		if token.kind == .Comment do continue
+		if found {
+			if token.kind == .Ident do return token.text
+			return ""
+		}
+		if token.kind == .Package do found = true
 	}
 }
 

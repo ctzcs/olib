@@ -24,7 +24,7 @@ core/        基础库（无引擎依赖）
 ├── tween/     补间系统（manager / sequence / 插值原语）
 ├── debug/     Tracking_Allocator 的 defer 包装
 ├── hotreload/ 桌面游戏 DLL 热重载：后台编译、快照恢复、UI 重建与失败保留旧版
-├── devbuild/  开发期编译子进程互斥（游戏 / Shader / 参数生成共用）
+├── devbuild/  开发期编译子进程互斥（游戏 / Shader 编译共用）
 └── profiler/  作用域计时统计
 
 foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组织与 Git 历史）
@@ -33,11 +33,14 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── asset/       资源管线：.meta 管身份、library/assets 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
 ├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Batcher 覆盖层，不持有场景对象
-├── rendering/   Sprite / SpriteAtlas + Grid/Kenney 图集源 + Aseprite 构建器
-├── rendering3d/ 3D 机制：Mesh 上传 / 泛型渲染队列 / 字节码选择 / std140 / DebugDraw3D / LOD（光照材质由游戏实现）
+├── rendering/   渲染：共享资源、2D/3D 绘制与 Shader 工具链
+│   ├── material/ 材质参数、效果描述、实例值、GPU 布局、资源加载与 Pass 提交
+│   ├── 2d/      Sprite / SpriteAtlas / 图集构建与精灵合批
+│   ├── 3d/      Mesh / 渲染队列 / std140 / DebugDraw3D / LOD
+│   └── shader/
+│       ├── lang/ .oshader 解析与参数/HLSL 布局
+│       └── dev/  开发期编译、文件监听与热重载
 ├── animation/   骨骼动画采样 / palette / 混合
-├── material/    材质参数描述、独立实例值、稳定 ID 迁移与生成 GPU 布局
-├── shaderdev/   Odin 字段标签生成参数面板数据；HLSL 热重载，2D/3D 共用
 ├── storage/     跨平台资源根 / 用户存储路径策略
 ├── app/         CLI 参数 + 调试控制台（可选 cli_open 接入 foster.App）
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
@@ -128,7 +131,7 @@ Web 上 `Run` 会把 App 拷贝到堆上并立即返回，但不会搬移游戏�
 
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
 内置 [默认图标图集](assets/icons/README.md) 提供 815 个白色图标，单张 4096×4096 PNG；
-通过 `rendering.builtin_icons_load` 加载，按名称取得 Subtexture，可直接用于 UI 或 Batcher。
+通过 `r2d.builtin_icons_load` 加载，按名称取得 Subtexture，可直接用于 UI 或 Batcher。
 
 桌面开发期可接入 [游戏代码与 UI 热重载](core/hotreload/README.md)：常驻宿主保留窗口/设备，
 保存 Odin 后后台编译游戏 DLL，在安全帧边界通过快照恢复游戏数据并重建 UI。编译或候选初始化失败
@@ -162,4 +165,4 @@ Shader 的模块归属、源码与 `Compiled/` 分层及统一编译入口见 [S
 移植路线图：[docs/ROADMAP.md](docs/ROADMAP.md)
 
 可嵌入编辑器的 Shader 工具见 [kit/tools/shader_lab](kit/tools/shader_lab/README.md)，底层热重载见
-[kit/shaderdev](kit/shaderdev/README.md)。在同级 olib_sample 运行 `run.bat shader_lab`，保存 HLSL 即可更新 2D/3D 预览。
+[kit/rendering/shader/dev](kit/rendering/shader/dev/README.md)。在同级 olib_sample 运行 `run.bat shader_lab`，保存 `.oshader` 即可更新 2D/3D 预览。

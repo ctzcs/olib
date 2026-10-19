@@ -8,8 +8,8 @@ import "core:path/filepath"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/material"
-import dev "olib:kit/shaderdev"
+import mat "olib:kit/rendering/material"
+import dev "olib:kit/rendering/shader/dev"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -44,17 +44,10 @@ parameters_update :: proc(s: ^Session) {
 	if s.parameter_watch.status != .Ready do return
 	build := dev.parameters_take(&s.parameter_watch)
 	defer dev.parameter_build_dispose(&build)
-	if len(build.schemas) == 0 do return
+	if s.parameter_watch.status != .Live do return
 	if len(build.schemas) > 16 || len(build.effects) > 16 {
 		bank_error(s, "Shader Lab supports 16 parameter groups and 16 effects")
 		return
-	}
-	if s.generated_directory != "" {
-		if error := dev.parameters_write_headers(build.schemas, s.generated_directory); error != "" {
-			bank_error(s, error)
-			delete(error)
-			return
-		}
 	}
 	bank_dispose(s.pending_bank)
 	s.pending_bank = bank_make(s, build)
@@ -183,7 +176,7 @@ parameters_panel :: proc(s: ^Session, index: int) {
 	}
 }
 
-// 卡片显示当前绑定的实际纹理；路径仍是 Odin 配置中的持久化表示。
+// 卡片显示当前绑定的实际纹理；路径仍是 Properties 声明中的持久化表示。
 parameter_texture_card :: proc(s: ^Session, p: ^Parameter_State, field: int, id: string) -> bool {
 	state := ui.ui_interact(&s.ctx, id)
 	if state.hovered && !state.disabled && s.input.focused && len(s.input.dropped_files) > 0 {

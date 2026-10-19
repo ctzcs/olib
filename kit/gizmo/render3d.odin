@@ -3,7 +3,7 @@ package gizmo
 import "core:math"
 
 import foster "olib:foster"
-import r3d "olib:kit/rendering3d"
+import r3d "olib:kit/rendering/3d"
 import world "olib:kit/world"
 
 // 分区：资源生命周期 / 世界空间网格 / 三维绘制

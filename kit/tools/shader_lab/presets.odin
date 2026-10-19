@@ -1,12 +1,12 @@
 package shader_lab
 
-// 预设是显式导入/导出的预览快照，不自动改写 Odin 或宿主材质文档。
+// 预设是显式导入/导出的预览快照，不自动改写 .oshader 或宿主材质文档。
 // 分区：格式 / 原子应用与默认值 / 文件读写。
 import "core:math"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/material"
+import mat "olib:kit/rendering/material"
 
 // 兼容现有调用；持久格式现在由运行时可用的 material 包提供。
 Preset_Field :: mat.Resource_Field

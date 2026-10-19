@@ -8,7 +8,7 @@ import "core:math"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/material"
+import mat "olib:kit/rendering/material"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 

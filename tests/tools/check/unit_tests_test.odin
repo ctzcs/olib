@@ -18,5 +18,6 @@ isolated_test_sources_keep_original_paths_without_rewriting_literals :: proc(t: 
 	testing.expect(t, !strings.contains(result, "root :: #directory"))
 	testing.expect(t, !strings.contains(result, "blob :: #load(\"data.bin\")"))
 	testing.expect(t, !strings.contains(result, "import local \"../shared\""))
+	testing.expect(t, strings.contains(result, "import local \"olib:"))
 	testing.expect(t, strings.contains(result, "import \"core:fmt\""))
 }

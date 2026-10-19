@@ -1,6 +1,6 @@
 package shader_lab
 
-// 分区：工作区书签 / 固定区域的滚动记忆。只拥有预览状态，不改写 Odin 或材质预设。
+// 分区：工作区书签 / 固定区域的滚动记忆。只拥有预览状态，不改写 .oshader 或材质预设。
 import "core:fmt"
 import "core:strings"
 import ui "olib:kit/ui"

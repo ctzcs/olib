@@ -4,7 +4,7 @@ package shader_lab
 import "core:math"
 
 import foster "olib:foster"
-import rendering "olib:kit/rendering"
+import r2d "olib:kit/rendering/2d"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -34,7 +34,7 @@ lab_theme :: proc() -> ui.UI_Theme {
 // 图集子图引用稳定的 Session / 宿主纹理；跟随 UI 比例直接画到最终像素。
 lab_icon :: proc(s: ^Session, name: string, tint: foster.Color, size: f32 = 20) {
 	if name == "" || s.icons == nil do return
-	sub, found := rendering.atlas_subtexture(s.icons, name)
+	sub, found := r2d.atlas_subtexture(s.icons, name)
 	if found do ui.ui_image(&s.ctx, sub, size, size, tint)
 }
 

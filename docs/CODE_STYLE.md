@@ -19,10 +19,12 @@ olib/
 ```
 
 - 一个目录一个 Odin 包；包名与目录名一致（`core/handle/array` → `package array`）。
+  `kit/rendering/2d`、`3d` 的目录名以数字开头，包名分别使用 `rendering2d`、`rendering3d`；import 建议显式取别名 `r2d`、`r3d`。
 - 同一主题的声明、构造、查询、修改和释放函数放在一起，不为层级拆小文件；
   单主题的小包（如 `meta.odin`）一个文件即可，多主题包按主题分文件
   （参考 `core/tween/`：manager / tween / interpolated / managed_*）。
 - 文件按能独立说明的职责划分，名称直接对应用途，例如 `sprite_draw.odin` / `model_draw.odin`。
+  不为包名另建只有注释和 `package` 声明的同名文件；包说明放 README 或已有实现文件。
   业务数据与常用入口放在文件前部，内部辅助实现放后部；只在包内使用的声明设为 private。
   只有实际共享或独立生命周期需要时才拆出公共实现，不因一个 struct/proc 单独建文件或目录。
   文档先说明业务入口，再说明渲染器、工具等集成细节；文件划分不应增加业务需要理解的概念。

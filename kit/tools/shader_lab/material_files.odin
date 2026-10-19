@@ -8,7 +8,7 @@ import "core:path/filepath"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/material"
+import mat "olib:kit/rendering/material"
 
 @(private)
 preset_file_load :: proc(schema: mat.Schema, path: string) -> ([]mat.Value, string) {

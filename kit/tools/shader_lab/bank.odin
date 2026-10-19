@@ -3,13 +3,11 @@ package shader_lab
 // 参数包和所有效果作为一个候选整体切换；Shader/Material 地址在 bank 存活期间固定。
 // 分区：资源所有权 / 候选创建 / GPU 探测与提交。
 import "core:fmt"
-import "core:path/filepath"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/material"
-import rendering "olib:kit/rendering"
-import dev "olib:kit/shaderdev"
+import mat "olib:kit/rendering/material"
+import dev "olib:kit/rendering/shader/dev"
 
 Parameter_Bank :: struct {
 	shaders: [16]dev.Session,
@@ -57,24 +55,17 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		p.available = true
 		p.values = mat.values_make(p.live)
 		p.buffer = make([]u8, mat.uniform_size(p.live))
-		source, _ := filepath.abs(fmt.tprintf("%s/%s", s.source_root, schema.shader), context.temp_allocator)
+		program := build.programs[i]
+		source, program_text := program.source, program.text
 		_ = dev.init(&b.shaders[i], source, s.device.Driver, {uniform_buffers = 1}, {uniform_buffers = 2})
+		b.shaders[i].source_text = strings.clone(program_text)
 		if prior := bank_index(s.bank, schema.name); prior >= 0 {
 			b.shaders[i].revision = s.shaders[prior].revision
 		}
 		foster.MaterialInitWithShaders(&b.materials[i], &b.shaders[i].vertex, &b.shaders[i].fragment)
-		header := mat.hlsl(schema)
-		include_path := ""
-		if s.generated_directory != "" {
-			generated, _ := filepath.abs(fmt.tprintf("%s/%s/params.generated.hlsli",
-				s.generated_directory, schema.name), context.temp_allocator)
-			include_path, _ = filepath.rel(filepath.dir(source), generated, context.temp_allocator)
-			include_path, _ = strings.replace_all(include_path, "\\", "/", context.temp_allocator)
-		}
-		dev.configure_parameters(&b.shaders[i], header, mat.texture_count(schema), source, include_path)
-		delete(header)
+		dev.configure_parameters(&b.shaders[i], mat.texture_count(schema))
 	}
-	// 参数组只是 Shader 资源；只有显式 X_Passes / X_Output 才创建效果和目标。
+	// 参数组只是 Shader 资源；每个 .oshader 创建一个效果及其 Pass 目标。
 	b.effects = make([]Effect_Runtime, len(build.effects))
 	for desc, i in build.effects {
 		e := &b.effects[i]
@@ -132,7 +123,7 @@ bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates
 					if string(p.params) != b.parameters[i].name do continue
 					target := foster.DrawableTargetFromTarget(&e.targets[mat.effect_is_material(e.desc) ? 0 : j].buffers[0])
 					command := pass_command(s, b, i, p.draw, target, string(p.id))
-					rendering.pass_state_apply(&command, p.state)
+					mat.pass_state_apply(&command, p.state)
 					append(&probes, command)
 				}
 				applied := false
@@ -163,6 +154,7 @@ bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates
 		}
 		if shader.status == .Error && b == s.pending_bank {
 			bank_error(s, fmt.tprintf("%s: %s", b.parameters[i].name, shader.diagnostic))
+			b.candidate_failed = true
 		}
 		// 候选包仍等待源码编译成功；未选中效果不分配目标或创建 GPU Shader。
 		ready = ready && (shader.status == .Live || (!b.shader_used[i] && shader.status == .Ready))
@@ -173,7 +165,7 @@ bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates
 
 bank_commit :: proc(s: ^Session) {
 	b := s.pending_bank
-	current, ok := dev.parameters_fingerprint(s.parameter_directory)
+	current, ok := dev.parameters_fingerprint(s.source_root)
 	if !ok || current != b.fingerprint do return
 	workspace_save(s)
 	cancel(s)

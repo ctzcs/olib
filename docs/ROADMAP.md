@@ -19,19 +19,19 @@
 | 消息 | CommandQueue / BroadcastChannel | `core/messaging` | 单消费者队列 / 延迟一帧广播 |
 | 模型格式数据层 | Dasset | `core/dasset` | 比特兼容 DragonLib v4，v1~v4 读兼容，坏文件防御 |
 | 资源管线 v1 | Asset 管线 | `kit/asset` | .meta 管身份、Library 管派生、blob 为边界、manifest 打包零改动 |
-| Sprite / 图集 | Rendering/Sprite + Atlas/* | `kit/rendering` | Grid / Kenney XML 图集源 + Aseprite 构建器 |
+| Sprite / 图集 | Rendering/Sprite + Atlas/* | `kit/rendering/2d` | Grid / Kenney XML 图集源 + Aseprite 构建器 |
 | 存储路径策略 | GameStorage + LocalStorage | `kit/storage` | 资源根 / 用户存档路径 |
 | 2D/3D 相机与场景 | World/* | `kit/world` | Camera2D/3D、Frustum3D、Ray3D、自备 Matrix4（行向量 v*M、D3D 深度）、SceneRouter |
 | CLI | CliConsole | `kit/app` | `has_arg` + 后台 stdin 控制台（`cli_open`）；不提供启动模板，直接用 `foster.App` |
 | 骨骼动画 | SkeletonAnimator | `kit/animation` | Step/Linear/CubicSpline 采样、palette 传播、blend、蒙皮包围盒 |
-| 3D 渲染机制 | Rendering3D | `kit/rendering3d` | Mesh 上传、泛型渲染队列（不透明前到后 / 透明后到前）、字节码按驱动选择（spv/dxil/msl，SDL_shadercross 编译）、std140 打包、DebugDraw3D、LOD；光照/材质/着色器的参考实现在 olib_sample `forward3d` |
+| 3D 渲染机制 | Rendering3D | `kit/rendering/3d` | Mesh 上传、泛型渲染队列（不透明前到后 / 透明后到前）、字节码按驱动选择（spv/dxil/msl，SDL_shadercross 编译）、std140 打包、DebugDraw3D、LOD；光照/材质/着色器的参考实现在 olib_sample `forward3d` |
 | 音频 | Audio | `kit/audio` | 直接绑 `vendor:sdl3`（Foster 本身不含音频）：设备流、WAV 装载、音量 |
 | 游戏 UI | Paper UI（替代） | `kit/ui` | clay 布局 + foster 后端：圆角/裁剪/九宫格、位图/MSDF 字体、离线多通道 MSDF 字体与旧位图兼容（`ui_font_bake`）、控件/焦点/模态/缩放 |
 | JobScheduler | Threading/* | 不移植 | `core:thread.Pool` + `core:sync.Wait_Group` 已覆盖“常驻池 + 完成等待”，见下文并行一节 |
 
 ## 后续（按需启动，无固定排期）
 
-### 3D（`kit/rendering3d`）
+### 3D（`kit/rendering/3d`）
 
 - Web 目标的 3D 着色器：Web 后端是 WebGL + 手写 GLSL ES、命名 uniform、不用 UBO；
   SDL_shadercross 不输出 GLSL，3D 上 Web 时需要另写一套。

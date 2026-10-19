@@ -1,16 +1,17 @@
 package shader_lab
 
 // 材质预览：2D/3D 对象与游戏共用绘制实现；本文件负责预览接入和材质存取。
+import "core:fmt"
 import "core:math"
 import foster "olib:foster"
-import mat "olib:kit/material"
-import rendering "olib:kit/rendering"
-import r3d "olib:kit/rendering3d"
+import r2d "olib:kit/rendering/2d"
+import r3d "olib:kit/rendering/3d"
+import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
 
 Material_Preview :: struct { session: ^Session, effect: ^Effect_Runtime }
 
-material_preview_prepare :: proc(data: rawptr, pass: int, command: ^foster.DrawCommand) {
+material_preview_prepare :: proc(data: rawptr, pass: int, command: ^foster.DrawCommand, _: ^mat.Instance_Values) {
 	host := cast(^Material_Preview)data
 	s, e := host.session, host.effect
 	p := e.desc.passes[pass]
@@ -19,7 +20,7 @@ material_preview_prepare :: proc(data: rawptr, pass: int, command: ^foster.DrawC
 		foster.DrawableTargetFromTarget(&e.targets[0].buffers[0]), string(p.id), e.time, e.last_delta, e.frame)
 }
 
-material_preview_submit :: proc(data: rawptr, pass: int, command: ^foster.DrawCommand) {
+material_preview_submit :: proc(data: rawptr, pass: int, command: ^foster.DrawCommand, _: ^mat.Instance_Values) {
 	host := cast(^Material_Preview)data
 	s, e := host.session, host.effect
 	if s.custom_preview && s.preview_hooks.draw != nil {
@@ -35,7 +36,7 @@ material_preview_submit :: proc(data: rawptr, pass: int, command: ^foster.DrawCo
 material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 	target := &e.targets[0].buffers[0]
 	target_clear(s, target, e.desc.passes[0].target.clear)
-	bindings := make([]rendering.Material_Binding, s.shader_count, context.temp_allocator)
+	bindings := make([]mat.Material_Binding, s.shader_count, context.temp_allocator)
 	for &p, i in s.parameters[:s.shader_count] {
 		samplers := make([]foster.BoundSampler, mat.texture_count(p.live), context.temp_allocator)
 		for &sampler, j in samplers {
@@ -61,7 +62,7 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 		}
 		size := f32(min(target.Width, target.Height))*0.7
 		scale := size/f32(max(texture.Width, texture.Height))
-		ok := rendering.sprite_material_draw(&s.sprite_renderer, e.desc, bindings, {
+		draw_error := r2d.sprite_material_draw(&s.sprite_renderer, e.desc, bindings, {
 			frame = foster.SubtextureFromTexture(texture),
 			origin = {f32(texture.Width)/2, f32(texture.Height)/2},
 			transform = {scale, 0, 0, scale, f32(target.Width)/2, f32(target.Height)/2},
@@ -69,24 +70,25 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 				delta_time = e.last_delta, frame = e.frame, pass_limit = s.preview_pass+1},
 			tint = {1, 1, 1, 1},
 			pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height},
-			enabled = e.enabled[:len(e.desc.passes)],
-			user_data = &host, prepare = material_preview_prepare, submit = material_preview_submit,
+			options = {enabled = e.enabled[:len(e.desc.passes)],
+				user_data = &host, prepare = material_preview_prepare, submit = material_preview_submit},
 		})
-		if !ok do bank_error(s, "Cannot bind sprite material")
+		if draw_error != .None do bank_error(s, fmt.tprintf("Cannot bind sprite material: %s", mat.draw_error_text(draw_error)))
 		return foster.TargetAttachment(target)
 	}
 	world.camera3d_set_viewport(&s.camera, target.Width, target.Height)
 	world.camera3d_set_position(&s.camera, {math.sin(s.yaw)*math.cos(s.pitch)*s.distance,
 		math.sin(s.pitch)*s.distance, math.cos(s.yaw)*math.cos(s.pitch)*s.distance})
-	ok := r3d.model_material_draw(s.device, e.desc, bindings, {
+	draw_error := r3d.model_material_draw(s.device, e.desc, bindings, {
 		mesh = &s.meshes[s.mode == 3 ? 2 : 1], target = foster.DrawableTargetFromTarget(target),
 		world_matrix = world.MATRIX4_IDENTITY, view_projection = world.camera3d_view_projection(&s.camera),
 		time = e.time, delta_time = e.last_delta, frame = e.frame,
 		pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height},
-		enabled = e.enabled[:len(e.desc.passes)], pass_limit = s.preview_pass+1,
-		user_data = &host, prepare = material_preview_prepare, submit = material_preview_submit,
+		pass_limit = s.preview_pass+1,
+		options = {enabled = e.enabled[:len(e.desc.passes)],
+			user_data = &host, prepare = material_preview_prepare, submit = material_preview_submit},
 	})
-	if !ok do bank_error(s, "Cannot bind model material")
+	if draw_error != .None do bank_error(s, fmt.tprintf("Cannot bind model material: %s", mat.draw_error_text(draw_error)))
 	return foster.TargetAttachment(target)
 }
 

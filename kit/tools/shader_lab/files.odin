@@ -7,7 +7,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
-import mat "olib:kit/material"
+import mat "olib:kit/rendering/material"
 
 File_Action :: enum { None, Texture, Save_Preset, Load_Preset }
 File_Request :: struct {

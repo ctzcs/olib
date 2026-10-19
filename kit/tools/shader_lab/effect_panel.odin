@@ -1,9 +1,9 @@
 package shader_lab
 
-// 效果选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 Odin 文件。
+// 效果选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 .oshader 文件。
 import "core:fmt"
 import foster "olib:foster"
-import mat "olib:kit/material"
+import mat "olib:kit/rendering/material"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 

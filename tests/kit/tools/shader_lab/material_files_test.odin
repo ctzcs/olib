@@ -10,7 +10,7 @@ import "core:path/filepath"
 import "core:strings"
 import "core:testing"
 
-import mat "olib:kit/material"
+import mat "olib:kit/rendering/material"
 
 @(test)
 preset_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) {

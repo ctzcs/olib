@@ -4,9 +4,9 @@
 
 ```text
 core/…                  库的生产代码（不含测试）
-kit/rendering/           库的生产代码（不含测试）
+kit/rendering/2d/        库的生产代码（不含测试）
 tests/core/…             core 的单元测试
-tests/kit/rendering/     rendering 的单元测试
+tests/kit/rendering/2d/  rendering2d 的单元测试
 tests/tools/check/       检查工具自身的测试
 tests/new_game/          新项目生成与构建回归
 ```
@@ -14,7 +14,7 @@ tests/new_game/          新项目生成与构建回归
 ```sh
 odin run tools/check                         # 完整检查
 odin run tools/check -- -only:test           # 测试及名称匹配的回归项
-odin run tools/check -- -only:kit/material   # 只检查/测试指定包
+odin run tools/check -- -only:kit/rendering/material   # 只检查/测试指定包
 ```
 
 `tests/core`、`tests/kit`、`tests/tools` 中的文件保留 `#+test` 和被测包的

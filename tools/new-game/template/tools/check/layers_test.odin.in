@@ -58,7 +58,7 @@ split_core_dependencies_preserve_pure_layers :: proc(t: ^testing.T) {
 	for source in ([]string{"core/def/units", "core/data/units", "core/logic/combat",
 		"core/logic/query/path", "core/view/hud", "core/content/maps", "core/combat"}) {
 		for dep in ([]string{"game:core", "game:host", "game:game", "game:core_editor/inspector",
-			"olib:core/hotreload", "olib:core/devbuild/process", "olib:kit/shaderdev",
+			"olib:core/hotreload", "olib:core/devbuild/process", "olib:kit/rendering/shader/dev",
 			"olib:thirdparty/odin-imgui", "olib:foster/internal/foo"}) {
 			testing.expectf(t, !allowed(source, dep, false), "%s must reject %s", source, dep)
 		}

@@ -13,22 +13,22 @@ XML 中额外记录原始相对路径与 SHA-256，供更新核对；不要手�
 ## 加载与绘制
 
 ```odin
-import rendering "olib:kit/rendering"
+import r2d "olib:kit/rendering/2d"
 import ui "olib:kit/ui"
 
 // 图集应放在地址稳定的游戏状态中；在 GraphicsDevice 初始化后加载一次。
-icons: rendering.Sprite_Atlas
-ok := rendering.builtin_icons_load(&icons, &game.GraphicsDevice)
+icons: r2d.Sprite_Atlas
+ok := r2d.builtin_icons_load(&icons, &game.GraphicsDevice)
 assert(ok)
 
-// UI 声明阶段；名字列表可通过 rendering.atlas_names(&icons) 获取。
-sub, found := rendering.atlas_subtexture(&icons, "game/action-points")
+// UI 声明阶段；名字列表可通过 r2d.atlas_names(&icons) 获取。
+sub, found := r2d.atlas_subtexture(&icons, "game/action-points")
 if found {
 	ui.ui_image(&ctx, sub, 32, 32, {120, 200, 255, 255})
 }
 
 // shutdown：在所有使用结束后、GraphicsDevice 释放前执行。
-rendering.atlas_dispose(&icons)
+r2d.atlas_dispose(&icons)
 ```
 
 `builtin_icons_load` 用 `#load` 嵌入资源，不依赖进程工作目录，也不自动初始化 GPU。

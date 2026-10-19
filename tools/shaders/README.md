@@ -1,5 +1,10 @@
 # Shader 归属与编译
 
+同一入口也支持 [单文件 `.oshader`](../../kit/rendering/shader/lang/README.md)，无需手动拆出 HLSL。
+每个 Pass 生成 `<Shader>_<Pass>.<阶段>.<格式>`，并输出包含 Schema/Effect 的
+`<Shader>.shader.json`。它描述材质定义，与保存实例参数值的 JSON 区分；
+预览与发布共用解析器。指定目录内的旧 `.hlsl` 可以并存，输出重名会在编译前报错。
+
 Shader 与使用它的功能放在一起。框架内置绘制属于 `foster`，库功能属于对应 `kit` 包，
 游戏材质和演示效果属于游戏/示例仓库。跨模块共享的代码按依赖方向提取到共同拥有者；
 库不得引用示例资产，不为目录统一而复制 shader。
@@ -28,13 +33,13 @@ Foster 的拥有者目录为 `foster/assets/shaders/`，遵循相同的源码/�
 | 所有者 | Shader |
 | --- | --- |
 | `foster/assets/shaders` | Batcher / Textured / Msdf |
-| `kit/rendering3d/shaders` | DebugLine3D |
+| `kit/rendering/3d/shaders` | DebugLine3D |
 | `kit/gizmo/shaders` | Gizmo3D |
 | `olib_sample/src/<示例>/shaders` | 示例专用效果与材质 |
 
-测试夹具留在对应测试目录。热重载生成的临时头文件与字节码属于项目的
-`library/shader_dev`；编译器自行管理的隔离快照仍使用私有临时目录，遵循
-[shaderdev](../../kit/shaderdev/README.md)。不覆盖 `Compiled/` 中用于发布的资产，
+测试夹具留在对应测试目录。热重载编译器的源码快照、临时 HLSL 与字节码
+使用独占的系统临时目录，编译结束后清理，遵循
+[shader/dev](../../kit/rendering/shader/dev/README.md)。不覆盖 `Compiled/` 中用于发布的资产，
 也不为每次构建在项目根另建输出目录；截图及诊断副本遵循
 [生成文件规则](../../prompts/new-project.md#生成文件与目录纪律)。
 
@@ -48,7 +53,7 @@ Foster 的拥有者目录为 `foster/assets/shaders/`，遵循相同的源码/�
 
 ```sh
 odin run tools/shaders -- -dir:foster/assets/shaders
-odin run tools/shaders -- -dir:kit/rendering3d/shaders
+odin run tools/shaders -- -dir:kit/rendering/3d/shaders
 odin run tools/shaders -- -dir:kit/gizmo/shaders
 ```
 
@@ -58,7 +63,7 @@ odin run tools/shaders -- -dir:kit/gizmo/shaders
 odin run ../olib/tools/shaders -- -dir:src/forward3d/shaders
 ```
 
-省略 `-dir` 时仍只编译 `kit/rendering3d/shaders`；路径相对于当前工作目录，工具路径可用绝对路径。
+省略 `-dir` 时仍只编译 `kit/rendering/3d/shaders`；路径相对于当前工作目录，工具路径可用绝对路径。
 独立的 compute/故障注入测试保留专用测试构建脚本，不交给固定双阶段入口。
 
 源码、共享 include 和发布产物一起纳入版本管理，使使用库的人无需安装 shader 编译器。

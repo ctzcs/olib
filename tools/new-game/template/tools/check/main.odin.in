@@ -209,7 +209,7 @@ allowed :: proc(source, path: string, test: bool) -> bool {
 	}
 	development := role == "editor" || role == "core_editor" || role == "tool"
 	if in_package(path, "olib:core/hotreload") || in_package(path, "olib:core/devbuild") ||
-	   in_package(path, "olib:kit/shaderdev") || in_package(path, "olib:thirdparty/odin-imgui") {
+	   in_package(path, "olib:kit/rendering/shader/dev") || in_package(path, "olib:thirdparty/odin-imgui") {
 		return development
 	}
 	if role == "ids" do return false

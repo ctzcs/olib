@@ -5,7 +5,6 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 import foster "olib:foster"
-import dev "olib:kit/shaderdev"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -119,7 +118,8 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 			}
 		}
 		if clay.UI()(ui.ui_row_decl(8)) {
-			status := s.pending_bank != nil ? "正在编译" : s.bank_error != "" || s.parameter_watch.status == .Error ? "编译失败 · 保留上次结果" : "LIVE"
+			failed := s.bank_error != "" || s.parameter_watch.status == .Error
+			status := failed ? "编译失败 · 保留上次结果" : s.pending_bank != nil ? "正在编译" : "LIVE"
 			ui.ui_label_dim(&s.ctx, &s.small_theme, status)
 			ui.ui_spacer()
 			if w > 650 {
@@ -180,11 +180,6 @@ preview_options :: proc(s: ^Session) {
 		}
 	}
 	if lab_button(s, "retry", "重新编译", icon = "media/code") {
-		for &item in s.shaders[:s.shader_count] do dev.retry(&item)
-		if s.pending_bank != nil {
-			s.pending_bank.candidate_failed = false
-			for &item in s.pending_bank.shaders[:s.pending_bank.shader_count] do dev.retry(&item)
-		}
 		s.parameter_watch.has_attempted = false
 	}
 }

@@ -1,6 +1,6 @@
 # 游戏 UI
 
-[纯 Odin Clay](../../thirdparty/clay-odin/README.md) 负责布局，`kit/ui` 提供控件、交互与 Foster Batcher 后端。
+[纯 Odin Clay](../../thirdparty/clay-odin/README.md) 负责布局，`kit/ui` 提供控件、交互与 Render2D 后端（原生使用 olib 材质）。
 可运行游戏界面位于示例仓库 [olib_sample](https://github.com/ctzcs/olib_sample) 的 `src/game_ui`：遗迹场景上的生命/能量 HUD、
 带冷却遮罩的技能栏、格子背包和暂停菜单。它使用同一套布局与交互，游戏皮肤在示例中定义。
 原来的设置页和控件验收示例在同仓库的 `src/ui_gallery`。
@@ -15,8 +15,10 @@
 
 初始化一次 `ui_init(&ctx, width, height)`，注册字体；退出时先释放 UI，再释放字体、
 贴图和 GraphicsDevice。`UI_Context` 必须保持地址稳定，不要按值复制。
+文字材质借用 Render2D 的材质库，库须活到 UI 释放之后；ui_draw/ui_render 只记录，调用方最后 submit。
 
 ```odin
+// renderer: r2d.Render2D 已用材质库初始化，见 rendering/2d README。
 // 初始化：font 与 texture 由资产层提供，存活到 ui_dispose 之后。
 ui.ui_init(&ctx, 1280, 720)
 theme := ui.UI_THEME_DARK
@@ -40,11 +42,10 @@ if clay.UI()(ui.ui_panel_decl(&theme, width = 300)) {
     }
 }
 
-foster.BatcherClear(&batcher)
-ui.ui_draw(&ctx, &batcher) // end + translate + render；复用操作缓冲
+ui.ui_draw(&ctx, &renderer) // end + translate + render；复用操作缓冲
 capture := ui.ui_input_capture(&ctx)
 // 根据 capture.pointer / capture.keyboard，决定是否将本帧输入交给游戏。
-foster.BatcherRender(&batcher, target)
+err := r2d.submit(&renderer, {target = target})
 ```
 
 需要自定义渲染时，可继续使用 `ui_end → ui_translate → ui_render`；`ui_translate`
@@ -78,7 +79,7 @@ ui.ui_set_visual(&ctx, "play", visual)
 if ui.ui_button(&ctx, &theme, "play", "PLAY") {
     // 触发游戏逻辑或下一段动画。
 }
-ui.ui_draw(&ctx, &batcher)
+ui.ui_draw(&ctx, &renderer)
 ```
 
 - 从 `UI_VISUAL_DEFAULT` 初始化；`UI_Visual{}` 的零缩放和零透明度不可见。
@@ -292,8 +293,8 @@ if show_dialog {
   动态汉字图集、字形塑形或 IME。文本换行由 Clay 处理，并非完整的多语言排版系统。
 - `ui_set_viewport` 统一处理绘制、命中与裁剪的缩放/偏移。高 DPI 窗口要先把窗口鼠标坐标
   转成渲染目标像素，示例已演示。`ui_set_dimensions` 直接设置逻辑尺寸。
-- 渲染恢复 Batcher 的矩阵、采样、混合、模式、材质及裁剪状态。继承外部裁剪区域，
-  使用屏幕 UI 变换，不叠加世界相机矩阵；用于 UI 的 Batcher 应使用普通默认材质。
+- 渲染恢复 Render2D 的矩阵、采样、混合、模式及裁剪状态。继承外部裁剪区域，
+  使用屏幕 UI 变换，不叠加世界相机矩阵；UI 图元用默认材质，MSDF 文字用每种字体独立的 Text_Msdf 材质。
 - 同一线程可逐帧切换多个 context，但不可交错 begin/end 或并发操作 Clay。
 - `error_count / last_error` 记录 Clay 错误；`pool_overflow` 报告本帧文本/图像池超限。
   默认每帧各 1024 个，溢出元素不显示。运行时字符串要存活到渲染结束，

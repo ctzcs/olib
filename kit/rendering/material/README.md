@@ -29,18 +29,10 @@ Material_Library ─┬─ Material_Effect ─ Effect_Desc（Pass 列表）+ []S
                        └─ Material_Binding：Schema + Value + 指向 Effect 的 foster.Material + 采样器
 ```
 
-一次绘制（精灵为例，模型同理）：
-
-```
-sprite_draw                           业务入口（sprite_draw.odin），传材质、子图、变换、视图
-  └ sprite_material_draw              （sprite_material_draw.odin）取出材质的 Effect 与 Binding，组装投影/帧 uniform；无回调时进入合批
-      └ mat.material_draw             逐 Pass：覆盖值 → pack → 绑纹理 → 应用 Pass_State
-        └ submit 回调（合批）或 GraphicsDeviceDraw（立即绘制）
-```
-
-`Draw_Options { enabled, pass_id, instance_values, user_data, prepare, submit }` 是 2D、3D 绘制请求共用的
-选择与工具扩展字段，分别内嵌在 `Material_Draw`、`Sprite_Material_Draw`、`Model_Material_Draw` 的
-`options` 里；业务代码只会用到 `pass_id` 和 `instance_values`（即 `sprite_draw` 的 `values` 参数）。
+2D 的 `r2d.image/texture` 记录几何与材质快照，`r2d.submit` 按连续兼容记录逐 Pass 绘制。
+3D 的 `model_draw` 与工具的 `r2d.material_draw` 使用本包的 `material_draw` 执行 Pass。
+`Draw_Options { enabled, pass_id, instance_values, user_data, prepare, submit }` 保留工具所需的
+选择、参数覆盖与回调；业务只需 `pass_id` 和 `values`。
 
 ## 每个实例的值：槽位与句柄
 
@@ -49,8 +41,8 @@ sprite_draw                           业务入口（sprite_draw.odin），传�
 
 1. **效果里把参数声明成 `[Instance]`**（`Field.instance`）：它不再占 uniform，而是写进每个对象的**实例记录**，
    于是取值不同的对象仍能合成一次 Draw。Sprite 与 Model 效果都支持，最多 `MAX_INSTANCE_FIELDS`（16）个，实际个数由项目决定（见[字段个数](#字段个数由你的项目决定)），
-   `Effect_Desc.instanced` 必须为 true（lang 自动设置）。着色器写法见
-   [lang 的 HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。
+   2D 的实例字段走顶点 storage buffer；只有常驻缓冲需要 `Effect_Desc.instanced`。3D 仍要求 instanced。着色器写法见
+   [lang 的 HLSL 约定](../shader/lang/README.md#2d-效果的-hlsl-约定)。
 2. **按槽位给每个实例设值**：槽位是字段在效果里声明的先后，**名字只解析一次**得到句柄，之后全按槽位赋值，没有字符串比较。
 
 ```odin
@@ -59,7 +51,7 @@ hue := mat.instance_slot(material, "hue")            // 解析一次；名字写
 // 逐个绘制：Instance_Values 设置这一次绘制的实例字段，只覆盖显式设置的槽位，其余沿用材质里的值
 cool: mat.Instance_Values
 mat.instance_values_set(&cool, hue, {0.7, 0, 0, 0})
-r2d.sprite_draw(&renderer, material, frame, transform, view, values = &cool)
+r2d.image(&renderer, frame, transform, material = material, values = &cool)
 
 // 缓冲：同样的槽位，写进平铺数组（每个实例连续 buffer.slots 个 float4），上传时一并传入
 mat.instance_array_set(values, sprite_buffer.slots, i, hue, {0.7, 0, 0, 0})
@@ -82,7 +74,7 @@ r3d.model_buffer_upload(&model_buffer, instances, values = values)
 mat.material_set_number(material, "Sprite_body", "strength", {0.8, 0, 0, 0})   // 之后所有绘制都用 0.8
 ```
 
-- 精灵合批在**提交时**就把 uniform 复制进批次，所以在两次绘制之间改它，已排队的绘制不受影响，可以临时改一下再改回去。
+- 精灵合批在**记录时**就把 uniform 复制进批次，所以在两次绘制之间改它，已排队的绘制不受影响，可以临时改一下再改回去。
 - 但统一参数取值不同的绘制无法合批，每个不同取值至少多一次 Draw；如果它其实是每个实例不同的值，就把它声明成 `[Instance]`。
 - 只有少数几种固定变体时，再 `material_load` 一个材质文件即可，共享同一份 Shader 和贴图。
 
@@ -106,7 +98,7 @@ r2d.sprite_buffer_upload(&buffer, items, values = values)
 
 ## 约定
 
-- **错误返回**：绘制路径返回 `Draw_Error` 枚举（出错时不提交任何 Draw）；声明、解析、加载和登记返回
+- **错误返回**：绘制路径返回 `Draw_Error` 枚举（记录失败不加入队列，submit 返回错误并清空本次记录）；声明、解析、加载和登记返回
   `reason: string`，空串表示成功，因为这些错误需要带上 Pass / 字段名等具体信息。文本借用至本帧
   `temp_allocator` 重置，需要保留时自行克隆。`describe`、`effect_validate`、`material_load` 等均遵循这一规则。
 - **上限常量**：`MAX_PASSES`（32）、`MAX_TEXTURES`（16）、`MAX_UNIFORM_BYTES`（16384）、
@@ -125,7 +117,7 @@ materials := mat.Material_Library{device = device, storage = &resources}
 // 清单与各 Pass 的 spv / dxil / msl 都由 tools/shaders 生成；库按驱动选择后端并登记。
 reason := mat.material_register_manifest(&materials, #load("Hero.shader.json"), passes)
 material, reason := mat.material_load(&materials, "materials/hero.json")
-// 检查 reason 后将 material 传给 r2d.sprite_draw 或 r3d.model_draw。
+// 检查 reason 后将 material 传给 r2d.image 或 r3d.model_draw。
 ```
 
 `passes` 是 `[]mat.Pass_Binaries`，与清单里的 Pass 一一对应（见 `olib_sample/src/material3d/shaders.odin`）。
@@ -147,14 +139,35 @@ ShaderLab 的本机路径适配属于工具内部实现，底层同样使用 Sto
 目前不逐项卸载，建议按场景或资源会话划分库。
 路径中的 `.`、`..`、反斜杠会规范化；导出文件含绝对贴图路径时，应先将贴图纳入资产根并改为相对路径。
 
+## 内置效果与 Web
+
+```odin
+sprite, reason := mat.material_create(&materials, "Sprite_Default")
+text, reason := mat.material_create(&materials, "Text_Msdf")
+mat.material_set_number(text, "Text_Msdf", "distance_range", {4, 0, 0, 0})
+```
+
+内置效果首次使用时自动登记，直接借用设备的默认 Shader（含 Web GLSL），库只释放材质实例。
+每种字体可以有独立的 Text_Msdf 实例。material_create 也支持已登记的自定义效果，
+每次创建独立参数、沿用声明默认值；material_library_dispose 统一释放。
+
+`Shader_Binaries { spv, dxil, msl, glsl }` 按驱动选择代码；Private（WebGL2）选 glsl，
+缺少对应格式返回空切片，登记失败。GLSL 必须手写，tools/shaders 不自动转换。
+Web 仅支持 Foster uniform 布局（矩阵与 MSDF distance_range）；普通 Olib Clock/参数块、
+实例 storage buffer 和实例缓冲在登记时返回明确错误，不进入 GPU 创建。
+因此添加 GLSL 源码本身并不能让普通 .oshader 材质在 Web 可用。
+
+`Pass_Binaries.instanced_vertex` 是 Sprite 常驻缓冲的顶点变体；普通批量用 vertex，
+两种变体共用 fragment。自定义效果代码借用到材质库释放，内置 Shader 归设备所有。
+
 ## 渲染器与工具接入
 
 `material_library.odin` 提供 `Material_Library`，`material.odin` 提供 `Material` 和游戏材质加载入口。
 `draw.odin` 提供 `Material_Binding`、`Material_Draw`、`Draw_Options`、`material_draw` 和 `pass_state_apply`，
 负责选取 Pass、验证绑定、上传参数、绑定纹理、应用状态并提交 DrawCommand。
-2D/3D 绘制入口与 Shader Lab 使用同一套实现；业务通常从 `sprite_draw` 或 `model_draw` 接入。
-所有绘制入口返回 `Draw_Error`：`.None` 表示成功（可能全部 Pass 被禁用，不提交任何 Draw），
-其余值说明被拒绝的原因，`draw_error_text(error)` 得到可读文本。拒绝时不会发出任何 Draw。
+2D/3D 绘制入口与 Shader Lab 使用同一套实现；业务通常从 `r2d.image` 或 `model_draw` 接入。
+所有绘制入口返回 `Draw_Error`，`.None` 表示成功，`draw_error_text(error)` 得到可读文本。
+Render2D 记录成功不代表已提交；被禁用的 Pass 不记录。
 
 Shader Lab 的参数作者使用 [.oshader 的 Properties](../shader/lang/README.md)。
 运行时代码也可通过 `describe` 反射创建 Schema；手工构造 Schema 的调用方
@@ -268,4 +281,4 @@ GPU 执行见 [rendering3d 的 model_material_draw](../3d/REFERENCE.md#model_mat
 一个 Effect 内不能混合 Sprite、Model 或图像效果；Sprite 使用 2d 参数组，Model 使用 3d。
 Sprite 的 `sprite_texture` 指定当前帧覆盖的 Texture 字段，无隐式贴图槽。
 Sprite 默认预乘 Alpha、无剔除和深度读写；`.Premultiplied` 可显式声明预乘混合。
-2D 接口及示例见 [精灵绘制](../2d/README.md#精灵绘制)。
+2D 接口及示例见 [精灵绘制](../2d/README.md#最小用法)。

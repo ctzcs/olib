@@ -32,7 +32,7 @@ foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组
 kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── asset/       资源管线：.meta 管身份、library/assets 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
-├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Batcher 覆盖层，不持有场景对象
+├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Render2D 覆盖层，不持有场景对象
 ├── rendering/   渲染：共享资源、2D/3D 绘制与 Shader 工具链
 │   ├── material/ 材质参数、效果描述、实例值、GPU 布局、资源加载与 Pass 提交
 │   ├── 2d/      Sprite / SpriteAtlas / 图集构建与精灵合批
@@ -131,7 +131,7 @@ Web 上 `Run` 会把 App 拷贝到堆上并立即返回，但不会搬移游戏�
 
 各模块文档见包内注释、[资源管线](kit/asset/README.md)与 [游戏 UI](kit/ui/README.md)。
 内置 [默认图标图集](assets/icons/README.md) 提供 815 个白色图标，单张 4096×4096 PNG；
-通过 `r2d.builtin_icons_load` 加载，按名称取得 Subtexture，可直接用于 UI 或 Batcher。
+通过 `r2d.builtin_icons_load` 加载，按名称取得 Subtexture，可直接用于 UI 或 Render2D。
 
 桌面开发期可接入 [游戏代码与 UI 热重载](core/hotreload/README.md)：常驻宿主保留窗口/设备，
 保存 Odin 后后台编译游戏 DLL，在安全帧边界通过快照恢复游戏数据并重建 UI。编译或候选初始化失败

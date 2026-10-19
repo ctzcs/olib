@@ -61,11 +61,15 @@ toon_init :: proc(t: ^Toon, device: ^foster.GraphicsDevice) -> bool {
 	d := device.Driver
 	// SamplerCount / UniformBufferCount 必须与 HLSL 声明的数量一致
 	foster.ShaderInit(&t.vertex, device, {Stage = .Vertex, UniformBufferCount = 1, EntryPoint = "vertex_main",
-		Code = mat.shader_pick(d, {#load("shaders/Compiled/Toon.vertex.spv"),
-			#load("shaders/Compiled/Toon.vertex.dxil"), #load("shaders/Compiled/Toon.vertex.msl")})}, "toon vertex")
+		Code = mat.shader_pick(d, {
+		spv = #load("shaders/Compiled/Toon.vertex.spv"),
+		dxil = #load("shaders/Compiled/Toon.vertex.dxil"),
+		msl = #load("shaders/Compiled/Toon.vertex.msl")})}, "toon vertex")
 	foster.ShaderInit(&t.fragment, device, {Stage = .Fragment, SamplerCount = 1, UniformBufferCount = 1, EntryPoint = "fragment_main",
-		Code = mat.shader_pick(d, {#load("shaders/Compiled/Toon.fragment.spv"),
-			#load("shaders/Compiled/Toon.fragment.dxil"), #load("shaders/Compiled/Toon.fragment.msl")})}, "toon fragment")
+		Code = mat.shader_pick(d, {
+		spv = #load("shaders/Compiled/Toon.fragment.spv"),
+		dxil = #load("shaders/Compiled/Toon.fragment.dxil"),
+		msl = #load("shaders/Compiled/Toon.fragment.msl")})}, "toon fragment")
 	if t.vertex.Resource == nil || t.fragment.Resource == nil do return false
 	foster.MaterialInitWithShaders(&t.material, &t.vertex, &t.fragment)
 	return true

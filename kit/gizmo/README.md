@@ -2,7 +2,7 @@
 
 `olib:kit/gizmo` 提供二维 `Transform_Gizmo2D`、三维 `Transform_Gizmo`，
 并保留移动专用的 `Translation_Gizmo`。使用现有的 `world.Camera2D` / `world.Camera3D`，
-三维手柄使用世界空间网格与深度测试，二维手柄使用 Batcher，返回拖拽结果；不读取窗口输入、不依赖 Clay、不识别模型、
+三维手柄使用世界空间网格与深度测试，二维手柄使用 Render2D，返回拖拽结果；不读取窗口输入、不依赖 Clay、不识别模型、
 不修改场景或保存文件。目前没有三维平面移动手柄、矩形边角编辑、吸附与负缩放。
 
 ## 二维操作
@@ -42,7 +42,7 @@ labels := gizmo.transform2d_draw(batch, &handle, geometry, input.pointer, ui_sca
 每帧调用包括释放/离焦帧，`allow_start=false` 只阻止开始，已有拖拽经过 UI 仍继续。
 调用方负责选中哪个对象、消费 captured 输入、应用变换和保存。
 
-`transform2d_draw` 使用最终像素 Batcher 和调用方设置的视口裁剪，
+`transform2d_draw` 使用最终像素 Render2D 和调用方设置的视口裁剪，
 返回三个 XYZ 标签槽位：移动/缩放使用前两个，旋转只使用 Z 槽。字体由调用方提供。
 状态与几何无堆分配，不拥有 GPU 资源。
 
@@ -56,7 +56,7 @@ labels := gizmo.transform2d_draw(batch, &handle, geometry, input.pointer, ui_sca
 ```
 
 三个视口分别演示移动、旋转、缩放；方向键平移相机，Q/E 旋转，Z/X 缩放，R 重置。
-shot 通过真实鼠标输入检查编辑结果，并生成 `build/gizmo2d-宽x高.png`，包含运行中 resize。
+shot 通过真实鼠标输入检查编辑结果，并生成 `library/screenshots/gizmo2d-宽x高.png`，包含运行中 resize。
 
 ## 三维操作模式
 

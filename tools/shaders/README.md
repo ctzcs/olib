@@ -3,7 +3,9 @@
 同一入口也支持 [单文件 `.oshader`](../../kit/rendering/shader/lang/README.md)，无需手动拆出 HLSL。
 每个 Pass 生成 `<Shader>_<Pass>.<阶段>.<格式>`，并输出包含 Schema/Effect 的
 `<Shader>.shader.json`。它描述材质定义，与保存实例参数值的 JSON 区分；
-预览与发布共用解析器。指定目录内的旧 `.hlsl` 可以并存，输出重名会在编译前报错。
+预览与发布共用解析器。Sprite 总是生成 BatcherVertex 批量变体；
+声明 Instanced 时额外输出 `<Shader>_<Pass>.instanced.vertex.<格式>`，两者共用片元代码。
+运行时分别填入 Pass_Binaries.vertex 与 instanced_vertex；修改 2D 输入约定后须一起重新生成。指定目录内的旧 `.hlsl` 可以并存，输出重名会在编译前报错。
 
 Shader 与使用它的功能放在一起。框架内置绘制属于 `foster`，库功能属于对应 `kit` 包，
 游戏材质和演示效果属于游戏/示例仓库。跨模块共享的代码按依赖方向提取到共同拥有者；

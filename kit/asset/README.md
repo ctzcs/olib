@@ -52,7 +52,7 @@ defer asset.assets_dispose(&m)
 tex, err := asset.assets_load_path(&m, "textures/belt.png")   // 先查 manifest，miss 回退 .meta
 // 或 asset.assets_load(&m, guid) —— 正式数据里存 guid，零表直查
 
-foster.BatcherQuadTexture(&batcher, asset.assets_get_texture(&m, tex), …)
+r2d.texture(&renderer, asset.assets_get_texture(&m, tex), foster.Matrix3x2Identity)
 ```
 
 Asset_Handle 带 `array` 代数，不依赖 ECS，任何 struct 里放一个即可引用资产。

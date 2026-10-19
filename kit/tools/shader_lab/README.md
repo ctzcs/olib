@@ -249,7 +249,7 @@ UI 始终在全部 Pass 完成后按最终像素绘制，不进入模糊/反馈�
 ### 精灵材质 / 阴影 + 本体
 
 `olib_sample` 的 `SpriteShadow.oshader` 使用 `.Sprite`：偏移阴影 + 本体。2D 工作区可选择该效果，
-预览直接调用 `r2d.sprite_material_draw`，游戏示例在 `src/material2d`。
+预览直接调用 `r2d.material_draw`（[工具接口](../../rendering/2d/REFERENCE.md#material_drawshader-lab-的立即入口)），游戏示例在 `src/material2d`。
 `.Sprite` 和旧 `.Preview_Model` 的顶点 uniform 接口不同；不能只改 draw 类型而沿用旧 Shader。
 整材质保存/载入同时适用于 Model 和 Sprite，按 Effect 名匹配，失败保留整个旧材质。
 Shader 接口与业务接入见 [kit/rendering/2d](../../rendering/2d/README.md)。

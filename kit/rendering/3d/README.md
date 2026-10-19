@@ -25,7 +25,7 @@ r3d.mesh_dispose(&mesh)
 mat.material_library_dispose(&materials)
 ```
 
-- 参数顺序与 `sprite_draw` 一致：材质、几何、变换、视图，最后是可选的 `pass_id`。
+- 参数顺序为：材质、几何、变换、视图，最后是可选的 `pass_id`。
 - `pass_id` 为空画全部启用的 Pass；`r3d.model_draw(material, &mesh, transform, view, "outline")` 只画该 Pass，
   用循环组织“全部本体 → 全部描边”这类顺序。未知 ID 返回 `.Unknown_Pass`，已禁用的 Pass 返回 `.None` 但不绘制。
 - 一个网格（primitive）一次调用；多 primitive 的模型由场景持有多组“网格 + 材质”。库不做场景、不排序、不合并网格。

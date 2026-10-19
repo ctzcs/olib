@@ -425,31 +425,36 @@ income_step_settles_multiple_cycles :: proc(t: ^testing.T) {
 package view
 
 import foster "olib:foster"
+import mat "olib:kit/rendering/material"
+import r2d "olib:kit/rendering/2d"
 import ui "olib:kit/ui"
 
 View :: struct {
-	batcher: foster.Batcher,
-	ui_ctx:  ui.UI_Context, // 地址必须稳定，初始化后不可按值复制 View。
+	materials: mat.Material_Library,
+	renderer: r2d.Render2D,
+	ui_ctx: ui.UI_Context, // 初始化后地址保持稳定。
 }
 
-view_init :: proc(v: ^View, app: ^foster.App) {
-	foster.BatcherInit(&v.batcher, &app.GraphicsDevice, "game")
+view_init :: proc(v: ^View, app: ^foster.App) -> string {
+	v.materials.device = &app.GraphicsDevice
+	if reason := r2d.init(&v.renderer, &v.materials); reason != "" do return reason
 	ui.ui_init(&v.ui_ctx, 1280, 720)
+	return ""
 }
 
-view_draw :: proc(v: ^View, app: ^foster.App) {
+view_draw :: proc(v: ^View, app: ^foster.App) -> mat.Draw_Error {
 	target := foster.DrawableTargetFromWindow(&app.Window)
-	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, foster.Color{24, 28, 36, 255})
-	foster.BatcherClear(&v.batcher)
-	// 绘制世界，再按 kit/ui README 的最小帧流程声明 UI 并 ui_draw 叠加。
-	foster.BatcherRender(&v.batcher, target)
+	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, {24, 28, 36, 255})
+	// 记录世界，再按 kit/ui README 声明 UI，用 ui_draw 叠加。
+	return r2d.submit(&v.renderer, {target = target})
 }
 
 view_destroy :: proc(v: ^View) {
-	// 先释放 UI，再释放字体、贴图和 Batcher。
 	ui.ui_dispose(&v.ui_ctx)
-	foster.BatcherDispose(&v.batcher)
+	r2d.dispose(&v.renderer)
+	mat.material_library_dispose(&v.materials)
 }
+
 ```
 
 入口代码以可运行模板为准，不再另放一份把业务组装写进 game 的 App 骨架：

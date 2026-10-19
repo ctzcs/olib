@@ -1,44 +1,31 @@
 # 渲染
 
-## 最小示例：带材质的精灵
+2D 用 `Render2D` 记录，最后 `submit`；3D 用 `model_draw`。二者共用材质库，互不依赖。
+
+## 最小示例
 
 ```odin
 import foster "olib:foster"
 import r2d "olib:kit/rendering/2d"
 import mat "olib:kit/rendering/material"
 
-// 初始化（一次）：资源容器、材质库、精灵渲染器。
 materials := mat.Material_Library{device = &app.GraphicsDevice, storage = &resources}
-if reason := mat.material_register_manifest(&materials, manifest_json, pass_binaries); reason != "" {
-    // 清单或字节码有问题：reason 说明原因。
-}
-renderer: r2d.Sprite_Renderer
-r2d.sprite_renderer_init(&renderer, &app.GraphicsDevice)
-material, reason := mat.material_load(&materials, "materials/hero.json")
-frame := foster.SubtextureFromTexture(&texture)
+renderer: r2d.Render2D
+reason := r2d.init(&renderer, &materials) // 检查 reason；空串成功
 
-// 每帧：begin/end 之间自动合并相邻兼容的绘制。
-view := r2d.Sprite_View{target = foster.DrawableTargetFromWindow(&app.Window), time = elapsed}
-if r2d.sprite_begin(&renderer) {
-    if err := r2d.sprite_draw(&renderer, material, frame, foster.Matrix3x2Identity, view); err != .None {
-        fmt.eprintln(mat.draw_error_text(err))
-    }
-    r2d.sprite_end(&renderer)
-}
+// 每帧：默认材质无需登记或加载；自定义材质加 material = material。
+err := r2d.texture(&renderer, &texture, foster.Matrix3x2Identity)
+err = r2d.submit(&renderer, {target = foster.DrawableTargetFromWindow(&app.Window), time = elapsed})
+// 检查每个 err：.None 成功，mat.draw_error_text(err) 给出原因。
 
-// 退出：先停止绘制，再释放。
-r2d.sprite_renderer_dispose(&renderer)
+// 退出：
+r2d.dispose(&renderer)
 mat.material_library_dispose(&materials)
 ```
 
-整张贴图当一帧时用 `r2d.sprite_draw_texture(&renderer, material, &texture, transform, view)`。
-同一材质要画不同取值（如不同 hue）时：效果里把参数声明成 `[Instance]`，用 `mat.instance_slot` 解析一次槽位，
-再用 `mat.Instance_Values` 给每个精灵设值，这些不同取值仍会合成一次 Draw
-（见 [2d README](2d/README.md#跨实例合批instance-与-instanced)）。整体参数用 `mat.material_set_number` 改材质。
-
-3D 把 `sprite_draw` 换成 `r3d.model_draw(material, &mesh, transform, view)`，同样返回 `mat.Draw_Error`。
-`manifest_json` 与 `pass_binaries` 由 `tools/shaders` 的产物 `#load` 得到，完整写法见
-`olib_sample/src/material2d` 和 `src/material3d`；各部分细节见下面各包的 README。
+自定义效果用 `material_register_manifest` 登记，再 `material_load` 或 `material_create` 创建材质。
+不同 tint 自动合批；每个对象独立变化的材质字段用 `[Instance]` 和 `Instance_Values`。
+常驻实例缓冲继续使用平铺数值数组，见 [2D](2d/README.md) 和 [3D](3d/README.md)。
 
 ## API 速查：从哪个文件找
 
@@ -46,13 +33,13 @@ mat.material_library_dispose(&materials)
 
 | 要做什么 | 函数 / 类型 | 文件 |
 | --- | --- | --- |
-| 创建材质库、登记效果 | `Material_Library`、`material_register_manifest`、`material_register`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
+| 创建材质库、登记效果 | `Material_Library`、`material_create`、`material_register_manifest`、`material_register`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
 | 加载材质、改参数 | `material_load`、`material_reload`、`material_set_number` | [material/material.odin](material/material.odin) |
 | 每个实例的值（可合批） | `Instance_Slot`、`instance_slot`、`instance_slot_count`、`Instance_Values`、`instance_values_set`、`instance_array_set`（缓冲用） | [material/instance_values.odin](material/instance_values.odin) |
 | 绘制失败原因 | `Draw_Error`、`draw_error_text` | [material/draw.odin](material/draw.odin) |
-| 2D 画精灵 | `Sprite_Renderer`、`sprite_renderer_init/dispose`、`sprite_begin/end/flush`、`sprite_draw`、`sprite_draw_texture`、`Sprite_View` | [2d/sprite_draw.odin](2d/sprite_draw.odin) |
-| 2D 百万精灵（一次 Draw） | `Sprite_Buffer`、`sprite_buffer_init/upload/dispose`、`Sprite_Item`、`sprite_item_make`、`sprite_draw_buffer` | [2d/sprite_buffer.odin](2d/sprite_buffer.odin) |
-| 2D 帧动画 | `Sprite`、`sprite_init/dispose`、`sprite_add_frame`、`sprite_add_animation`、`sprite_get_animation`、`sprite_get_frame_at` | [2d/sprite.odin](2d/sprite.odin) |
+| 2D 画精灵 | `Render2D`、`init/dispose`、`image/texture`、`push_matrix/pop_matrix`、`submit`、`View` | [2d/render2d.odin](2d/render2d.odin) |
+| 2D 百万精灵（一次 Draw） | `Sprite_Buffer`、`sprite_buffer_init/upload/dispose`、`Sprite_Item`、`sprite_item_make`、`buffer` | [2d/sprite_buffer.odin](2d/sprite_buffer.odin) |
+| 2D 帧动画 | `Animation_Set`、`animation_set_init/dispose`、`animation_set_add_frame/add_animation`、`animation_set_get_animation/get_frame_at` | [2d/animation_set.odin](2d/animation_set.odin) |
 | 2D 图集 | `Sprite_Atlas`、`atlas_from_rects`、`atlas_upload`、`atlas_subtexture`、`atlas_get/has/names/crop` | [2d/atlas.odin](2d/atlas.odin)（来源格式见 `atlas_grid / atlas_kenney / atlas_aseprite / atlas_builtin_icons`） |
 | 3D 画模型 | `View`、`model_draw` | [3d/model_draw.odin](3d/model_draw.odin) |
 | 3D 实例化（大批量） | `Model_Buffer`、`Model_Item`、`model_buffer_init/upload/dispose`、`model_draw_buffer` | [3d/model_buffer.odin](3d/model_buffer.odin)、[3d/model_draw.odin](3d/model_draw.odin) |

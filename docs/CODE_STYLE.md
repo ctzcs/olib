@@ -23,7 +23,7 @@ olib/
 - 同一主题的声明、构造、查询、修改和释放函数放在一起，不为层级拆小文件；
   单主题的小包（如 `meta.odin`）一个文件即可，多主题包按主题分文件
   （参考 `core/tween/`：manager / tween / interpolated / managed_*）。
-- 文件按能独立说明的职责划分，名称直接对应用途，例如 `sprite_draw.odin` / `model_draw.odin`。
+- 文件按能独立说明的职责划分，名称直接对应用途，例如 `render2d.odin` / `model_draw.odin`。
   不为包名另建只有注释和 `package` 声明的同名文件；包说明放 README 或已有实现文件。
   业务数据与常用入口放在文件前部，内部辅助实现放后部；只在包内使用的声明设为 private。
   只有实际共享或独立生命周期需要时才拆出公共实现，不因一个 struct/proc 单独建文件或目录。
@@ -42,7 +42,9 @@ olib/
    - kit 的 API 直接接收、返回 foster 类型；**不给** foster 的类型或 proc 起别名，**不做**一对一封装；
    - kit **不封装** foster 的 App 生命周期（`InitApp` / `Run` / `Exit` / `Dispose`）；
    - `foster/` 以外的代码**不得** import `olib:foster/internal/...`。
-4. 依赖方向：`kit → foster`、`kit → core`；`core` 不得依赖 `foster` 或 `kit`；`foster` 不依赖 olib 其他任何包。
+4. kit 内 2D 绘制统一使用 `r2d.Render2D`，不使用 `foster.Batcher`，以原生支持 olib 材质、
+   `[Instance]` 与常驻实例缓冲。Foster Batcher 留给直接使用 foster 的代码；顶点格式仍直接用 Foster 类型。
+5. 依赖方向：`kit → foster`、`kit → core`；`core` 不得依赖 `foster` 或 `kit`；`foster` 不依赖 olib 其他任何包。
 
 主动修改 Foster 时须先登记 [LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)，
 保留 Foster API 与命名体系。

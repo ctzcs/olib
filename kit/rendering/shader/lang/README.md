@@ -49,41 +49,44 @@ Shader "Water"
 - `Range(min,max)`、`Float`、`Vector2`、`Vector3`、`Color`、`2D` 对应现有控件。
   除 Float 默认范围 -10000..10000 外，数值控件默认范围 0..1；向量和颜色可写
   `Vector2(-5,5)`、`Color(0,4)` 指定范围。默认值必须落在范围内。
-- `[Step(0.01)]` 设置步长；`[Id("稳定标识")]` 让字段改名后保留值。
-- `[Instance]` 标记 per-instance 数值字段（仅数值，最多 16 个，实际个数由项目决定，见 [material README](../../material/README.md#字段个数由你的项目决定)）：它不占 uniform，而是随每个精灵的顶点传入，
-  所以参数取值不同的精灵仍能合批。含 `[Instance]` 字段的效果自动成为 **instanced** 效果；
-  只想让 tint 也随顶点（不同 tint 合批）而没有实例字段时，在 Shader 顶层写一行 `Instanced`。
-  instanced 支持 `Draw Sprite` 和 `Draw Model`（模型须用实例缓冲绘制，见 [3d README](../3d/README.md#模型实例化)）。
+- `[Step(0.01)]` 设置步长；`[Id("稳定标识")]` 让字段改名后保留值。未指定 Id 时取去掉第一个下划线后的属性名，大小写敏感。
+- `[Instance]` 标记每对象数值字段（最多 16 个）；2D 走顶点 storage buffer，不占参数 uniform，
+  不同取值仍可合批。tint 总在顶点颜色里，不需要额外标记。
+- 顶层 `Instanced` 声明生成常驻缓冲变体；当前解析器遇到 `[Instance]` 也会自动启用它。
+  底层 Effect 允许 2D 只用实例字段而不启用 instanced；3D 仍要求实例缓冲。
 
-### instanced 效果的 HLSL 约定
+### 2D 效果的 HLSL 约定
 
-instanced 效果的实例数据（变换、tint、`[Instance]` 字段）通过一个**按实例步进的顶点缓冲**提供：
-逐个 `sprite_draw` 时由渲染器累积并自动合批，也可以用 `Sprite_Buffer` / `Model_Buffer` 一次画上百万个。
-生成代码里多出 `OlibInstanceInput`（顶点输入）、`OlibInstance`（传给片元）和全局 `olib_instance`。
-
-**精灵 instanced**（`Draw Sprite`）：
+所有 `Draw Sprite` 都用同一份输入接口，批量与常驻缓冲的差异由生成器处理：
 
 ```hlsl
 cbuffer ViewBlock : register(b0, space1) { float4x4 Projection; };
-struct Input {
-    OlibInstanceInput Instance;   // 必须是第一个成员
-    float2 Corner : TEXCOORD0;    // 单位四边形的角点 (0,0)(1,0)(1,1)(0,1)
-};
+struct Input { OlibSpriteInput Sprite; };
 struct Output { float4 Position : SV_Position; float2 Uv : TEXCOORD0; OlibInstance Instance; };
 Output vertex_main(Input v)
 {
+    OlibSprite s = olib_sprite(v.Sprite);
     Output o;
-    float2 position;
-    olib_sprite_vertex(v.Instance, v.Corner, position, o.Uv);   // 屏幕像素位置与图集 UV
-    o.Position = mul(Projection, float4(position, 0, 1));
-    o.Instance = olib_instance_from(v.Instance);
+    o.Position = mul(Projection, float4(s.position, 0, 1));
+    o.Uv = s.uv;
+    o.Instance = s.instance;
     return o;
 }
-// fragment_main: olib_instance = v.Instance;   // 之后 _hue 等 [Instance] 字段和 InstanceTint 才有值
+float4 fragment_main(Output v) : SV_Target0
+{
+    olib_instance = v.Instance;
+    return _image.Sample(_imageSampler, v.Uv) * InstanceTint;
+}
 ```
 
-`InstanceTint` 是 `sprite_draw*` 的 tint；instanced 效果里 Fragment b0 的 `Tint` 固定为白色，请改用 `InstanceTint`。
-没有声明 instanced 的旧着色器仍使用原来的 `Position` / `Uv` 顶点输入，不受影响。Odin 声明里用结构体标签 `instance:"true"` 对应。
+`InstanceTint` 是绘制调用的顶点色；片元 b0 中的 Tint 固定白色。
+批量变体使用 BatcherVertex；有实例字段时，mode 字节存 storage buffer 下标，
+生成器声明顶点 t0/space0 和 b1/space1 的 Pass 偏移，运行时一次上传各 Pass 的独立数值。
+缓冲变体使用单位四边形与实例顶点，由 `r2d.buffer` 绘制，不使用 storage buffer。
+顶点 b0 为投影；片元 b0 为 Clock/Pointer/Tint，b1 为统一参数；这些帧块仍由宿主提供。
+不要手写或复用旧的精灵顶点布局。Odin 的字段标签 `instance:"true"` 对应 `[Instance]`。
+
+### instanced 效果的 HLSL 约定
 
 **模型 instanced** 的 HLSL（`Draw Model`）：
 
@@ -105,7 +108,7 @@ struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibIn
 1. `OlibInstanceInput` 必须是 `Input` 的第一个成员，这样实例属性的位置总是 0.. 且全部被使用；
    网格属性自动后移，网格里末尾未使用的属性（如 Tangent）无妨，中间未使用的属性会错位。
 2. 传给片元的变量（`Output` 里除 `SV_Position` 外的成员）必须全部在片元里被使用，否则顶点输出与片元输入对不上。
-  未指定 Id 时取去掉第一个下划线后的属性名，大小写敏感。
+
 - `2D` 默认值是相对 Shader Lab `source_root` 的贴图路径，空字符串使用内置棋盘格。
 - 数值只支持 fragment 参数；保持现有 fragment b1/space3、每字段 16 字节及
   texture/sampler space2 布局。引擎 b0 由宿主提供，不自动生成 `Time` 等全局变量。
@@ -156,7 +159,8 @@ odin run ../olib/tools/shaders -- -dir:src/shader_lab/shaders
 
 工具编译指定目录顶层的 `.hlsl` 和 `.oshader`，子目录需分别运行。
 每个 Pass 输出 `Compiled/<Shader>_<Pass>.<vertex|fragment>.<spv|dxil|msl>`，
-同时输出 `Compiled/<Shader>.shader.json`，包含 `version:1`、`schemas`、`effect`。
+Sprite 批量变体总是生成；声明 Instanced 时还输出 `<Shader>_<Pass>.instanced.vertex.<spv|dxil|msl>`，
+片元代码共用。同时输出 `Compiled/<Shader>.shader.json`，包含 `version:1`、`schemas`、`effect`。
 描述中的 `schema.shader` 是不带后缀的程序资源键，不含开发机路径。
 游戏可将其解码为现有 `material.Schema` / `Effect_Desc`，配合预编译代码登记到
 Material_Library；它与保存参数值的材质实例 JSON 是两种不同数据，不可互换。
@@ -168,4 +172,4 @@ Zed / ZedG 的 `.oshader` 高亮见 [本地扩展](../../../../tools/zed-shader/
 支持外层声明和嵌入 HLSL；语义补全与跨块跳转尚未提供。
 共享代码可用 HLSLINCLUDE / HLSLI；每个效果在自己的文件中声明 Pass，分别编译。
 
-检查：`odin run tools/check -- -only:kit/shader`，全仓检查为 `odin run tools/check`。
+检查：`odin run tools/check -- -only:kit/rendering/shader`，全仓检查为 `odin run tools/check`。

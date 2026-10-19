@@ -31,7 +31,8 @@ reload.hot_dispose(&host.hot)      // Shutdown
 State :: struct {
 	position: [2]f32,
 	trail: [dynamic][2]f32,      // 数组、map、堆上的对象都可以放
-	batcher: foster.Batcher,     // 资源字段也可以放，在 start 里重新创建
+	materials: mat.Material_Library,
+	renderer: r2d.Render2D,     // 资源字段也可以放，在 start 里重新创建
 }
 
 hooks := reload.Game_Hooks(State, Services){
@@ -49,7 +50,7 @@ olib_game_api :: proc "c" (version: u32, size: int, api: ^reload.API) -> bool {
 | 回调 | 何时调用 |
 | --- | --- |
 | `reset` | 第一次启动时初始化 State；热重载时不调用 |
-| `start` / `stop` | 每次加载 / 卸载一个版本：创建 / 释放这个版本的资源（Batcher、UI 等）。热重载时旧版本的 `stop` 在新版本 `start` 之后执行 |
+| `start` / `stop` | 每次加载 / 卸载一个版本：创建 / 释放这个版本的资源（Render2D、材质库、UI 等）。热重载时旧版本的 `stop` 在新版本 `start` 之后执行 |
 | `drop` | 游戏真正结束时调用一次：释放 State 拥有的堆数据。热重载换版本时不调用 |
 | `update` / `render` | 每帧调用 |
 
@@ -57,14 +58,14 @@ olib_game_api :: proc "c" (version: u32, size: int, api: ^reload.API) -> bool {
 
 - 可以放：普通数据；用宿主分配器分配的堆数据（动态数组、map、`strings.clone` 的字符串、`new` 的对象，
   回调里的 `context.allocator` 就是宿主的），新旧版本共用同一份，由 `drop` 释放；资源字段在 `start`
-  里重新创建（`BatcherInit` 会覆盖整个字段），在 `stop` 里释放。
+  里重新创建（`r2d.init` 会覆盖整个字段），在 `stop` 里释放。
 - 不能放：字符串字面量、函数指针、指向 DLL 包级变量或常量的指针。旧 DLL 卸载后它们就失效，新版本再用会崩溃；
   需要字符串就 `strings.clone`，需要回调就存 ID。
 - 改了 State 的字段布局（大小不同）时新版本会被拒绝：提高 `state_version` 并选择重开，
   或改用下面的完整接口，自己用 JSON 等格式编码，可以跨字段变化保留局面。
 
 完整可运行的版本是 olib_sample 的 `run.bat hotreload`（宿主约 90 行含窗口样板，游戏约 70 行，
-`State` 里放了拖尾数组和 Batcher）。需要自定义编译命令、`.Migrate` / `.Reset` 策略时，用下面的完整接口。
+`State` 里放了拖尾数组、材质库和 Render2D）。需要自定义编译命令、`.Migrate` / `.Reset` 策略时，用下面的完整接口。
 
 ## 从哪里开始
 
@@ -80,7 +81,7 @@ olib_game_api :: proc "c" (version: u32, size: int, api: ^reload.API) -> bool {
 1. **宿主和模块版本一致**：同一版本 Odin、同一架构和编译选项、同一份共享协议源码。
    协议或共享类型变了，升级 `host_version` 并重启宿主。
 2. **宿主拥有，模块借用**：`foster.App`、窗口、设备、`Session`、`Watch` 和服务结构（地址须稳定）属于宿主；
-   世界、UI/Clay、Batcher、表现缓存、任务属于模块，卸载前必须全部释放。
+   世界、UI/Clay、Render2D、表现缓存、任务属于模块，卸载前必须全部释放。
 3. **快照只放自有数据**：数值、稳定 ID、数组和字符串的内容、格式版本。
    不放指针、函数指针、`any/typeid`、分配器、GPU 句柄、UI/Clay 内存。可以用 JSON、存档格式或二进制。
 4. **`load` 只建私有对象**：不改宿主场景、不注册回调、不播音效、不写存档；这些放到成功提交后的 `activate`。
@@ -123,7 +124,7 @@ assert(reload.watch_init(&host.watch, {
 	roots = {"src/core", "src/core_editor"},
 }))
 
-// UpdateProc 开始，尚未生成本帧 UI、Batcher 或渲染队列。
+// UpdateProc 开始，尚未生成本帧 UI、Render2D 记录或渲染队列。
 reload.watch_update(&host.watch, dt)
 if host.watch.status == .Ready {
 	result := reload.watch_apply(&host.watch, &host.session)

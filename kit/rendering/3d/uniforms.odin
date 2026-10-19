@@ -1,4 +1,4 @@
-// rendering3d:uniforms3d —— cbuffer 的 CPU 侧打包（与光照/材质模型无关的部分）。
+// rendering3d:uniforms —— cbuffer 的 CPU 侧打包（与光照/材质模型无关的部分）。
 //
 // 布局按 SDL std140 规则手排（全 vec4，无 padding 陷阱）。矩阵按 kit/world
 // Matrix4 的存储（c0..c3）依次写 64B，HLSL 默认 column_major 读到的就是同一个
@@ -18,12 +18,7 @@ import world "olib:kit/world"
 // 顶点矩阵块 —— WVP + World
 // ------------------------------------------------------------------------------
 
-// VertexMatrixBlock（128B）：WVP + World。
-Vertex_Matrix_Block :: struct {
-	world_view_projection: world.Matrix4,
-	world:                 world.Matrix4,
-}
-
+// 顶点槽 0 的矩阵块（128B）：WVP + World，按此顺序各 64B。
 VERTEX_MATRIX_BLOCK_SIZE :: 128
 
 // 打包 WVP/World。buf 长度不足返回 false。

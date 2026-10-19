@@ -1,4 +1,4 @@
-// rendering3d:debug_draw3d —— 立即模式调试线（对位 DragonLib DebugDraw3D）。
+// rendering3d:debug_draw —— 立即模式调试线（对位 DragonLib DebugDraw3D）。
 //
 // 提供 Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton 的排队绘制，render 后清空。
 // GPU 路径走"朝向相机的细四边形"：Foster 管线固定为三角列表（无线拓扑），
@@ -19,6 +19,7 @@ import world "olib:kit/world"
 //   几何生成 —— aabb / sphere / frustum / axis / grid / skeleton
 //   顶点展开 —— 线段 -> 朝向相机的四边形
 //   GPU 渲染 —— render
+//   着色器 —— DebugLine3D 字节码（tools/shaders 编译入库、#load 内嵌）与装载
 
 // ------------------------------------------------------------------------------
 // 类型
@@ -39,7 +40,7 @@ Debug_Draw_3D :: struct {
 	vertices: [dynamic]Debug_Line_Vertex, // 每线段 2 个端点
 
 	mesh:     foster.Mesh,
-	shaders:  Shader3D_Debug_Line_Pair,
+	shaders:  Debug_Line_Shaders,
 	material: foster.Material,
 	has_gpu:  bool,
 }
@@ -52,7 +53,7 @@ debug_draw_init :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bo
 		thickness          = DEBUG_DRAW_DEFAULT_THICKNESS,
 	}
 	if device == nil do return false
-	if !shader3d_debug_line_init(&d.shaders, device) do return false
+	if !debug_line_shaders_init(&d.shaders, device) do return false
 
 	format := debug_line_format()
 	defer foster.VertexFormatDispose(&format)
@@ -202,6 +203,7 @@ debug_draw_skeleton :: proc(
 
 // 把已排队的线段展开为四边形顶点（不改变 d.vertices；输出追加到 out）。
 // 每段 4 顶点 6 索引的扇形展开；侧面向量 = normalize(cross(线方向, 视线)) * 半厚。
+@(private)
 debug_draw_expand :: proc(d: ^Debug_Draw_3D, camera_position: [3]f32, out: ^[dynamic]Debug_Line_Vertex) {
 	half := d.thickness * 0.5
 	for i in 0..<len(d.vertices) / 2 {
@@ -285,6 +287,7 @@ debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, came
 // ------------------------------------------------------------------------------
 
 // 调试线顶点格式（Float3 + Float4，28B）。
+@(private)
 debug_line_format :: proc() -> foster.VertexFormat {
 	return foster.VertexFormatMake(
 		[]foster.VertexElement{
@@ -328,4 +331,50 @@ sphere_point :: proc(plane: int, angle: f32) -> [3]f32 {
 	case 1: return {0, math.cos(angle), math.sin(angle)}
 	case:   return {math.sin(angle), 0, math.cos(angle)}
 	}
+}
+
+// ------------------------------------------------------------------------------
+// 着色器 —— DebugLine3D
+// ------------------------------------------------------------------------------
+
+@(private)
+debugline_vertex_spv :: #load("shaders/Compiled/DebugLine3D.vertex.spv")
+@(private)
+debugline_fragment_spv :: #load("shaders/Compiled/DebugLine3D.fragment.spv")
+@(private)
+debugline_vertex_dxil :: #load("shaders/Compiled/DebugLine3D.vertex.dxil")
+@(private)
+debugline_fragment_dxil :: #load("shaders/Compiled/DebugLine3D.fragment.dxil")
+@(private)
+debugline_vertex_msl :: #load("shaders/Compiled/DebugLine3D.vertex.msl")
+@(private)
+debugline_fragment_msl :: #load("shaders/Compiled/DebugLine3D.fragment.msl")
+
+// DebugLine3D（调试线）：vertex 1 个 UBO（ViewProjection），fragment 无。
+@(private)
+Debug_Line_Shaders :: struct {
+	vertex:   foster.Shader,
+	fragment: foster.Shader,
+}
+
+@(private)
+debug_line_shaders_init :: proc(pair: ^Debug_Line_Shaders, device: ^foster.GraphicsDevice) -> bool {
+	if !mat.shader_driver_supported(device.Driver) do return false
+
+	vs_code := mat.shader_pick(device.Driver, {debugline_vertex_spv, debugline_vertex_dxil, debugline_vertex_msl})
+	fs_code := mat.shader_pick(device.Driver, {debugline_fragment_spv, debugline_fragment_dxil, debugline_fragment_msl})
+
+	foster.ShaderInit(&pair.vertex, device, foster.ShaderCreateInfo{
+		Stage              = .Vertex,
+		Code               = vs_code,
+		SamplerCount       = 0,
+		UniformBufferCount = 1,
+		EntryPoint         = "vertex_main",
+	}, "DebugLine3DVertex")
+	foster.ShaderInit(&pair.fragment, device, foster.ShaderCreateInfo{
+		Stage      = .Fragment,
+		Code       = fs_code,
+		EntryPoint = "fragment_main",
+	}, "DebugLine3DFragment")
+	return pair.vertex.Resource != nil && pair.fragment.Resource != nil
 }

@@ -1,7 +1,7 @@
 package shader_lab
 
 // 程序化几何：示例没有模型资源，直接在代码里生成 dasset primitive，
-// 再走与真实模型相同的 r3d.mesh3d_upload 路径。三角形从外侧看为 CCW（与 dasset 约定一致）。
+// 再走与真实模型相同的 r3d.mesh_upload 路径。三角形从外侧看为 CCW（与 dasset 约定一致）。
 
 import "core:math"
 

@@ -1,4 +1,4 @@
-// rendering3d:queue3d —— 渲染项队列与排序（对位 DragonLib Renderer3D 的提交/分桶逻辑）。
+// rendering3d:queue —— 渲染项队列与排序（对位 DragonLib Renderer3D 的提交/分桶逻辑）。
 //
 // 每帧：clear -> 提交（payload + 视深度 + 是否透明）->
 // queue_sort（不透明前到后省 early-z，透明后到前保正确混合）->

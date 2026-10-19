@@ -137,10 +137,10 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	foster.MeshSetIndicesTyped(u32, &s.meshes[0], indices[:])
 	sphere := make_sphere(1.15, 48, 64, {})
 	defer primitive_dispose(&sphere)
-	assert(r3d.mesh3d_upload(&s.meshes[1], device, &sphere, "preview sphere"))
+	assert(r3d.mesh_upload(&s.meshes[1], device, &sphere, "preview sphere"))
 	cube := make_cube(1.8, {})
 	defer primitive_dispose(&cube)
-	assert(r3d.mesh3d_upload(&s.meshes[2], device, &cube, "preview cube"))
+	assert(r3d.mesh_upload(&s.meshes[2], device, &cube, "preview cube"))
 	image := foster.ImageMake(512, 512)
 	defer foster.ImageDispose(&image)
 	for y in 0..<512 {

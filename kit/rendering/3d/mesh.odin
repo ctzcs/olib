@@ -1,4 +1,4 @@
-// rendering3d:mesh3d —— dasset 顶点 -> Foster Mesh 上传（对位 DragonLib MeshUpload3D）。
+// rendering3d:mesh —— dasset 顶点 -> Foster Mesh 上传（对位 DragonLib MeshUpload3D）。
 package rendering3d
 
 import dasset "olib:core/dasset"
@@ -13,7 +13,7 @@ import foster "olib:foster"
 // ------------------------------------------------------------------------------
 
 // 静态顶点格式：Float3 位置 + Float3 法线 + Float2 UV + Float4 切线（48B）。
-mesh3d_static_format :: proc() -> foster.VertexFormat {
+mesh_static_format :: proc() -> foster.VertexFormat {
 	return foster.VertexFormatMake(
 		[]foster.VertexElement{
 			{0, .Float3, false},
@@ -26,7 +26,7 @@ mesh3d_static_format :: proc() -> foster.VertexFormat {
 }
 
 // 蒙皮顶点格式：静态布局 + UByte4 关节 + Float4 权重（68B）。
-mesh3d_skin_format :: proc() -> foster.VertexFormat {
+mesh_skin_format :: proc() -> foster.VertexFormat {
 	return foster.VertexFormatMake(
 		[]foster.VertexElement{
 			{0, .Float3, false},
@@ -47,11 +47,11 @@ mesh3d_skin_format :: proc() -> foster.VertexFormat {
 // 把 dasset primitive 的顶点/索引整块上传为 Foster Mesh。
 // 顶点是 #packed 不了的普通 struct，但 dasset 布局与格式步长一致，
 // 直接按字节整块拷贝。失败（空 primitive / 无 device）返回 false。
-mesh3d_upload :: proc(mesh: ^foster.Mesh, device: ^foster.GraphicsDevice, p: ^dasset.Dasset_Primitive, name := "") -> bool {
+mesh_upload :: proc(mesh: ^foster.Mesh, device: ^foster.GraphicsDevice, p: ^dasset.Dasset_Primitive, name := "") -> bool {
 	if device == nil do return false
 
 	skinned := dasset.dasset_primitive_is_skinned(p)
-	format := skinned ? mesh3d_skin_format() : mesh3d_static_format()
+	format := skinned ? mesh_skin_format() : mesh_static_format()
 	defer foster.VertexFormatDispose(&format)
 
 	foster.MeshInitWithFormat(mesh, device, format, .ThirtyTwo, name)
@@ -71,7 +71,7 @@ mesh3d_upload :: proc(mesh: ^foster.Mesh, device: ^foster.GraphicsDevice, p: ^da
 }
 
 // 释放 Mesh 的 GPU 缓冲。终止态调用。
-mesh3d_dispose :: proc(mesh: ^foster.Mesh) {
+mesh_dispose :: proc(mesh: ^foster.Mesh) {
 	if mesh == nil do return
 	foster.VertexBufferDispose(&mesh.VertexData)
 	foster.IndexBufferDispose(&mesh.IndexData)

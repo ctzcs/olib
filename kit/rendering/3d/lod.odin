@@ -1,10 +1,11 @@
-// rendering3d:lod3d —— LOD 选择（对位 DragonLib LodSelector3D / ModelLod3D）。
+// rendering3d:lod —— LOD 选择（对位 DragonLib LodSelector3D / ModelLod3D）。
 //
 // 屏幕高度占比阈值从高到低，最后必须为 0（最低档无条件兜底）；
 // 阈值上下带相对滞回，避免相机在边界附近抖动。
 package rendering3d
 
 import "core:math"
+import "core:math/linalg"
 
 import dasset "olib:core/dasset"
 import world "olib:kit/world"
@@ -82,20 +83,15 @@ lod_selector_select :: proc(s: ^Lod_Selector, screen_height: f32) -> int {
 // 保守球的投影直径 / 视口高度。相机在球内、近裁面相交或数据不可靠时
 // 返回 +inf（选最高细节——宁多画不低估）。
 lod_screen_height :: proc(camera: ^world.Camera3D, bounds: dasset.Dasset_Bounds) -> f32 {
-	center := [3]f32{
-		(bounds.min[0] + bounds.max[0]) * 0.5,
-		(bounds.min[1] + bounds.max[1]) * 0.5,
-		(bounds.min[2] + bounds.max[2]) * 0.5,
-	}
-	dx := bounds.max[0] - bounds.min[0]
-	dy := bounds.max[1] - bounds.min[1]
-	dz := bounds.max[2] - bounds.min[2]
-	radius := math.sqrt(dx*dx + dy*dy + dz*dz) * 0.5
+	center := (bounds.min + bounds.max) * 0.5
+	return lod_sphere_screen_height(camera, center, linalg.length(bounds.max - bounds.min) * 0.5)
+}
 
+// 球（世界空间）的投影直径 / 视口高度，规则同 lod_screen_height。
+@(private)
+lod_sphere_screen_height :: proc(camera: ^world.Camera3D, center: [3]f32, radius: f32) -> f32 {
 	forward := world.camera3d_forward(camera)
-	offset := [3]f32{center[0] - camera.position[0], center[1] - camera.position[1], center[2] - camera.position[2]}
-	depth := offset[0]*forward[0] + offset[1]*forward[1] + offset[2]*forward[2]
-
+	depth := linalg.dot(center - camera.position, forward)
 	if radius != radius || depth != depth || radius < 0 ||
 	   depth - radius <= max(0.001, camera.near_clip) {
 		return f32(math.INF_F32)
@@ -103,6 +99,18 @@ lod_screen_height :: proc(camera: ^world.Camera3D, bounds: dasset.Dasset_Bounds)
 	// 透视投影 M22 = zz（列 2 的第 2 分量）
 	projection := world.camera3d_projection(camera)
 	return radius * math.abs(projection.c2[2]) / (depth - radius)
+}
+
+// 局部包围盒经 world_matrix 变换后的包围球：球心是盒中心的像，半径取 8 个角点到球心的最远距离。
+// 平移、旋转、缩放（含非均匀缩放）下都不低估；变换退化时返回 ok=false。
+@(private)
+lod_world_sphere :: proc(bounds: dasset.Dasset_Bounds, world_matrix: world.Matrix4) -> (center: [3]f32, radius: f32, ok: bool) {
+	center = world.matrix4_transform_point(world_matrix, (bounds.min + bounds.max) * 0.5) or_return
+	for corner in aabb_corners(bounds) {
+		p := world.matrix4_transform_point(world_matrix, corner) or_return
+		radius = max(radius, linalg.length(p - center))
+	}
+	return center, radius, true
 }
 
 // ------------------------------------------------------------------------------
@@ -131,17 +139,13 @@ model_lod_dispose :: proc(m: ^Model_Lod($T)) {
 	m^ = {}
 }
 
-// 选当前级的模型（内部先走 selector）。world 变换下用局部包围盒投影。
+// 选当前级的模型（内部先走 selector）。局部包围盒按 world_matrix 变换成保守包围球再投影。
 model_lod_select :: proc(m: ^Model_Lod($T), camera: ^world.Camera3D, world_matrix: world.Matrix4) -> (T, bool) {
-	world_bounds := m.bounds
-	// 包围盒随 world 平移（忽略旋转/缩放的保守近似：取 8 角点变换后的盒）
-	if w, ok := world.matrix4_transform_point(world_matrix, m.bounds.min); ok {
-		world_bounds.min = w
+	height := f32(math.INF_F32) // 变换退化时选最高细节
+	if center, radius, ok := lod_world_sphere(m.bounds, world_matrix); ok {
+		height = lod_sphere_screen_height(camera, center, radius)
 	}
-	if w, ok := world.matrix4_transform_point(world_matrix, m.bounds.max); ok {
-		world_bounds.max = w
-	}
-	level := lod_selector_select(&m.selector, lod_screen_height(camera, world_bounds))
+	level := lod_selector_select(&m.selector, height)
 	if level < 0 || level >= len(m.models) do return _, false
 	return m.models[level], true
 }

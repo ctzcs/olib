@@ -3,6 +3,7 @@
 package rendering3d
 
 import "core:math"
+import "core:math/linalg"
 import "core:testing"
 
 import dasset "olib:core/dasset"
@@ -11,12 +12,12 @@ import foster "olib:foster"
 import mat "olib:kit/rendering/material"
 
 @(test)
-mesh3d_format_strides :: proc(t: ^testing.T) {
-	static := mesh3d_static_format()
+mesh_format_strides :: proc(t: ^testing.T) {
+	static := mesh_static_format()
 	defer foster.VertexFormatDispose(&static)
 	testing.expect(t, static.Stride == 48 && len(static.Elements) == 4)
 
-	skin := mesh3d_skin_format()
+	skin := mesh_skin_format()
 	defer foster.VertexFormatDispose(&skin)
 	testing.expect(t, skin.Stride == 68 && len(skin.Elements) == 6)
 }
@@ -246,6 +247,34 @@ instance_value_set_writes_flat_slots :: proc(t: ^testing.T) {
 	testing.expect(t, !mat.instance_array_set(values, 2, 0, {}, {1, 0, 0, 0})) // 句柄无效
 	testing.expect(t, !mat.instance_array_set(values, 2, 0, {2, true}, {1, 0, 0, 0})) // 槽位越界
 	testing.expect(t, !mat.instance_array_set(values, 2, 3, {0, true}, {1, 0, 0, 0})) // 实例越界
+}
+
+// 变换后的包围球：平移时半径不变；旋转后再非均匀缩放时，只变换 min/max 两个角会低估半径。
+@(test)
+lod_world_sphere_is_conservative :: proc(t: ^testing.T) {
+	bounds := dasset.Dasset_Bounds{min = {-2, -0.5, -0.5}, max = {2, 0.5, 0.5}}
+	center, radius, ok := lod_world_sphere(bounds, world.matrix4_translation(1, 2, 3))
+	testing.expect(t, ok)
+	testing.expect(t, linalg.length(center - [3]f32{1, 2, 3}) < 1e-5)
+	testing.expect(t, math.abs(radius - linalg.length(bounds.max - bounds.min)*0.5) < 1e-5)
+
+	// 绕 Z 转 ±45° 后沿 Y 拉长 3 倍：盒的轴不再正交，两条对角线长度不同；
+	// 只变换 min/max 两个角在其中一个方向上取到短对角线，必然低估。
+	underestimated := false
+	for sign in ([2]f32{1, -1}) {
+		half := sign * math.PI / 8
+		m := world.matrix4_multiply(world.matrix4_from_quaternion({0, 0, math.sin(half), math.cos(half)}), world.matrix4_scaling(1, 3, 1))
+		center, radius, ok = lod_world_sphere(bounds, m)
+		testing.expect(t, ok)
+		for corner in aabb_corners(bounds) {
+			p, _ := world.matrix4_transform_point(m, corner)
+			testing.expect(t, linalg.length(p - center) <= radius + 1e-4)
+		}
+		two_corners := linalg.length(world.matrix4_transform_vector(m, bounds.max - bounds.min)) * 0.5
+		testing.expect(t, radius >= two_corners - 1e-4)
+		underestimated ||= two_corners < radius - 0.5
+	}
+	testing.expect(t, underestimated)
 }
 
 // 实例缓冲的布局约定：每实例 世界矩阵 + tint + 字段，没有字段时 Model_Item 与缓冲同一布局可直接上传。

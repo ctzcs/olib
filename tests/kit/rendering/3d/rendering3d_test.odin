@@ -5,6 +5,7 @@ package rendering3d
 import "core:math"
 import "core:testing"
 
+import dasset "olib:core/dasset"
 import world "olib:kit/world"
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
@@ -253,11 +254,21 @@ instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	testing.expect_value(t, model_stride(0), 80)
 	testing.expect_value(t, model_stride(2), 112)
 	testing.expect_value(t, size_of(Model_Item), model_stride(0))
+	// 槽数取自材质：没有材质、不是 instanced 效果、各参数组字段数不一致、容量为 0 都拒绝（不碰 GPU）。
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	fields := []mat.Field{{id = "hue", instance = true}, {id = "glow", instance = true}}
+	plain := mat.Material_Effect{schemas = []mat.Schema{{fields = fields}}}
+	instanced := mat.Material_Effect{desc = {instanced = true}, schemas = []mat.Schema{{fields = fields}, {fields = fields[:1]}}}
 	buffer: Model_Buffer
 	testing.expect(t, !model_buffer_init(&buffer, nil, 10))
-	device: foster.GraphicsDevice
-	testing.expect(t, !model_buffer_init(&buffer, &device, 0))
-	testing.expect(t, !model_buffer_init(&buffer, &device, 10, mat.MAX_INSTANCE_FIELDS+1))
+	plain_material := mat.Material{owner = &library, effect = &plain}
+	testing.expect(t, !model_buffer_init(&buffer, &plain_material, 10))
+	material := mat.Material{owner = &library, effect = &instanced}
+	testing.expect(t, !model_buffer_init(&buffer, &material, 10))
+	instanced.schemas = instanced.schemas[:1]
+	testing.expect(t, !model_buffer_init(&buffer, &material, 0))
+	testing.expect_value(t, buffer.capacity, 0)
 	// 未创建的缓冲拒绝上传；越界被拒绝。
 	instances := []Model_Item{{}, {}}
 	testing.expect(t, !model_buffer_upload(&buffer, instances))
@@ -266,8 +277,25 @@ instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	testing.expect(t, !model_buffer_upload(&buffer, instances[:1], 1))
 	buffer.capacity, buffer.slots = 2, 2
 	testing.expect(t, !model_buffer_upload(&buffer, instances, 0, make([][4]f32, 3, context.temp_allocator))) // 应为 2×2
-	// 没有材质的模型给出明确原因，不会碰 GPU。
-	view: Model_View
-	testing.expect_value(t, model_draw_buffer({}, &buffer, 1, view), mat.Draw_Error.Missing_Material)
-	testing.expect_value(t, model_draw_buffer({}, &buffer, 1, view, "outline"), mat.Draw_Error.Missing_Material)
+}
+
+// 绘制入口的错误码：都在提交 Draw 之前返回，不需要真实 GPU。
+@(test)
+model_draw_reports_errors_before_gpu :: proc(t: ^testing.T) {
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	effect := mat.Material_Effect{desc = {instanced = true}}
+	material := mat.Material{owner = &library, effect = &effect}
+	view: View
+	buffer := Model_Buffer{capacity = 4}
+	testing.expect_value(t, model_draw(nil, nil, world.MATRIX4_IDENTITY, view), mat.Draw_Error.Missing_Material)
+	testing.expect_value(t, model_draw_buffer(nil, nil, &buffer, 1, view, "outline"), mat.Draw_Error.Missing_Material)
+	testing.expect_value(t, model_draw(&material, nil, world.MATRIX4_IDENTITY, view), mat.Draw_Error.Missing_Mesh)
+	testing.expect_value(t, model_draw_buffer(&material, nil, nil, 1, view), mat.Draw_Error.Instance_Buffer_Required)
+	testing.expect_value(t, model_draw_buffer(&material, nil, &Model_Buffer{}, 1, view), mat.Draw_Error.Instance_Buffer_Required)
+	// 蒙皮网格（68B 顶点）不在材质路径内，明确报错
+	skinned: foster.Mesh
+	skinned.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_SKIN
+	testing.expect_value(t, model_draw(&material, &skinned, world.MATRIX4_IDENTITY, view), mat.Draw_Error.Unsupported_Mesh)
+	testing.expect_value(t, model_draw_buffer(&material, &skinned, &buffer, 1, view), mat.Draw_Error.Unsupported_Mesh)
 }

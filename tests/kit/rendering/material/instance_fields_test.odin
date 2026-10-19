@@ -209,3 +209,15 @@ model_instancing_hlsl_declares_input_world_and_varyings :: proc(t: ^testing.T) {
 	testing.expect(t, strings.contains(sprite, "OlibInstanceInput") && !strings.contains(sprite, "olib_world"))
 	testing.expect(t, !strings.contains(text, "sprite0") || !strings.contains(sprite, "world0"))
 }
+
+@(test)
+instance_slot_count_requires_consistent_groups :: proc(t: ^testing.T) {
+	fields := []Field{{id = "hue", instance = true}, {id = "tint"}, {id = "glow", instance = true}}
+	effect := Material_Effect{schemas = []Schema{{fields = fields}, {fields = fields}}}
+	material := Material{effect = &effect}
+	testing.expect_value(t, instance_slot_count(&material), 2)
+	effect.schemas = []Schema{{fields = fields}, {fields = fields[:1]}}
+	testing.expect_value(t, instance_slot_count(&material), -1) // 各组字段数不同，无法共用一个缓冲布局
+	testing.expect_value(t, instance_slot_count(nil), 0)
+	testing.expect_value(t, instance_slot_count(&Material{}), 0)
+}

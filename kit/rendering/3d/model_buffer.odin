@@ -24,7 +24,7 @@ Model_Item :: struct {
 #assert(size_of(Model_Item) == 80)
 
 // 缓冲里每个实例按 世界矩阵(64B) + tint(16B) + slots × 16B 紧凑排列；
-// slots 须等于效果的 [Instance] 字段数。大批量静态场景只需上传一次，动画交给着色器（Clock）。
+// slots 是材质效果的 [Instance] 字段数（init 时读取）。大批量静态场景只需上传一次，动画交给着色器（Clock）。
 Model_Buffer :: struct {
 	buffer: foster.VertexBuffer,
 	slots: int,
@@ -43,18 +43,20 @@ model_stride :: proc(slots: int) -> int {
 // 创建与释放
 // ------------------------------------------------------------------------------
 
-// 预留 capacity 个实例的 GPU 空间（实际按 2 的幂向上取整）。slots 为效果的 [Instance] 字段数。
+// 为 material 的 instanced 效果预留 capacity 个实例的 GPU 空间（实际按 2 的幂向上取整）。
+// 设备与槽数（效果的 [Instance] 字段数）都取自材质；材质未加载、效果不是 instanced 或各参数组字段数不一致时返回 false。
 // 属性位置固定为 0..4+slots（世界矩阵 4 列、tint、字段）：HLSL 里 OlibInstanceInput 须是 Input
 // 的第一个成员，绘制时网格的属性整体后移，同一缓冲可用于不同网格。
-model_buffer_init :: proc(buf: ^Model_Buffer, device: ^foster.GraphicsDevice, capacity: int,
-	slots := 0, name := "") -> bool {
-	if device == nil || capacity <= 0 || slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return false
-	elements := make([]foster.VertexElement, 5+slots, context.temp_allocator)
+model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity: int, name := "") -> bool {
+	if material == nil || material.owner == nil || material.owner.device == nil || material.effect == nil do return false
+	slots := mat.instance_slot_count(material)
+	if !material.effect.desc.instanced || capacity <= 0 || slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return false
+	elements := make([]foster.VertexElement, mat.INSTANCE_FIXED_ATTRIBUTES+slots, context.temp_allocator)
 	for i in 0..<len(elements) do elements[i] = {i, .Float4, false}
 	format := foster.VertexFormatMake(elements, model_stride(slots))
 	defer foster.VertexFormatDispose(&format)
 	buf^ = {slots = slots, capacity = capacity}
-	foster.VertexBufferInit(&buf.buffer, device, format, name)
+	foster.VertexBufferInit(&buf.buffer, material.owner.device, format, name)
 	foster.VertexBufferReserve(&buf.buffer, capacity)
 	return true
 }

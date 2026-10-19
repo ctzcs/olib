@@ -80,15 +80,17 @@ Sprite_Buffer :: struct {
 	capacity: int,
 }
 
-// 预留 capacity 个精灵的 GPU 空间（实际按 2 的幂向上取整）。slots 为效果的 [Instance] 字段数。
+// 为 material 的 instanced 效果预留 capacity 个精灵的 GPU 空间（实际按 2 的幂向上取整）。
+// 设备与槽数（效果的 [Instance] 字段数）都取自材质；材质未加载、效果不是 instanced 或各参数组字段数不一致时返回 false。
 // 每个精灵 80 + 16×slots 字节，100 万个精灵（1 个字段）约 96 MB。
-sprite_buffer_init :: proc(buf: ^Sprite_Buffer, device: ^foster.GraphicsDevice, capacity: int,
-	slots := 0, name := "") -> bool {
-	if device == nil || capacity <= 0 || slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return false
+sprite_buffer_init :: proc(buf: ^Sprite_Buffer, material: ^mat.Material, capacity: int, name := "") -> bool {
+	if material == nil || material.owner == nil || material.owner.device == nil || material.effect == nil do return false
+	slots := mat.instance_slot_count(material)
+	if !material.effect.desc.instanced || capacity <= 0 || slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return false
 	format := sprite_instance_format(slots)
 	defer foster.VertexFormatDispose(&format)
 	buf^ = {slots = slots, capacity = capacity}
-	foster.VertexBufferInit(&buf.buffer, device, format, name)
+	foster.VertexBufferInit(&buf.buffer, material.owner.device, format, name)
 	foster.VertexBufferReserve(&buf.buffer, capacity)
 	return true
 }
@@ -148,7 +150,7 @@ sprite_draw_buffer :: proc(renderer: ^Sprite_Renderer, material: ^mat.Material, 
 	count: int, texture: ^foster.Texture, view: Sprite_View, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
 	if material == nil || material.owner == nil || material.effect == nil do return .Missing_Material
 	if material.owner.device != renderer.device do return .Device_Mismatch
-	if buf == nil || buf.capacity <= 0 do return .Instance_Mismatch
+	if buf == nil || buf.capacity <= 0 do return .Instance_Buffer_Required
 	w, h := view.target.WidthInPixels, view.target.HeightInPixels
 	if w <= 0 || h <= 0 do return .Invalid_Target
 	mesh := sprite_corner_mesh(renderer)

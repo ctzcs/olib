@@ -41,6 +41,19 @@ instance_slot :: proc(material: ^Material, field: string) -> Instance_Slot {
 	return {index, found}
 }
 
+// 材质效果的 [Instance] 字段数，即实例缓冲每个实例的槽数（sprite_buffer_init / model_buffer_init 用它）。
+// 材质未加载返回 0；各参数组的字段数不一致时返回 -1（与 instance_slot 的规则一致，无法共用一个缓冲布局）。
+instance_slot_count :: proc(material: ^Material) -> int {
+	if material == nil || material.effect == nil do return 0
+	count := -1
+	for schema in material.effect.schemas {
+		n := instance_count(schema)
+		if count >= 0 && n != count do return -1
+		count = n
+	}
+	return max(count, 0)
+}
+
 // 写平铺数组里第 index 个实例的一个字段：values 里每个实例连续占 slots 个 float4，按实例顺序排列
 // （缓冲上传的 values 参数就是这个布局，长度 = 实例数 × slots）。句柄无效或越界返回 false，不写入。
 instance_array_set :: proc(values: [][4]f32, slots, index: int, slot: Instance_Slot, value: [4]f32) -> bool {

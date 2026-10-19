@@ -80,9 +80,9 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 	world.camera3d_set_position(&s.camera, {math.sin(s.yaw)*math.cos(s.pitch)*s.distance,
 		math.sin(s.pitch)*s.distance, math.cos(s.yaw)*math.cos(s.pitch)*s.distance})
 	draw_error := r3d.model_material_draw(s.device, e.desc, bindings, {
-		mesh = &s.meshes[s.mode == 3 ? 2 : 1], target = foster.DrawableTargetFromTarget(target),
-		world_matrix = world.MATRIX4_IDENTITY, view_projection = world.camera3d_view_projection(&s.camera),
-		time = e.time, delta_time = e.last_delta, frame = e.frame,
+		mesh = &s.meshes[s.mode == 3 ? 2 : 1], world_matrix = world.MATRIX4_IDENTITY,
+		view = {target = foster.DrawableTargetFromTarget(target), view_projection = world.camera3d_view_projection(&s.camera),
+			time = e.time, delta_time = e.last_delta, frame = e.frame},
 		pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height},
 		pass_limit = s.preview_pass+1,
 		options = {enabled = e.enabled[:len(e.desc.passes)],

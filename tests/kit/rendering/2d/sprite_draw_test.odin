@@ -155,10 +155,14 @@ sprite_item_pack_pads_missing_values_with_zero :: proc(t: ^testing.T) {
 @(test)
 sprite_buffer_guards_and_draw_errors :: proc(t: ^testing.T) {
 	buffer: Sprite_Buffer
-	testing.expect(t, !sprite_buffer_init(&buffer, nil, 10))
 	device: foster.GraphicsDevice
-	testing.expect(t, !sprite_buffer_init(&buffer, &device, 0))
-	testing.expect(t, !sprite_buffer_init(&buffer, &device, 10, mat.MAX_INSTANCE_FIELDS+1))
+	library := mat.Material_Library{device = &device}
+	plain := mat.Material_Effect{}
+	instanced := mat.Material_Effect{desc = {instanced = true}}
+	testing.expect(t, !sprite_buffer_init(&buffer, nil, 10))
+	testing.expect(t, !sprite_buffer_init(&buffer, &mat.Material{owner = &library, effect = &plain}, 10)) // 不是 instanced 效果
+	testing.expect(t, !sprite_buffer_init(&buffer, &mat.Material{owner = &library, effect = &instanced}, 0))
+	testing.expect(t, !sprite_buffer_init(&buffer, &mat.Material{effect = &instanced}, 10)) // 材质未加载
 	items := []Sprite_Item{{}, {}}
 	testing.expect(t, !sprite_buffer_upload(&buffer, items)) // 未创建
 	buffer.capacity = 1
@@ -169,4 +173,6 @@ sprite_buffer_guards_and_draw_errors :: proc(t: ^testing.T) {
 	renderer := Sprite_Renderer{device = &device}
 	view := Sprite_View{target = {WidthInPixels = 100, HeightInPixels = 100}}
 	testing.expect_value(t, sprite_draw_buffer(&renderer, nil, &buffer, 1, nil, view), mat.Draw_Error.Missing_Material)
+	testing.expect_value(t, sprite_draw_buffer(&renderer, &mat.Material{owner = &library, effect = &instanced}, nil, 1, nil, view),
+		mat.Draw_Error.Instance_Buffer_Required)
 }

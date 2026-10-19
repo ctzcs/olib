@@ -55,6 +55,7 @@ Draw_Error :: enum {
 	Instance_Buffer_Required, // instanced 效果必须带实例缓冲（模型 model_draw_buffer，精灵 sprite_draw_buffer）
 	Not_Instanced_Effect,   // 用实例缓冲绘制，但效果没有声明 instanced
 	Instance_Mismatch,      // 实例缓冲的字段数与效果的 [Instance] 字段数不一致
+	Unsupported_Mesh,       // 网格顶点格式不是模型材质路径支持的静态格式（例如蒙皮网格）
 }
 
 draw_error_text :: proc(error: Draw_Error) -> string {
@@ -76,6 +77,7 @@ draw_error_text :: proc(error: Draw_Error) -> string {
 	case .Instance_Buffer_Required: return "Instanced effects must be drawn with an instance buffer"
 	case .Not_Instanced_Effect: return "Effect is not instanced; it cannot use an instance buffer"
 	case .Instance_Mismatch: return "Instance buffer field count differs from the effect's Instance fields"
+	case .Unsupported_Mesh: return "Model materials only support the static vertex format"
 	}
 	return ""
 }

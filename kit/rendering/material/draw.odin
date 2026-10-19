@@ -194,25 +194,31 @@ material_binding_find :: proc(p: Pass_Desc, draw: Material_Draw, bindings: []Mat
 	return index, .None
 }
 
-// 提交单个 Pass：应用固定覆盖值、写入 uniform 与采样器、套用 Pass 状态后绘制。
-@(private)
-material_pass_submit :: proc(device: ^foster.GraphicsDevice, draw: Material_Draw,
-	p: Pass_Desc, pass_index: int, b: Material_Binding) {
+// 一个 Pass 本次绘制的参数：参数 uniform（按 uniform_size 打包，借用 temp_allocator）与 [Instance] 字段数值。
+// 套用顺序：材质实例值 < overrides（instance_values）< Pass 的固定 values。
+material_pass_values :: proc(p: Pass_Desc, b: Material_Binding, overrides: ^Instance_Values) -> (uniform: []u8, instance: Instance_Values) {
 	values := make([]Value, len(b.values), context.temp_allocator)
 	copy(values, b.values)
-	instance_values_apply(draw.options.instance_values, b.schema, values)
+	instance_values_apply(overrides, b.schema, values)
 	for value in p.values {
 		j := field_index(b.schema, string(value.field))
 		if j >= 0 do values[j].number = value.number
 	}
-	buffer := make([]u8, uniform_size(b.schema), context.temp_allocator)
-	_ = pack(b.schema, values, buffer)
-	instance: Instance_Values
+	uniform = make([]u8, uniform_size(b.schema), context.temp_allocator)
+	_ = pack(b.schema, values, uniform)
 	for f, i in b.schema.fields {
 		if !f.instance || instance.count >= MAX_INSTANCE_FIELDS do continue
 		instance.numbers[instance.count] = values[i].number
 		instance.count += 1
 	}
+	return
+}
+
+// 提交单个 Pass：应用固定覆盖值、写入 uniform 与采样器、套用 Pass 状态后绘制。
+@(private)
+material_pass_submit :: proc(device: ^foster.GraphicsDevice, draw: Material_Draw,
+	p: Pass_Desc, pass_index: int, b: Material_Binding) {
+	buffer, instance := material_pass_values(p, b, draw.options.instance_values)
 	foster.MaterialStageSetUniformBuffer(&b.material.Vertex, draw.vertex_uniform)
 	foster.MaterialStageSetUniformBuffer(&b.material.Fragment, draw.frame_uniform)
 	foster.MaterialStageSetUniformBuffer(&b.material.Fragment, buffer, 1)
@@ -271,18 +277,38 @@ material_draw :: proc(device: ^foster.GraphicsDevice, effect: Effect_Desc,
 			if instance_count(binding.schema) != draw.instance_slots do return .Instance_Mismatch
 		}
 	}
+	selection: Pass_Selection
+	if error := material_select(effect, bindings, draw, &selection); error != .None do return error
+	if draw.instance_buffer != nil && draw.instance_count <= 0 do return .None
+	for i in 0..<selection.count {
+		pass := selection.passes[i]
+		material_pass_submit(device, draw, effect.passes[pass], pass, bindings[selection.bindings[i]])
+	}
+	return .None
+}
+
+// 本次绘制要画的 Pass（按声明顺序）及各自的绑定下标。
+Pass_Selection :: struct {
+	count: int,
+	passes, bindings: [MAX_PASSES]int,
+}
+
+// 解析选择并检查 Pass 种类与绑定，不提交、不改动绑定；渲染器记录绘制时用它提前得到错误。
+// draw 只读取 kind、sprite_texture、pass_limit 与 options。
+material_select :: proc(effect: Effect_Desc, bindings: []Material_Binding, draw: Material_Draw,
+	selection: ^Pass_Selection) -> Draw_Error {
+	selection^ = {}
 	selected: [MAX_PASSES]int
 	count, error := material_pass_indices(effect, draw, &selected)
 	if error != .None do return error
-	bound: [MAX_PASSES]int
 	for i in selected[:count] {
 		if effect.passes[i].draw != draw.kind do return .Wrong_Pass_Kind
-		bound[i], error = material_binding_find(effect.passes[i], draw, bindings)
+		bound: int
+		bound, error = material_binding_find(effect.passes[i], draw, bindings)
 		if error != .None do return error
-	}
-	if draw.instance_buffer != nil && draw.instance_count <= 0 do return .None
-	for i in selected[:count] {
-		material_pass_submit(device, draw, effect.passes[i], i, bindings[bound[i]])
+		selection.passes[selection.count] = i
+		selection.bindings[selection.count] = bound
+		selection.count += 1
 	}
 	return .None
 }

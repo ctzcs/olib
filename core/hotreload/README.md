@@ -4,7 +4,7 @@
 窗口和图形设备不重启，当前局面保留。编译期间旧游戏继续运行，编译失败则保留旧版。
 这是"编译后生效"，不是解释执行：检测和稳定等待各约 250ms，再加编译、快照和初始化时间。
 
-## 最快接入：宿主 4 个调用，游戏 4 个函数
+## 最快接入：宿主 4 个调用，游戏一张回调表
 
 **宿主**（`Hot` 包装了会话、监听、编译、替换）：
 
@@ -25,26 +25,46 @@ reload.hot_dispose(&host.hot)      // Shutdown
 `hot_error(&host.hot)` 返回最近一次失败原因（供 UI 显示），`hot_retry` 重新尝试编译；默认会往终端打印
 `LIVE version N` 和编译错误（`quiet = true` 关闭）。
 
-**游戏**（状态是纯数据时）：
+**游戏**（`Game_Hooks`：一个 `State` 加几个回调）：
 
 ```odin
-State :: struct { position: [2]f32 }        // 只放可按字节复制的数据，热重载时自动保存和恢复
+State :: struct {
+	position: [2]f32,
+	trail: [dynamic][2]f32,      // 数组、map、堆上的对象都可以放
+	batcher: foster.Batcher,     // 资源字段也可以放，在 start 里重新创建
+}
+
+hooks := reload.Game_Hooks(State, Services){
+	reset = reset, update = update, render = render,      // 必填
+	start = start, stop = stop, drop = drop,              // 可选，不需要就不写
+	host_version = HOST_VERSION,
+}
 
 @(export)
 olib_game_api :: proc "c" (version: u32, size: int, api: ^reload.API) -> bool {
-	return reload.simple_api(version, size, api, State, Services,
-		reset, start, stop, update, render, host_version = HOST_VERSION)
+	return reload.simple_api(version, size, api, &hooks)
 }
-reset  :: proc(state: ^State, host: ^Services) { state.position = {200, 200} }  // 只在新局调用
-start  :: proc(state: ^State, host: ^Services) { /* 每次加载：创建 GPU/UI 资源 */ }
-stop   :: proc(state: ^State, host: ^Services) { /* 每次卸载：释放它们 */ }
-update :: proc(state: ^State, host: ^Services, dt: f64) { ... }
-render :: proc(state: ^State, host: ^Services, dt: f64) { ... }
 ```
 
-没有 GPU/UI 资源时去掉 `start` / `stop`：`simple_api(…, State, Services, reset, update, render)`；`state_version` 在 State 格式变化时加一。
-完整可运行的版本是 olib_sample 的 `run.bat hotreload`（宿主约 90 行含窗口样板，游戏约 50 行）。
-状态含指针、动态数组、字符串，或需要自定义编译命令、`.Migrate` / `.Reset` 策略时，用下面的完整接口。
+| 回调 | 何时调用 |
+| --- | --- |
+| `reset` | 第一次启动时初始化 State；热重载时不调用 |
+| `start` / `stop` | 每次加载 / 卸载一个版本：创建 / 释放这个版本的资源（Batcher、UI 等）。热重载时旧版本的 `stop` 在新版本 `start` 之后执行 |
+| `drop` | 游戏真正结束时调用一次：释放 State 拥有的堆数据。热重载换版本时不调用 |
+| `update` / `render` | 每帧调用 |
+
+**State 的交接规则**：热重载时 State 整体交给新版本（按字节搬过去，不复制它指向的内存），所以：
+
+- 可以放：普通数据；用宿主分配器分配的堆数据（动态数组、map、`strings.clone` 的字符串、`new` 的对象，
+  回调里的 `context.allocator` 就是宿主的），新旧版本共用同一份，由 `drop` 释放；资源字段在 `start`
+  里重新创建（`BatcherInit` 会覆盖整个字段），在 `stop` 里释放。
+- 不能放：字符串字面量、函数指针、指向 DLL 包级变量或常量的指针。旧 DLL 卸载后它们就失效，新版本再用会崩溃；
+  需要字符串就 `strings.clone`，需要回调就存 ID。
+- 改了 State 的字段布局（大小不同）时新版本会被拒绝：提高 `state_version` 并选择重开，
+  或改用下面的完整接口，自己用 JSON 等格式编码，可以跨字段变化保留局面。
+
+完整可运行的版本是 olib_sample 的 `run.bat hotreload`（宿主约 90 行含窗口样板，游戏约 70 行，
+`State` 里放了拖尾数组和 Batcher）。需要自定义编译命令、`.Migrate` / `.Reset` 策略时，用下面的完整接口。
 
 ## 从哪里开始
 

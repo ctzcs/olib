@@ -1,14 +1,14 @@
 package rendering3d
 
 // 模型材质绘制的实现与 ShaderLab 集成：打包顶点矩阵与帧 uniform，再交给材质 Pass 执行器。
-// 业务通常使用 model_draw.odin 的 model_draw。
+// 业务使用 Render3D 的 model/models + submit。
 import dasset "olib:core/dasset"
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
 
 // ------------------------------------------------------------------------------
-// 渲染器集成 —— ShaderLab 借用 GPU 绑定绘制；业务使用上面的 model_draw。
+// 渲染器集成 —— ShaderLab 借用 GPU 绑定立即绘制。
 // ------------------------------------------------------------------------------
 
 Model_Material_Draw :: struct {

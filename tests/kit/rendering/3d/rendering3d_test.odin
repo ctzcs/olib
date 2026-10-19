@@ -439,21 +439,22 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 
 // 绘制入口的错误码：都在提交 Draw 之前返回，不需要真实 GPU。
 @(test)
-model_draw_reports_errors_before_gpu :: proc(t: ^testing.T) {
+render3d_reports_errors_before_gpu :: proc(t: ^testing.T) {
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
-	effect := mat.Material_Effect{desc = {instanced = true}}
+	effect := mat.Material_Effect{desc = {instanced = true, passes = []mat.Pass_Desc{{draw = .Model}}}}
 	material := mat.Material{owner = &library, effect = &effect}
-	view: View
-	buffer := Model_Buffer{capacity = 4}
-	testing.expect_value(t, model_draw(nil, nil, world.MATRIX4_IDENTITY, view), mat.Draw_Error.Missing_Material)
-	testing.expect_value(t, model_draw_buffer(nil, nil, &buffer, 1, view, "outline"), mat.Draw_Error.Missing_Material)
-	testing.expect_value(t, model_draw(&material, nil, world.MATRIX4_IDENTITY, view), mat.Draw_Error.Missing_Mesh)
-	testing.expect_value(t, model_draw_buffer(&material, nil, nil, 1, view), mat.Draw_Error.Instance_Buffer_Required)
-	testing.expect_value(t, model_draw_buffer(&material, nil, &Model_Buffer{}, 1, view), mat.Draw_Error.Instance_Buffer_Required)
+	r := Render3D{library = &library}
+	defer dispose(&r)
+	testing.expect_value(t, model(&r, nil, nil, world.MATRIX4_IDENTITY), mat.Draw_Error.Missing_Material)
+	testing.expect_value(t, model(&r, nil, &material, world.MATRIX4_IDENTITY), mat.Draw_Error.Missing_Mesh)
+	mesh := foster.Mesh{GraphicsDevice = &device}
+	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
+	testing.expect_value(t, buffer(&r, &mesh, &material, nil, 1), mat.Draw_Error.Instance_Buffer_Required)
+	testing.expect_value(t, buffer(&r, &mesh, &material, &Model_Buffer{}, 1), mat.Draw_Error.Instance_Buffer_Required)
 	// 蒙皮网格（68B 顶点）不在材质路径内，明确报错
-	skinned: foster.Mesh
+	skinned := mesh
 	skinned.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_SKIN
-	testing.expect_value(t, model_draw(&material, &skinned, world.MATRIX4_IDENTITY, view), mat.Draw_Error.Unsupported_Mesh)
-	testing.expect_value(t, model_draw_buffer(&material, &skinned, &buffer, 1, view), mat.Draw_Error.Unsupported_Mesh)
+	testing.expect_value(t, model(&r, &skinned, &material, world.MATRIX4_IDENTITY), mat.Draw_Error.Unsupported_Mesh)
+	testing.expect_value(t, buffer(&r, &skinned, &material, nil, 1), mat.Draw_Error.Unsupported_Mesh)
 }

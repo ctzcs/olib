@@ -4,13 +4,55 @@
 窗口和图形设备不重启，当前局面保留。编译期间旧游戏继续运行，编译失败则保留旧版。
 这是"编译后生效"，不是解释执行：检测和稳定等待各约 250ms，再加编译、快照和初始化时间。
 
+## 最快接入：宿主 4 个调用，游戏 4 个函数
+
+**宿主**（`Hot` 包装了会话、监听、编译、替换）：
+
+```odin
+import reload "olib:core/hotreload"
+
+// Startup（host.hot 放在堆上，地址必须稳定）
+reload.hot_init(&host.hot, {
+	source = "src/game", collections = {"olib=../olib"},   // 游戏 DLL 的包目录，相对 working_directory
+	services = &host.services, host_version = HOST_VERSION,
+	before_swap = wait_for_gpu, user_data = app,           // 替换前等 GPU 空闲（可选）
+})
+reload.hot_update(&host.hot, dt)   // UpdateProc：检查编译、必要时替换，再转发游戏的 update
+reload.hot_render(&host.hot, dt)   // RenderProc
+reload.hot_dispose(&host.hot)      // Shutdown
+```
+
+`hot_error(&host.hot)` 返回最近一次失败原因（供 UI 显示），`hot_retry` 重新尝试编译；默认会往终端打印
+`LIVE version N` 和编译错误（`quiet = true` 关闭）。
+
+**游戏**（状态是纯数据时）：
+
+```odin
+State :: struct { position: [2]f32 }        // 只放可按字节复制的数据，热重载时自动保存和恢复
+
+@(export)
+olib_game_api :: proc "c" (version: u32, size: int, api: ^reload.API) -> bool {
+	return reload.simple_api(version, size, api, State, Services,
+		reset, start, stop, update, render, host_version = HOST_VERSION)
+}
+reset  :: proc(state: ^State, host: ^Services) { state.position = {200, 200} }  // 只在新局调用
+start  :: proc(state: ^State, host: ^Services) { /* 每次加载：创建 GPU/UI 资源 */ }
+stop   :: proc(state: ^State, host: ^Services) { /* 每次卸载：释放它们 */ }
+update :: proc(state: ^State, host: ^Services, dt: f64) { ... }
+render :: proc(state: ^State, host: ^Services, dt: f64) { ... }
+```
+
+没有 GPU/UI 资源时去掉 `start` / `stop`：`simple_api(…, State, Services, reset, update, render)`；`state_version` 在 State 格式变化时加一。
+完整可运行的版本是 olib_sample 的 `run.bat hotreload`（宿主约 90 行含窗口样板，游戏约 50 行）。
+状态含指针、动态数组、字符串，或需要自定义编译命令、`.Migrate` / `.Reset` 策略时，用下面的完整接口。
+
 ## 从哪里开始
 
 | 你想要 | 看这里 |
 | --- | --- |
 | 新建一个带热重载的游戏 | [tools/new-game 模板](../../tools/new-game/README.md)：`odin run tools/new-game -- ../MyGame MyGame`，进入目录运行 `play.bat`。宿主、模块、状态快照、失败提示都已接好 |
-| 看最小的接线（约 200 行） | 同级 olib_sample：`run.bat hotreload`，代码在 `src/hotreload/`（宿主 `main.odin` + 游戏 `game/game.odin`） |
-| 把热重载接进已有项目 | 下面的 [宿主接线](#宿主接线) 和 [游戏模块](#游戏模块dll) |
+| 看最小的可运行示例 | 同级 olib_sample：`run.bat hotreload`，代码在 `src/hotreload/`（宿主 `main.odin` + 游戏 `game/game.odin`） |
+| 把热重载接进已有项目 | 上面的"最快接入"；要更多控制看 [宿主接线](#宿主接线) 和 [游戏模块](#游戏模块dll) |
 | 排查"为什么没生效 / 为什么崩了" | [必须遵守的规则](#必须遵守的规则)、[能力与边界](#能力与边界) 和 [REFERENCE](REFERENCE.md) |
 
 ## 必须遵守的规则
@@ -42,9 +84,9 @@
 当前实际验收平台是 Windows（用 `core:dynlib` / `core:os`）；Linux/macOS 尚未做运行验收。
 不隔离游戏崩溃：断言失败、越界、死循环仍会拖垮整个宿主；也不能回滚候选模块私自写到外部的副作用。
 
-## 宿主接线
+## 宿主接线（完整接口）
 
-`Session / Watch / Services` 地址须稳定（放在宿主堆上），所有接口由宿主同一线程调用，
+`Hot` 就是对下面这些调用的封装。`Session / Watch / Services` 地址须稳定（放在宿主堆上），所有接口由宿主同一线程调用，
 不要在模块回调里重入 reload/dispose。以下是接线片段，`Services` 是游戏自己定义的宿主服务结构。
 
 ```odin
@@ -81,9 +123,9 @@ reload.watch_dispose(&host.watch)
 宿主仍直接调用 `foster.InitApp / Run / Exit / Dispose`。
 Watch 的配置细节、外部构建系统和缓存见 [REFERENCE](REFERENCE.md#watch-的配置要点)。
 
-## 游戏模块（DLL）
+## 游戏模块（完整接口）
 
-DLL 导出一个 `olib_game_api`，把回调填进 `reload.API`：
+`simple_api` 是对下面协议的封装。DLL 导出一个 `olib_game_api`，把回调填进 `reload.API`：
 
 ```odin
 @(export)

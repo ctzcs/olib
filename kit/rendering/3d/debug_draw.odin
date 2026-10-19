@@ -39,6 +39,7 @@ Debug_Draw_3D :: struct {
 	thickness:          f32, // 线宽（世界单位）
 
 	vertices: [dynamic]Debug_Line_Vertex, // 每线段 2 个端点
+	expanded: [dynamic]Debug_Line_Vertex, // 跨视图复用展开工作区
 
 	mesh:     foster.Mesh,
 	shaders:  Debug_Line_Shaders,
@@ -53,6 +54,12 @@ debug_draw_init :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bo
 		depth_test_enabled = true,
 		thickness          = DEBUG_DRAW_DEFAULT_THICKNESS,
 	}
+	return debug_draw_prepare(d, device)
+}
+
+@(private)
+debug_draw_prepare :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bool {
+	if d.has_gpu do return true
 	if device == nil do return false
 	if !debug_line_shaders_init(&d.shaders, device) do return false
 
@@ -66,12 +73,14 @@ debug_draw_init :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bo
 
 debug_draw_dispose :: proc(d: ^Debug_Draw_3D) {
 	if d.has_gpu {
+		foster.MaterialDispose(&d.material)
 		foster.ShaderDispose(&d.shaders.vertex)
 		foster.ShaderDispose(&d.shaders.fragment)
 		foster.VertexBufferDispose(&d.mesh.VertexData)
 		foster.IndexBufferDispose(&d.mesh.IndexData)
 	}
 	delete(d.vertices)
+	delete(d.expanded)
 	d^ = {}
 }
 
@@ -205,7 +214,8 @@ debug_draw_skeleton :: proc(
 // 把已排队的线段展开为四边形顶点（不改变 d.vertices；输出追加到 out）。
 // 每段 4 顶点 6 索引的扇形展开；侧面向量 = normalize(cross(线方向, 视线)) * 半厚。
 @(private)
-debug_draw_expand :: proc(d: ^Debug_Draw_3D, camera_position: [3]f32, out: ^[dynamic]Debug_Line_Vertex) {
+debug_draw_expand :: proc(d: ^Debug_Draw_3D, camera_position: [3]f32,
+	out: ^[dynamic]Debug_Line_Vertex, direction: [3]f32 = {}) {
 	half := d.thickness * 0.5
 	for i in 0..<len(d.vertices) / 2 {
 		a := d.vertices[i*2]
@@ -215,6 +225,7 @@ debug_draw_expand :: proc(d: ^Debug_Draw_3D, camera_position: [3]f32, out: ^[dyn
 		dir := b.position - a.position
 		mid := (a.position + b.position) * 0.5
 		to_cam := camera_position - mid
+		if direction != ([3]f32{}) do to_cam = direction // 正交视图使用固定朝向
 		side := linalg.cross(dir, to_cam)
 		length2 := linalg.dot(side, side)
 		if length2 > 1e-12 {
@@ -250,21 +261,35 @@ debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, came
 	if !d.has_gpu || len(d.vertices) == 0 do return
 
 	world.camera3d_set_viewport(camera, target.WidthInPixels, target.HeightInPixels)
+	debug_draw_submit(d, {target = target, view_matrix = world.camera3d_view(camera),
+		view_projection = world.camera3d_view_projection(camera)})
+}
 
-	expanded: [dynamic]Debug_Line_Vertex
-	defer delete(expanded)
-	debug_draw_expand(d, camera.position, &expanded)
-	if len(expanded) == 0 do return
+// 保留记录的绘制实现；旧 debug_draw_render 的 defer 负责其原有清空策略。
+@(private)
+debug_draw_submit :: proc(d: ^Debug_Draw_3D, view: View) {
+	if !d.has_gpu || len(d.vertices) == 0 do return
+	builtin.clear(&d.expanded)
+	inverse, ok := world.matrix4_inverse(render3d_view_matrix(view))
+	if !ok do inverse = world.MATRIX4_IDENTITY
+	position := [3]f32{inverse.c0[3], inverse.c1[3], inverse.c2[3]}
+	projection := world.matrix4_multiply(inverse, view.view_projection)
+	direction: [3]f32
+	if math.abs(projection.c3[3]) > 1e-8 {
+		direction = world.matrix4_transform_vector(inverse, {0, 0, 1})
+	}
+	debug_draw_expand(d, position, &d.expanded, direction)
+	if len(d.expanded) == 0 do return
 
-	foster.MeshSetVertexCount(&d.mesh, len(expanded))
-	foster.MeshSetVertices(&d.mesh, raw_data(expanded), len(expanded))
+	foster.MeshSetVertexCount(&d.mesh, len(d.expanded))
+	foster.MeshSetVertices(&d.mesh, raw_data(d.expanded), len(d.expanded))
 
 	vp_buf: [64]u8
-	mat.std140_write_matrix(vp_buf[:], 0, world.camera3d_view_projection(camera))
+	mat.std140_write_matrix(vp_buf[:], 0, view.view_projection)
 	foster.MaterialStageSetUniformBuffer(&d.material.Vertex, vp_buf[:], 0)
 
 	command: foster.DrawCommand
-	foster.DrawCommandFromMesh(&command, target, &d.mesh, &d.material)
+	foster.DrawCommandFromMesh(&command, view.target, &d.mesh, &d.material)
 	command.DepthTestEnabled = d.depth_test_enabled
 	command.DepthWriteEnabled = false
 	command.DepthCompare = .LessOrEqual

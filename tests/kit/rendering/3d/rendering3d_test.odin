@@ -347,13 +347,13 @@ instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	plain := mat.Material_Effect{schemas = []mat.Schema{{fields = fields}}}
 	instanced := mat.Material_Effect{desc = {instanced = true}, schemas = []mat.Schema{{fields = fields}, {fields = fields[:1]}}}
 	buffer: Model_Buffer
-	testing.expect(t, !model_buffer_init(&buffer, nil, 10))
+	testing.expect(t, model_buffer_init(&buffer, nil, 10) != "")
 	plain_material := mat.Material{owner = &library, effect = &plain}
-	testing.expect(t, !model_buffer_init(&buffer, &plain_material, 10))
+	testing.expect(t, model_buffer_init(&buffer, &plain_material, 10) != "")
 	material := mat.Material{owner = &library, effect = &instanced}
-	testing.expect(t, !model_buffer_init(&buffer, &material, 10))
+	testing.expect(t, model_buffer_init(&buffer, &material, 10) != "")
 	instanced.schemas = instanced.schemas[:1]
-	testing.expect(t, !model_buffer_init(&buffer, &material, 0))
+	testing.expect(t, model_buffer_init(&buffer, &material, 0) != "")
 	testing.expect_value(t, buffer.capacity, 0)
 	// 未创建的缓冲拒绝上传；越界被拒绝。
 	instances := []Model_Item{{}, {}}
@@ -363,6 +363,78 @@ instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	testing.expect(t, !model_buffer_upload(&buffer, instances[:1], 1))
 	buffer.capacity, buffer.slots = 2, 2
 	testing.expect(t, !model_buffer_upload(&buffer, instances, 0, make([][4]f32, 3, context.temp_allocator))) // 应为 2×2
+}
+
+// 同一组记录验证：实例数值不拆批、参数快照拆批、透明顺序屏障、多 Pass 独立覆盖。
+@(test)
+render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	r := Render3D{library = &library}
+	defer dispose(&r)
+	vertex: foster.Shader
+	vertex.Resource = cast(type_of(vertex.Resource))uintptr(1)
+	fragment := vertex
+	fragment.Stage = .Fragment
+	gpu: foster.Material
+	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
+	defer foster.MaterialDispose(&gpu)
+	schema := mat.Schema{name = "Body", fields = []mat.Field{
+		{id = "hue", kind = .Scalar, instance = true, maximum = 1},
+		{id = "gain", kind = .Scalar, maximum = 1},
+		{id = "albedo", kind = .Texture}}}
+	effect := mat.Material_Effect{schemas = []mat.Schema{schema}, desc = {
+		instanced = true, passes = []mat.Pass_Desc{
+			{id = "body", params = "Body", draw = .Model},
+			{id = "shadow", params = "Body", draw = .Model,
+				values = []mat.Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}},
+			{id = "glass", params = "Body", draw = .Model, state = {blend = .Alpha}}}}}
+	texture: foster.Texture
+	texture.Resource = cast(type_of(texture.Resource))uintptr(1)
+	other_texture := texture
+	values := []mat.Value{{number = {0.2, 0, 0, 0}}, {number = {0.5, 0, 0, 0}}, {}}
+	samplers := []foster.BoundSampler{{Texture = &texture}}
+	m := mat.Material{owner = &library, effect = &effect,
+		bindings = []mat.Material_Binding{{schema, values, &gpu, samplers}}}
+	mesh := foster.Mesh{GraphicsDevice = &device}
+	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
+	other_mesh := mesh
+	flat := [][4]f32{{0.4, 0, 0, 0}, {0.6, 0, 0, 0}}
+	items := []Model_Item{{world.matrix4_translation(0, 0, -5), {1, 1, 1, 1}},
+		{world.matrix4_translation(0, 0, -4), {1, 1, 1, 1}}}
+	testing.expect_value(t, models(&r, &mesh, &m, items, values = flat), mat.Draw_Error.None)
+	testing.expect_value(t, r.values[0][0], f32(0.4))
+	testing.expect_value(t, r.values[1][0], f32(0.9))
+	testing.expect_value(t, r.values[3][0], f32(0.6))
+	flat[0] = {}
+	items[0].world = world.MATRIX4_IDENTITY
+	testing.expect_value(t, model(&r, &other_mesh, &m, world.matrix4_translation(0, 0, -7)), mat.Draw_Error.None)
+	testing.expect_value(t, model(&r, &mesh, &m, world.matrix4_translation(0, 0, -10)), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 1) // 实例值不进入合批键
+	testing.expect_value(t, r.values[6][0], f32(0.2)) // nil 使用材质默认值
+	line(&r, {0, 0, 0}, {1, 0, 0}, {1, 1, 1, 1})
+	view := View{view_projection = world.MATRIX4_IDENTITY}
+	testing.expect_value(t, render3d_prepare(&r, view, "body"), mat.Draw_Error.None)
+	testing.expect_value(t, render3d_batch_end(&r, 0), 2)
+	testing.expect_value(t, render3d_prepare(&r, view, "glass"), mat.Draw_Error.None)
+	expected := [4]int{3, 2, 0, 1}
+	for item, i in r.queue.items do testing.expect_value(t, item.payload, expected[i])
+	testing.expect_value(t, render3d_batch_end(&r, 0), 1)
+	testing.expect_value(t, render3d_batch_end(&r, 2), 4)
+	testing.expect_value(t, render3d_prepare(&r, view, ""), mat.Draw_Error.None)
+	testing.expect_value(t, render3d_batch_end(&r, 2), 3) // 透明多 Pass 不跨对象
+	testing.expect_value(t, debug_draw_line_count(&r.debug), 1)
+	// 修改参数或贴图必须新建快照；原记录仍保留先前值。
+	values[1].number[0] = 0.8
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 2)
+	samplers[0].Texture = &other_texture
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 3)
+	testing.expect(t, r.snapshots[0].Fragment.Samplers[0].Texture == &texture)
+	testing.expect_value(t, read_vec4(r.snapshots[0].Fragment.UniformBuffers[1][:], 0)[0], f32(0.5))
+	clear(&r)
+	testing.expect_value(t, debug_draw_line_count(&r.debug), 0)
 }
 
 // 绘制入口的错误码：都在提交 Draw 之前返回，不需要真实 GPU。

@@ -44,13 +44,16 @@ model_stride :: proc(slots: int) -> int {
 // ------------------------------------------------------------------------------
 
 // 为 material 的 instanced 效果预留 capacity 个实例的 GPU 空间（实际按 2 的幂向上取整）。
-// 设备与槽数（效果的 [Instance] 字段数）都取自材质；材质未加载、效果不是 instanced 或各参数组字段数不一致时返回 false。
+// 设备与槽数取自材质；成功返回空串，失败返回原因。
 // 属性位置固定为 0..4+slots（世界矩阵 4 列、tint、字段）：HLSL 里 OlibInstanceInput 须是 Input
 // 的第一个成员，绘制时网格的属性整体后移，同一缓冲可用于不同网格。
-model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity: int, name := "") -> bool {
-	if material == nil || material.owner == nil || material.owner.device == nil || material.effect == nil do return false
+model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity: int, name := "") -> string {
+	if material == nil || material.owner == nil || material.effect == nil do return "Missing material"
+	if material.owner.device == nil do return "Missing graphics device"
 	slots := mat.instance_slot_count(material)
-	if !material.effect.desc.instanced || capacity <= 0 || slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return false
+	if !material.effect.desc.instanced do return "Material effect is not instanced"
+	if capacity <= 0 do return "Instance capacity must be positive"
+	if slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return "Inconsistent instance field count"
 	elements := make([]foster.VertexElement, mat.INSTANCE_FIXED_ATTRIBUTES+slots, context.temp_allocator)
 	for i in 0..<len(elements) do elements[i] = {i, .Float4, false}
 	format := foster.VertexFormatMake(elements, model_stride(slots))
@@ -58,7 +61,7 @@ model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity:
 	buf^ = {slots = slots, capacity = capacity}
 	foster.VertexBufferInit(&buf.buffer, material.owner.device, format, name)
 	foster.VertexBufferReserve(&buf.buffer, capacity)
-	return true
+	return ""
 }
 
 model_buffer_dispose :: proc(buf: ^Model_Buffer) {

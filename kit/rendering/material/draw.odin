@@ -195,6 +195,23 @@ material_binding_find :: proc(p: Pass_Desc, draw: Material_Draw, bindings: []Mat
 }
 
 // 一个 Pass 本次绘制的参数：参数 uniform（按 uniform_size 打包，借用 temp_allocator）与 [Instance] 字段数值。
+// 不分配内存的实例值解析，供批量记录模型逐实例使用；与 material_pass_values 的覆盖顺序相同。
+material_pass_instance :: proc(p: Pass_Desc, b: Material_Binding,
+	overrides: ^Instance_Values) -> (instance: Instance_Values) {
+	for field, i in b.schema.fields {
+		if !field.instance || instance.count >= MAX_INSTANCE_FIELDS do continue
+		value := b.values[i]
+		if overrides != nil && overrides.set & (1 << u32(instance.count)) != 0 {
+			value_assign(field, &value, overrides.numbers[instance.count])
+		}
+		for fixed in p.values do if string(fixed.field) == field.id do value.number = fixed.number
+		instance.numbers[instance.count] = value.number
+		instance.count += 1
+	}
+	return
+}
+
+// 参数 uniform 借用 temp_allocator，实例值按值返回。
 // 套用顺序：材质实例值 < overrides（instance_values）< Pass 的固定 values。
 material_pass_values :: proc(p: Pass_Desc, b: Material_Binding, overrides: ^Instance_Values) -> (uniform: []u8, instance: Instance_Values) {
 	values := make([]Value, len(b.values), context.temp_allocator)

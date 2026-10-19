@@ -1,6 +1,10 @@
 # Plan：Render3D（第二阶段）
 
-> **状态：进行中（2026-10-20）** · 已批准；基线 86 项检查通过，按步骤执行。
+> **状态：已完成（2026-10-20）** · olib 提交 `8b219cc`..`dcbdadc`
+> 偏离：Odin 不支持结构体字段默认值，draw_debug 使用 Maybe(bool) 表达“未指定则开启”，零 view_matrix 按单位矩阵处理。Foster 没有实例缓冲起始偏移绑定，临时实例按批次/Pass 紧凑上传并复用容量。不透明也仅合并排序后相邻的兼容项，以保留组内前到后顺序。
+> olib_sample：`949d3b9`（迁移与演示）、`3b2f1b8`（文档与实测）；两个仓库均在 render3d 分支，未合并、未推送。Proj_Sand 未修改。
+> 验收：完整 `odin run tools/check` 全部 86 项通过；新增 2 个 CPU 回归，复用并扩充既有队列/缓冲错误检查。material3d 默认、第二视图、单个与 4096 个自动实例、百万常驻实例及 forward3d 已运行，最终输出截图位于 olib_sample/library/screenshots。默认双球布局/描边保持，shot 改为固定动画时间；多视图和自动实例是新增展示。Shader Lab 编译回归通过，工具入口保留。
+> 性能：D3D12、1100×720、4x MSAA、tools/check 默认构建，预热 10 帧后统计 120 帧。默认 4 Draw / submit CPU 0.046 ms；多视图 6 Draw / 0.080 ms；4096 自动实例 1 Draw / 0.891 ms；百万常驻实例 1 Draw / 0.030 ms。GPU 时间未测，16.667 ms 的受限帧时间不作为 GPU 耗时。
 
 ## 背景与范围
 

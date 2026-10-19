@@ -2,6 +2,7 @@ package rendering3d
 
 // 记录拥有 CPU 数据与材质绑定快照；GPU 资源借用至 clear/dispose。
 // submit 只重建当前视图的队列，不消耗记录，也不清理目标附件。
+// 分区：类型 / 生命周期 / 记录入口与快照 / 视图队列 / 提交与实例上传。
 import "core:math"
 import "base:builtin"
 import "core:mem"
@@ -9,6 +10,10 @@ import dasset "olib:core/dasset"
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
+
+// ------------------------------------------------------------------------------
+// 类型
+// ------------------------------------------------------------------------------
 
 View :: struct {
 	target: foster.DrawableTarget,
@@ -58,6 +63,10 @@ Render3D_Source :: struct {
 	transparent: bool,
 }
 
+// ------------------------------------------------------------------------------
+// 生命周期
+// ------------------------------------------------------------------------------
+
 init :: proc(r: ^Render3D, library: ^mat.Material_Library) -> string {
 	if library == nil || library.device == nil do return "Missing graphics device"
 	r^ = {library = library}
@@ -89,6 +98,10 @@ clear :: proc(r: ^Render3D) {
 	builtin.clear(&r.values)
 	debug_draw_clear(&r.debug)
 }
+
+// ------------------------------------------------------------------------------
+// 记录入口与材质快照
+// ------------------------------------------------------------------------------
 
 model :: proc(r: ^Render3D, mesh: ^foster.Mesh, material: ^mat.Material,
 	transform: world.Matrix4, bounds: ^dasset.Dasset_Bounds = nil,
@@ -235,6 +248,10 @@ render3d_source :: proc(r: ^Render3D, m: ^mat.Material, selection: mat.Pass_Sele
 	return index
 }
 
+// ------------------------------------------------------------------------------
+// 包围盒与当前视图队列
+// ------------------------------------------------------------------------------
+
 @(private)
 render3d_world_bounds :: proc(bounds: dasset.Dasset_Bounds,
 	transform: world.Matrix4) -> (result: dasset.Dasset_Bounds, valid: bool) {
@@ -299,6 +316,10 @@ render3d_prepare :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id) -> mat.
 	queue_sort(&r.queue, grouped = true)
 	return .None
 }
+
+// ------------------------------------------------------------------------------
+// 提交与实例上传
+// ------------------------------------------------------------------------------
 
 submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
 	r.draw_calls = 0

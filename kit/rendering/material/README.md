@@ -30,7 +30,8 @@ Material_Library ─┬─ Material_Effect ─ Effect_Desc（Pass 列表）+ []S
 ```
 
 2D 的 `r2d.image/texture` 记录几何与材质快照，`r2d.submit` 按连续兼容记录逐 Pass 绘制。
-3D 的 `model_draw` 与工具的 `r2d.material_draw` 使用本包的 `material_draw` 执行 Pass。
+3D 的 `Render3D` 记录快照，submit 按视图剔除、排序与实例化；工具的 `r2d.material_draw` 和
+`r3d.model_material_draw` 仍使用立即 Pass 执行器。Render2D 提交后清空，Render3D 保留到显式 clear。
 `Draw_Options { enabled, pass_id, instance_values, user_data, prepare, submit }` 保留工具所需的
 选择、参数覆盖与回调；业务只需 `pass_id` 和 `values`。
 
@@ -117,7 +118,7 @@ materials := mat.Material_Library{device = device, storage = &resources}
 // 清单与各 Pass 的 spv / dxil / msl 都由 tools/shaders 生成；库按驱动选择后端并登记。
 reason := mat.material_register_manifest(&materials, #load("Hero.shader.json"), passes)
 material, reason := mat.material_load(&materials, "materials/hero.json")
-// 检查 reason 后将 material 传给 r2d.image 或 r3d.model_draw。
+// 检查 reason 后将 material 传给 r2d.image 或 r3d.model。
 ```
 
 `passes` 是 `[]mat.Pass_Binaries`，与清单里的 Pass 一一对应（见 `olib_sample/src/material3d/shaders.odin`）。
@@ -165,7 +166,7 @@ Web 仅支持 Foster uniform 布局（矩阵与 MSDF distance_range）；普通 
 `material_library.odin` 提供 `Material_Library`，`material.odin` 提供 `Material` 和游戏材质加载入口。
 `draw.odin` 提供 `Material_Binding`、`Material_Draw`、`Draw_Options`、`material_draw` 和 `pass_state_apply`，
 负责选取 Pass、验证绑定、上传参数、绑定纹理、应用状态并提交 DrawCommand。
-2D/3D 绘制入口与 Shader Lab 使用同一套实现；业务通常从 `r2d.image` 或 `model_draw` 接入。
+2D/3D 绘制入口与 Shader Lab 复用相同的 Pass 选择、数值覆盖与状态规则；业务通常从 `r2d.image` 或 `r3d.model` 接入。
 所有绘制入口返回 `Draw_Error`，`.None` 表示成功，`draw_error_text(error)` 得到可读文本。
 Render2D 记录成功不代表已提交；被禁用的 Pass 不记录。
 
@@ -274,7 +275,7 @@ passes := []mat.Pass_Desc{
 GPU 执行见 [rendering3d 的 model_material_draw](../3d/REFERENCE.md#model_material_drawshader-lab-的底层入口)。完整实例见
 `olib_sample/src/material3d`，Shader/参数的唯一来源是 `olib_sample/src/shader_lab`。
 游戏业务默认使用 [Material_Library](README.md#公共材质资源)：
-`material_load` 自动解析效果并加载 Shader/纹理，之后直接传给 `model_draw`。
+`material_load` 自动解析效果并加载 Shader/纹理，之后直接传给 `r3d.model`。
 这里的 Instance 编解码接口留给资源层和工具使用，不要求每个游戏手动组装 GPU 绑定。
 
 2D 使用 `.Sprite` Pass，与 `.Model` 共用 Instance、资源格式和公共加载器。

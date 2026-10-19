@@ -1,6 +1,7 @@
 # 渲染
 
-2D 用 `Render2D` 记录，最后 `submit`；3D 用 `model_draw`。二者共用材质库，互不依赖。
+2D 用 `Render2D`，3D 用 `Render3D`，均先记录再 `submit`。二者共用材质库，互不依赖。
+Render2D 提交后清空；Render3D 保留记录，支持多个视图/Pass 重复提交，下一帧重新记录前显式 `clear`。
 
 ## 最小示例
 
@@ -41,8 +42,9 @@ mat.material_library_dispose(&materials)
 | 2D 百万精灵（一次 Draw） | `Sprite_Buffer`、`sprite_buffer_init/upload/dispose`、`Sprite_Item`、`sprite_item_make`、`buffer` | [2d/sprite_buffer.odin](2d/sprite_buffer.odin) |
 | 2D 帧动画 | `Animation_Set`、`animation_set_init/dispose`、`animation_set_add_frame/add_animation`、`animation_set_get_animation/get_frame_at` | [2d/animation_set.odin](2d/animation_set.odin) |
 | 2D 图集 | `Sprite_Atlas`、`atlas_from_rects`、`atlas_upload`、`atlas_subtexture`、`atlas_get/has/names/crop` | [2d/atlas.odin](2d/atlas.odin)（来源格式见 `atlas_grid / atlas_kenney / atlas_aseprite / atlas_builtin_icons`） |
-| 3D 画模型 | `View`、`model_draw` | [3d/model_draw.odin](3d/model_draw.odin) |
-| 3D 实例化（大批量） | `Model_Buffer`、`Model_Item`、`model_buffer_init/upload/dispose`、`model_draw_buffer` | [3d/model_buffer.odin](3d/model_buffer.odin)、[3d/model_draw.odin](3d/model_draw.odin) |
+| 3D 画模型 / 自动实例化 | `Render3D`、`View`、`init/dispose/clear`、`model/models`、`submit`、`Model_Item` | [3d/render3d.odin](3d/render3d.odin) |
+| 3D 常驻实例缓冲 | `Model_Buffer`、`model_buffer_init/upload/dispose`、`buffer` | [3d/model_buffer.odin](3d/model_buffer.odin)、[3d/REFERENCE.md](3d/REFERENCE.md) |
+| 3D 随模型提交调试线 | `line/aabb/sphere/frustum/axis/grid/skeleton` | [3d/render3d_debug.odin](3d/render3d_debug.odin) |
 | 3D 网格上传 | `mesh_upload`、`mesh_dispose`、`mesh_static_format`、`mesh_skin_format` | [3d/mesh.odin](3d/mesh.odin) |
 | 3D 排序 / LOD / 调试线 | `Render_Queue`、`queue_*`；`Lod_Selector`、`lod_*`、`Model_Lod`；`Debug_Draw_3D`、`debug_draw_*` | [3d/queue.odin](3d/queue.odin)、[3d/lod.odin](3d/lod.odin)、[3d/debug_draw.odin](3d/debug_draw.odin) |
 | 解析 `.oshader`、开发期热重载 | `lang.parse`；`dev.*` | [shader/lang/lang.odin](shader/lang/lang.odin)、[shader/dev/](shader/dev/) |

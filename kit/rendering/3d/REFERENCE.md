@@ -4,6 +4,69 @@
 完整可运行的手写渲染器是 olib_sample 的 `src/forward3d`（Standard PBR 前向渲染：方向光、点光、聚光、半透明排序），
 复制到游戏里按画风改写即可。
 
+## 常驻实例缓冲
+
+静态的百万级实例可在加载时上传一次，随后只记录缓冲引用。普通动态模型优先用 README 的 models。
+
+```odin
+instances: r3d.Model_Buffer
+reason := r3d.model_buffer_init(&instances, material, capacity = 1_000_000) // 空串成功
+// items: []Model_Item；values: [][4]f32，每个实例连续 instances.slots 个 float4。
+ok := r3d.model_buffer_upload(&instances, items, values = values)
+
+r3d.clear(&renderer)
+err := r3d.buffer(&renderer, &mesh, material, &instances, count, bounds = &world_bounds)
+err = r3d.submit(&renderer, view, "body")
+// 释放前先 clear/dispose renderer。
+r3d.clear(&renderer)
+r3d.model_buffer_dispose(&instances)
+```
+
+- buffer 的 bounds 是整块实例的**世界 AABB**；只做整块剔除、排序，不读回或逐实例重排。
+  透明块内部顺序由调用方负责。无盒时保留整块，并用世界原点作为排序位置。
+- count 必须在 0..capacity 内；缓冲槽数必须匹配 instanced 效果，资源必须属于同一设备。
+  每个所选 Pass 绘制一次；重复 submit 不重新上传常驻数据。
+- 每实例 `80 + 16×slots` 字节。更新部分数据用 `model_buffer_upload(..., first = offset)`。
+  upload 的 nil values 表示全零；model/models 的 nil values 表示材质默认值，两者不同。
+- 常驻实例字段和 tint 完全来自缓冲，不套用材质默认实例值或 Pass 的实例字段覆盖；
+  各 Pass 的非实例 uniform、纹理与状态仍独立生效。需要每 Pass 不同实例值时用 models 或自行提供不同缓冲。
+- 自动实例化的临时缓冲按批次和 Pass 紧凑上传并复用容量。Foster 没有实例缓冲起始偏移绑定，
+  因此当前逐批上传/绘制，不是整帧仅一次上传。
+
+## 手写队列、LOD 与独立调试线
+
+```odin
+queue: r3d.Render_Queue(My_Draw)
+r3d.queue_clear(&queue)
+r3d.queue_submit(&queue, draw, r3d.queue_view_depth(&camera, draw.transform), transparent = false)
+r3d.queue_sort(&queue)
+for item in queue.items { /* 自己的 DrawCommand */ }
+// 退出时 queue_dispose。
+```
+
+默认排序与 forward3d 一致：不透明前到后、透明后到前，同深度稳定。
+可选 queue_submit 的 group 键与 `queue_sort(..., grouped = true)` 开启不透明分组，
+组按最近深度、同深度按 group 键排列，组内前到后；透明仍全局后到前。
+使用可复用工作区的稳定 O(n log n) 归并排序，Render3D 内部也用这一实现。
+
+LOD 独立使用 `Model_Lod`、`model_lod_init / select`，或 `Lod_Selector`、`lod_screen_height`；
+Render3D 不自动选 LOD。手写渲染器仍可用 `Debug_Draw_3D`、`debug_draw_line / aabb / sphere / frustum / axis / grid / skeleton`。
+独立 `debug_draw_render` 沿用画完清空的语义，Render3D 共用几何实现但提交后保留。
+
+## 模型材质 Shader 布局
+
+| 绑定 | 内容 |
+| --- | --- |
+| 静态顶点 | TEXCOORD0..3：位置、法线、UV、切线，48B |
+| vertex b0 | WVP + World；instanced 时为 VP + 单位矩阵 |
+| fragment b0 | Clock、Pointer（xy 为 0，zw 为目标像素尺寸）、Tint |
+| fragment b1 | 材质非实例参数 |
+| space2 | 材质纹理和采样器 |
+
+model 的 Tint 为白色；非 instanced models 使用 Model_Item.tint；instanced 模型的 tint 来自实例缓冲。
+实例输入属性在前，网格属性位置后移 `5 + slots`，详见 [instanced HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。
+普通材质不生成隐式 instanced Shader 变体。静态格式以外的网格返回 `.Unsupported_Mesh`。
+
 ## 手写一个着色器
 
 ### 1. HLSL
@@ -124,7 +187,7 @@ foster.TargetInit(&scene, device, w, h, attachments[:], "scene color + depth")
 
 ## model_material_draw：Shader Lab 的底层入口
 
-`model_draw` 是它的薄包装。Shader Lab 用自己管理的 GPU 资源（`mat.Material_Binding`）预览效果，直接调用：
+这是独立的立即绘制工具入口。Shader Lab 用自己管理的 GPU 资源（`mat.Material_Binding`）预览效果，直接调用：
 
 ```odin
 // 每组一个绑定；samplers 按 Schema 中 Texture 字段顺序，空路径也要绑定默认纹理。
@@ -147,6 +210,6 @@ err := r3d.model_material_draw(device, effect, bindings, {
   在 prepare 后应用，Shader Lab 的候选管线探测也使用相同状态。
 - 须提供有效世界矩阵和 VP，不能把零矩阵当单位阵。instanced 效果传 `instances` / `instance_count`，此时 `world_matrix` 被忽略。
 
-首版不提供蒙皮材质、阴影 Pass 调度、透明物排序、顶点材质参数或逐模型后处理。示例描边沿顶点法线外扩，
+工具入口不负责场景排序；业务的剔除与排序由 Render3D 提供。库不提供蒙皮材质、自动阴影调度或逐模型后处理。示例描边沿顶点法线外扩，
 宽度是 HLSL 常量，颜色属于材质参数；硬边/非均匀缩放的法线和描边策略由 Shader 作者处理。
 发布游戏使用预编译 Shader，不 import Shader Lab 或 shader/dev。

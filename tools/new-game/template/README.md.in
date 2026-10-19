@@ -39,7 +39,7 @@ Windows 和 Web 都编译 src/game。桌面专用调用用 game/main_native.odin
 play.bat
 ```
 
-A/D 或方向键移动，Enter/按钮加分，Space/按钮暂停，New game 重开，F1 显示/隐藏编辑器，F5 重试编译，Esc 退出。窗口标题显示编译状态。失败时宿主在窗口内显示红色、非阻塞的错误摘要，区分 Build failed 与 Reload failed；已有模块时说明仍在运行旧版及版本号，首次失败说明尚未加载游戏。
+A/D 或方向键移动，Enter/按钮加分，Space/按钮暂停，New game 重开，F1 显示/隐藏编辑器，F3 显示/隐藏性能面板，F5 重试编译，Esc 退出。窗口标题显示编译状态。失败时宿主在窗口内显示红色、非阻塞的错误摘要，区分 Build failed 与 Reload failed；已有模块时说明仍在运行旧版及版本号，首次失败说明尚未加载游戏。
 
 完整错误写入终端和 `build/hotreload-last-error.txt`。保存修复自动重试，F5 手动重试；等待及重新编译期间保留失败提示，只有新 DLL 实际加载成功后才清除。最后一次错误日志仍保留供回看。游戏 DLL 编译失败时提示也可用，因为反馈 UI 由常驻 `src/editor/main.odin` 持有并借用宿主字体，不属于 Editor DLL；失败不暂停旧游戏。
 

@@ -9,6 +9,7 @@ import reload "olib:core/hotreload"
 import foster "olib:foster"
 import r2d "olib:kit/rendering/2d"
 import mat "olib:kit/rendering/material"
+import perf "olib:kit/tools/perf_overlay"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -23,6 +24,7 @@ Editor_App :: struct {
 	session: reload.Session,
 	watch: reload.Watch,
 	feedback: Feedback,
+	perf: perf.Overlay, // F3 悬浮性能面板，常驻宿主，热重载不清空历史
 	root, sources, library: string,
 	status: reload.Build_Status,
 	failed: bool,
@@ -64,6 +66,10 @@ startup :: proc(app: ^foster.App) {
 		s.services.font, s.services.texture), "feedback initialization") {
 		return
 	}
+	if !check(s, perf.init(&s.perf, &app.GraphicsDevice, s.services.font, s.services.texture),
+		"perf overlay initialization") {
+		return
+	}
 	if !check(s, reload.init(&s.session, core.SERVICES_VERSION, &s.services), "session initialization") do return
 	if !check(s, reload.watch_init(&s.watch, {
 		working_directory = s.root,
@@ -74,7 +80,7 @@ startup :: proc(app: ^foster.App) {
 	}), "watch initialization") {
 		return
 	}
-	fmt.println("Save src/core or src/core_editor for game and Editor UI reload. F1 panel; F5 retry; Escape exit.")
+	fmt.println("Save src/core or src/core_editor for game and Editor UI reload. F1 panel; F3 perf; F5 retry; Escape exit.")
 }
 
 shutdown :: proc(app: ^foster.App) {
@@ -83,6 +89,7 @@ shutdown :: proc(app: ^foster.App) {
 	check(s, reload.dispose(&s.session), "module disposal")
 	reload.watch_dispose(&s.watch)
 	feedback_dispose(&s.feedback)
+	perf.dispose(&s.perf)
 	core.resources_dispose(&s.resources)
 }
 
@@ -92,6 +99,8 @@ update :: proc(app: ^foster.App) {
 	k := &app.Input.State.Keyboard
 	if foster.KeyboardPressed(k, .Escape) do foster.Exit(app)
 	if foster.KeyboardPressed(k, .F5) do reload.watch_retry(&s.watch)
+	if foster.KeyboardPressed(k, .F3) do s.perf.visible = !s.perf.visible
+	perf.frame(&s.perf, app.Time.Delta)
 	reload.watch_update(&s.watch, f64(app.Time.Delta))
 	installed, load_failed: bool
 	if s.watch.status == .Ready {
@@ -120,6 +129,7 @@ render :: proc(app: ^foster.App) {
 	reload.render(&s.session, f64(app.Time.Delta))
 	feedback_draw(&s.feedback, target, reload.is_live(&s.session), s.session.revision,
 		s.services.scale, app.Time.Delta)
+	perf.draw(&s.perf, target, s.services.scale)
 }
 
 check :: proc(s: ^Editor_App, ok: bool, message: string) -> bool {

@@ -44,7 +44,8 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── storage/     跨平台资源根 / 用户存储路径策略
 ├── app/         CLI 参数 + 调试控制台（可选 cli_open 接入 foster.App）
 ├── audio/       SDL3 音频（设备流 / WAV 装载 / 播放）
-└── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
+├── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
+└── tools/       可嵌入工具：shader_lab / perf_overlay（悬浮性能面板）
 
 thirdparty/  外部移植与绑定：纯 Odin clay-odin / odin-imgui（含 Foster 后端）
 
@@ -166,3 +167,5 @@ Shader 的模块归属、源码与 `Compiled/` 分层及统一编译入口见 [S
 
 可嵌入编辑器的 Shader 工具见 [kit/tools/shader_lab](kit/tools/shader_lab/README.md)，底层热重载见
 [kit/rendering/shader/dev](kit/rendering/shader/dev/README.md)。在同级 olib_sample 运行 `run.bat shader_lab`，保存 `.oshader` 即可更新 2D/3D 预览。
+
+悬浮性能面板见 [kit/tools/perf_overlay](kit/tools/perf_overlay/README.md)：FPS、帧时间曲线与 profiler 作用域耗时，新游戏开发版按 F3 打开。

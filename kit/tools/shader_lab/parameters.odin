@@ -45,10 +45,6 @@ parameters_update :: proc(s: ^Session) {
 	build := dev.parameters_take(&s.parameter_watch)
 	defer dev.parameter_build_dispose(&build)
 	if s.parameter_watch.status != .Live do return
-	if len(build.schemas) > 16 || len(build.effects) > 16 {
-		bank_error(s, "Shader Lab supports 16 parameter groups and 16 effects")
-		return
-	}
 	bank_dispose(s.pending_bank)
 	s.pending_bank = bank_make(s, build)
 	bank_error(s, "")

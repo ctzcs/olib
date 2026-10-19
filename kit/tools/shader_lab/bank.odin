@@ -10,11 +10,13 @@ import mat "olib:kit/rendering/material"
 import dev "olib:kit/rendering/shader/dev"
 
 Parameter_Bank :: struct {
-	shaders: [16]dev.Session,
-	materials: [16]foster.Material,
-	parameters: [16]Parameter_State,
+	// 按构建结果一次分配，之后不再增长，Material 才能长期指向 shaders 里的着色器。
+	shaders: []dev.Session,
+	materials: []foster.Material,
+	parameters: []Parameter_State,
 	shader_count: int,
-	shader_used: [16]bool,
+	shader_used: []bool,
+	last_status: []dev.Status,
 	effects: []Effect_Runtime,
 	fingerprint: u64,
 	candidate_failed: bool,
@@ -33,6 +35,11 @@ bank_dispose :: proc(b: ^Parameter_Bank) {
 	for &p in b.parameters do parameter_dispose(&p)
 	for &shader in b.shaders do dev.dispose(&shader)
 	for &effect in b.effects do effect_dispose(&effect)
+	delete(b.shaders)
+	delete(b.materials)
+	delete(b.parameters)
+	delete(b.shader_used)
+	delete(b.last_status)
 	delete(b.effects)
 	free(b)
 }
@@ -47,7 +54,13 @@ bank_index :: proc(b: ^Parameter_Bank, name: string) -> int {
 bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 	b := new(Parameter_Bank)
 	b.fingerprint = s.parameter_watch.attempted
-	b.shader_count = len(build.schemas)
+	count := len(build.schemas)
+	b.shader_count = count
+	b.shaders = make([]dev.Session, count)
+	b.materials = make([]foster.Material, count)
+	b.parameters = make([]Parameter_State, count)
+	b.shader_used = make([]bool, count)
+	b.last_status = make([]dev.Status, count)
 	for schema, i in build.schemas {
 		p := &b.parameters[i]
 		p.name = strings.clone(schema.name)
@@ -63,6 +76,7 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		b.shaders[i].source_text = strings.clone(program_text)
 		if prior := bank_index(s.bank, schema.name); prior >= 0 {
 			b.shaders[i].revision = s.shaders[prior].revision
+			b.last_status[i] = s.last_status[prior]
 		}
 		foster.MaterialInitWithShaders(&b.materials[i], &b.shaders[i].vertex, &b.shaders[i].fragment)
 		dev.configure_parameters(&b.shaders[i], mat.texture_count(schema))
@@ -74,6 +88,8 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		e.desc = mat.effect_clone(desc)
 		e.order, _ = mat.effect_order(e.desc, build.schemas)
 		e.targets = make([]Pass_Target, len(desc.passes))
+		e.validated_revision = make([]u64, count)
+		e.rejected_revision = make([]u64, count)
 		for p, j in desc.passes {
 			e.enabled[j] = !p.disabled
 			e.expanded[j] = true
@@ -200,7 +216,7 @@ bank_commit :: proc(s: ^Session) {
 		p.generation = s.schema_generation
 		texture_stamps_reset(s, &p)
 	}
-	selected := bank_index(b, s.parameters[s.selected].name)
+	selected := s.selected < s.shader_count ? bank_index(b, s.parameters[s.selected].name) : -1
 	new_effect := -1
 	new_pass := -1
 	new_preview := -1

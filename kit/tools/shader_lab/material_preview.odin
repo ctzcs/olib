@@ -123,7 +123,7 @@ load_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 		parameter_error(reporter, reason)
 		return false
 	}
-	textures: [16][16]foster.Texture
+	textures := make([][mat.MAX_TEXTURES]foster.Texture, len(next.groups), context.temp_allocator)
 	defer for &group in textures do for &texture in group do foster.TextureDispose(&texture)
 	for group, i in next.groups {
 		slot := 0

@@ -24,8 +24,9 @@ Effect_Runtime :: struct {
 	last_tick: u64,
 	clear_pending: bool,
 	ready: bool,
-	validated_revision: [16]u64,
-	rejected_revision: [16]u64,
+	// 按参数组下标记录，长度等于所属 bank 的 shader_count。
+	validated_revision: []u64,
+	rejected_revision: []u64,
 	enabled, expanded: [32]bool,
 }
 
@@ -66,6 +67,8 @@ effect_dispose :: proc(e: ^Effect_Runtime) {
 	effect_targets_release(e)
 	delete(e.targets)
 	delete(e.order)
+	delete(e.validated_revision)
+	delete(e.rejected_revision)
 	mat.effect_dispose(&e.desc)
 	e^ = {}
 }
@@ -79,8 +82,8 @@ effect_targets_release :: proc(e: ^Effect_Runtime) {
 		}
 	}
 	e.ready = false
-	e.validated_revision = {}
-	e.rejected_revision = {}
+	for &r in e.validated_revision do r = 0
+	for &r in e.rejected_revision do r = 0
 }
 
 effect_targets_trim :: proc(bank: ^Parameter_Bank, selected: int) {
@@ -105,7 +108,7 @@ target_clear :: proc(s: ^Session, target: ^foster.Target, color: [4]f32) {
 // Resize 先分配整套新目标，失败保留该效果旧目标。历史目标始终两张，其余只分配一张。
 effect_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int) -> bool {
 	effect_targets_trim(bank, selected)
-	bank.shader_used = {}
+	for &used in bank.shader_used do used = false
 	for &e, effect_index in bank.effects {
 		if effect_index != selected do continue
 		model := mat.effect_is_material(e.desc)

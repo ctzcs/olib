@@ -69,7 +69,6 @@ Session :: struct {
 	pointer: foster.Vec2,
 	initialized: bool,
 	render_serial: int,
-	last_status: [16]dev.Status,
 	file_dialogs: bool,
 	request: File_Request,
 	request_serial, schema_generation: u64,

@@ -14,6 +14,8 @@ import mat "olib:kit/rendering/material"
 // ------------------------------------------------------------------------------
 
 // 一个精灵的数据：2D 变换、局部矩形（已减去锚点）、UV 矩形与 tint。
+// 内存布局就是 GPU 记录的前 80 字节（与 hlsl 生成的 OlibInstanceInput 的前 5 个 float4 一致），
+// 没有 [Instance] 字段时整块上传，有字段时按块拷贝拼接，不做逐字段打包。
 // [Instance] 字段的数值不放在这里：它们的个数由效果决定，由调用方另备一个平铺数组，上传时一并传入
 // （sprite_buffer_upload 的 values，用 mat.instance_array_set 写入）。
 // 一次 Draw 里所有精灵共用同一张贴图（图集页），贴图在 sprite_draw_buffer 时指定。
@@ -21,8 +23,11 @@ Sprite_Item :: struct {
 	transform: foster.Matrix3x2,
 	rect: [4]f32, // 局部 x0, y0, 宽, 高（像素，已减去锚点）
 	uv: [4]f32, // u0, v0, 宽, 高
+	padding: [2]f32, // 凑满第 4 个 float4，不要使用
 	tint: [4]f32,
 }
+#assert(size_of(Sprite_Item) == 80 && offset_of(Sprite_Item, rect) == 24 &&
+	offset_of(Sprite_Item, uv) == 40 && offset_of(Sprite_Item, tint) == 64)
 
 // 由图集子图构造：保留裁剪后的 DrawCoords / TexCoords；origin 相对于未裁剪原图。
 sprite_item_make :: proc(frame: foster.Subtexture, origin: foster.Vec2, transform: foster.Matrix3x2,
@@ -44,20 +49,13 @@ sprite_stride :: proc(slots: int) -> int {
 	return mat.INSTANCE_FIXED_ATTRIBUTES*16 + 16*slots
 }
 
-// 把一个精灵写成 GPU 记录：与 hlsl 生成的 OlibInstanceInput / olib_sprite_vertex 的约定一致。
+// 把一个精灵写成 GPU 记录：Sprite_Item 的字节加上 [Instance] 数值，与 hlsl 生成的
+// OlibInstanceInput / olib_sprite_vertex 的约定一致。
 // dst 至少 sprite_stride(slots) 字节；values 是这个精灵的 [Instance] 数值（至多 slots 个，不足的补 0）。
 @(private)
 sprite_item_pack :: proc(dst: []u8, item: Sprite_Item, slots: int, values: [][4]f32 = nil) {
-	item := item // 取字段地址需要一个可寻址的副本
-	t := item.transform
-	head := [20]f32{
-		t.M11, t.M12, t.M21, t.M22,
-		t.M31, t.M32, item.rect[0], item.rect[1],
-		item.rect[2], item.rect[3], item.uv[0], item.uv[1],
-		item.uv[2], item.uv[3], 0, 0,
-		item.tint[0], item.tint[1], item.tint[2], item.tint[3],
-	}
-	mem.copy(raw_data(dst), &head, 80)
+	item := item // 取地址需要一个可寻址的副本
+	mem.copy(raw_data(dst), &item, size_of(Sprite_Item))
 	if slots <= 0 do return
 	copied := min(len(values), slots)
 	if copied > 0 do mem.copy(raw_data(dst[80:]), raw_data(values), 16*copied)
@@ -100,28 +98,39 @@ sprite_buffer_dispose :: proc(buf: ^Sprite_Buffer) {
 	buf^ = {}
 }
 
-// 一次最多打包上传的精灵数：限制临时内存；更大的批量分段写入。
+// 一次最多拼接上传的精灵数：限制临时内存；更大的批量分段写入。
 @(private)
-SPRITE_UPLOAD_CHUNK :: 65536
+SPRITE_UPLOAD_CHUNK :: 262144
 
 // 把 items 写到缓冲第 first 个精灵起的位置（部分更新只需传变化的区间）。
 // values 是这批精灵的 [Instance] 数值：平铺数组，每个精灵连续 buf.slots 个 float4，长度须为 len(items) × slots
 // （用 mat.instance_array_set 写入）；slots 为 0 或传 nil（全部为 0）时可省略。
+// 没有 [Instance] 字段时 items 整块拷贝到 GPU；有字段时按精灵拼接 items 与 values 两块内存。
 // 超出容量或 values 长度不对返回 false 且不写入。帧内上传会占用设备暂存区，百万级请在加载时一次性上传。
 sprite_buffer_upload :: proc(buf: ^Sprite_Buffer, items: []Sprite_Item, first := 0,
 	values: [][4]f32 = nil) -> bool {
 	if buf.capacity <= 0 || first < 0 || first + len(items) > buf.capacity do return false
 	slots := buf.slots
 	if values != nil && len(values) != len(items)*slots do return false
+	if slots == 0 {
+		// 与 GPU 记录同一布局，直接上传。
+		foster.VertexBufferUpload(&buf.buffer, raw_data(items), len(items), first)
+		return true
+	}
 	stride := sprite_stride(slots)
 	scratch := make([]u8, min(len(items), SPRITE_UPLOAD_CHUNK)*stride)
 	defer delete(scratch)
+	value_bytes := 16*slots
 	for start := 0; start < len(items); start += SPRITE_UPLOAD_CHUNK {
 		chunk := items[start:min(start+SPRITE_UPLOAD_CHUNK, len(items))]
-		for item, i in chunk {
-			own: [][4]f32
-			if values != nil do own = values[(start+i)*slots:(start+i+1)*slots]
-			sprite_item_pack(scratch[i*stride:], item, slots, own)
+		for i in 0..<len(chunk) {
+			record := raw_data(scratch[i*stride:])
+			mem.copy(record, &chunk[i], size_of(Sprite_Item))
+			if values != nil {
+				mem.copy(rawptr(uintptr(record) + size_of(Sprite_Item)), &values[(start+i)*slots], value_bytes)
+			} else {
+				mem.zero(rawptr(uintptr(record) + size_of(Sprite_Item)), value_bytes)
+			}
 		}
 		foster.VertexBufferUpload(&buf.buffer, raw_data(scratch), len(chunk), first+start)
 	}

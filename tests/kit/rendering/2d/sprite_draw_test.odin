@@ -116,6 +116,8 @@ sprite_item_packs_gpu_record_layout :: proc(t: ^testing.T) {
 	item := sprite_item_make(frame, {12, 12}, {2, 0, 0, 3, 100, 200}, {0.5, 0.25, 1, 1})
 	testing.expect_value(t, item.rect, [4]f32{-8, -4, 16, 8}) // 局部 x0, y0 = 裁剪起点(4,8) - 锚点(12,12)
 	testing.expect_value(t, item.uv, [4]f32{0.25, 0.5, 0.125, 0.0625})
+	testing.expect_value(t, size_of(Sprite_Item), 80) // 与 GPU 记录同一布局，无字段时整块上传
+	testing.expect_value(t, offset_of(Sprite_Item, tint), 64)
 	testing.expect_value(t, sprite_stride(0), 80)
 	testing.expect_value(t, sprite_stride(2), 112)
 	record: [112]u8

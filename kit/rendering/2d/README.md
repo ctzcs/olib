@@ -73,7 +73,9 @@ err = r2d.sprite_draw_buffer(&renderer, material, &buffer, count, &atlas_texture
 - 字段个数由你的项目决定：效果里声明几个 `[Instance]`，`SLOTS` 就是几个（硬上限 `MAX_INSTANCE_FIELDS` = 16），
   库里没有全局配置。`values` 长度必须是 `len(items) × SLOTS`，传 `nil` 表示全部为 0。
 - 一次 Draw 里的精灵共用同一张贴图（`texture`，即帧贴图字段）；不同图集页各自一个缓冲。
-- 每个精灵 80 + 16×slots 字节：100 万个、2 个字段约 112 MB 显存；上传请在加载时一次完成（帧内上传占用设备暂存区）。
+- 每个精灵 80 + 16×slots 字节：100 万个、2 个字段约 112 MB 显存。`Sprite_Item` 的内存布局就是 GPU 记录，没有字段时整块拷贝，
+  有字段时只做两次块拷贝拼接，不逐字段打包；实测 100 万个精灵（2 个字段）上传约 37 ms（RTX 3070，D3D12）。
+  请在加载时一次完成，运行中只更新变化的区间（帧内上传占用设备暂存区）。
 - 剔除：把精灵按空间分块放进多个缓冲，每块每帧只提交可见的；`count` 可以只画缓冲前 N 个。
 - 绘制顺序：`sprite_draw_buffer` 先提交 begin/end 里已排队的精灵再绘制，保持调用顺序；缓冲内部按下标顺序混合。
 - `[Instance]` 字段以缓冲为准，其余统一参数来自材质、整批共用。非 instanced 效果返回 `.Not_Instanced_Effect`，字段数不一致返回 `.Instance_Mismatch`。

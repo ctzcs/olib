@@ -3,6 +3,8 @@ package core
 import "core:fmt"
 
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
+import mat "olib:kit/rendering/material"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -12,14 +14,20 @@ ACCENT :: foster.Color{100, 229, 185, 255}
 
 View :: struct {
 	ctx: ui.UI_Context,
-	batcher: foster.Batcher,
+	// 2D 绘制：Render2D 借用材质库的设备与内置材质；View 初始化后不得搬动。
+	materials: mat.Material_Library,
+	renderer: r2d.Render2D,
 	theme: ui.UI_Theme,
 }
 
 view_init :: proc(v: ^View, device: ^foster.GraphicsDevice, font: ^foster.MsdfFont,
 	texture: foster.Texture) -> bool {
 	if !ui.ui_init(&v.ctx, 960, 720) do return false
-	foster.BatcherInit(&v.batcher, device, "game")
+	v.materials = {device = device}
+	if reason := r2d.init(&v.renderer, &v.materials); reason != "" {
+		fmt.eprintln(reason)
+		return false
+	}
 	v.theme = ui.UI_THEME_DARK
 	v.theme.body_font_id = u16(ui.ui_register_font(&v.ctx, font, texture, .MSDF))
 	v.theme.body_font_size = 18
@@ -30,7 +38,8 @@ view_init :: proc(v: ^View, device: ^foster.GraphicsDevice, font: ^foster.MsdfFo
 
 view_dispose :: proc(v: ^View) {
 	ui.ui_dispose(&v.ctx)
-	foster.BatcherDispose(&v.batcher)
+	r2d.dispose(&v.renderer)
+	mat.material_library_dispose(&v.materials)
 }
 
 // 只读取世界，返回操作；游戏实例在下一次更新处理，不在 Render 改模拟。
@@ -59,12 +68,11 @@ view_draw :: proc(v: ^View, w: ^World, target: foster.DrawableTarget,
 		}
 		ui.ui_label_dim(ctx, &v.theme, "A/D: move   Space: pause   Enter: point")
 	}
-	foster.BatcherClear(&v.batcher)
-	ui.ui_draw(ctx, &v.batcher)
+	ui.ui_draw(ctx, &v.renderer)
 	// 世界示意与 UI 都直接输出到最终像素目标。
 	fit := min(viewport.Width/640, 1)
-	foster.BatcherRect(&v.batcher, {viewport.X+20*fit, viewport.Y+viewport.Height-60, 600*fit, 2}, ACCENT)
-	foster.BatcherCircle(&v.batcher, {viewport.X+w.x*fit, viewport.Y+viewport.Height-80}, 12, 24, ACCENT)
-	foster.BatcherRender(&v.batcher, target)
+	r2d.rect(&v.renderer, {viewport.X+20*fit, viewport.Y+viewport.Height-60, 600*fit, 2}, ACCENT)
+	r2d.circle(&v.renderer, {viewport.X+w.x*fit, viewport.Y+viewport.Height-80}, 12, 24, ACCENT)
+	r2d.submit(&v.renderer, {target = target})
 	return
 }

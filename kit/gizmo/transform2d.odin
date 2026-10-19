@@ -3,6 +3,7 @@ package gizmo
 import "core:math"
 
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
 import world "olib:kit/world"
 
 // 分区：二维变换 / 几何与命中 / 拖拽生命周期 / 覆盖层与坐标校验
@@ -206,7 +207,7 @@ transform2d_update :: proc(g: ^Transform_Gizmo2D, camera: ^world.Camera2D,
 // ==============================================================================
 
 // 最终像素覆盖层；调用方负责矩阵、材质和 viewport 裁剪。标签返回 XYZ 对应槽位。
-transform2d_draw :: proc(batch: ^foster.Batcher, state: ^Transform_Gizmo2D,
+transform2d_draw :: proc(batch: ^r2d.Render2D, state: ^Transform_Gizmo2D,
 	g: Transform_Geometry2D, pointer: foster.Vec2, scale: f32 = 1,
 	style := DEFAULT_TRANSLATION_STYLE) -> [3]Axis_Label {
 	labels: [3]Axis_Label
@@ -221,7 +222,7 @@ transform2d_draw :: proc(batch: ^foster.Batcher, state: ^Transform_Gizmo2D,
 				b := f32(i+1)*2*math.PI/RING_SEGMENTS
 				start := g.axes.origin+foster.Vec2{math.cos(a), math.sin(a)}*g.radius
 				end := g.axes.origin+foster.Vec2{math.cos(b), math.sin(b)}*g.radius
-				foster.BatcherLine(batch, start, end,
+				r2d.line(batch, start, end,
 					(pass == 0 ? style.outline_width : style.line_width)*scale,
 					pass == 0 ? style.outline : color)
 			}
@@ -237,8 +238,8 @@ transform2d_draw :: proc(batch: ^foster.Batcher, state: ^Transform_Gizmo2D,
 			if !g.axes.visible[axis] do continue
 			color := hover == axis ? style.highlight : style.colors[axis]
 			end := g.axes.ends[axis]
-			foster.BatcherLine(batch, g.axes.origin, end, style.outline_width*scale, style.outline)
-			foster.BatcherLine(batch, g.axes.origin, end, style.line_width*scale, color)
+			r2d.line(batch, g.axes.origin, end, style.outline_width*scale, style.outline)
+			r2d.line(batch, g.axes.origin, end, style.line_width*scale, color)
 			draw_square(batch, end, 5*scale, color, style.outline)
 			d := end-g.axes.origin
 			labels[axis] = {true, end+d/math.sqrt(dot2(d, d))*style.label_gap*scale, color}
@@ -278,11 +279,11 @@ camera2d_valid :: proc(camera: ^world.Camera2D, viewport: foster.Rect) -> bool {
 // 覆盖层绘制
 // ==============================================================================
 
-// 在最终像素目标上绘制。调用方提供单位像素矩阵、普通 Batcher 材质与目标裁剪；本函数不切换状态。
+// 在最终像素目标上绘制。调用方提供单位像素矩阵、默认材质与目标裁剪；本函数不切换状态。
 // 返回标签锚点，调用方用自己的字体/UI 渲染 X/Y/Z；不依赖 Clay，不创建 GPU 资源。
 @(private)
 draw_projected_axes :: proc(
-	batch: ^foster.Batcher, g: ^Translation_Gizmo, geometry: Translation_Geometry,
+	batch: ^r2d.Render2D, g: ^Translation_Gizmo, geometry: Translation_Geometry,
 	pointer: foster.Vec2, scale: f32 = 1, style := DEFAULT_TRANSLATION_STYLE,
 ) -> [3]Axis_Label {
 	labels: [3]Axis_Label
@@ -300,18 +301,18 @@ draw_projected_axes :: proc(
 		direction := delta/length
 		base := end-direction*style.arrow_length*scale
 		side := foster.Vec2{-direction.y, direction.x}*style.arrow_half_width*scale
-		foster.BatcherLine(batch, geometry.origin, base, style.outline_width*scale, style.outline)
-		foster.BatcherLine(batch, geometry.origin, base, style.line_width*scale, color)
-		foster.BatcherTriangle(batch, end, base+side, base-side, color)
+		r2d.line(batch, geometry.origin, base, style.outline_width*scale, style.outline)
+		r2d.line(batch, geometry.origin, base, style.line_width*scale, color)
+		r2d.triangle(batch, end, base+side, base-side, color)
 		labels[axis] = {true, end+direction*style.label_gap*scale, color}
 	}
-	if any_visible do foster.BatcherCircle(batch, geometry.origin, style.center_radius*scale, 12, style.center)
+	if any_visible do r2d.circle(batch, geometry.origin, style.center_radius*scale, 12, style.center)
 	return labels
 }
 
 @(private)
-draw_square :: proc(batch: ^foster.Batcher, center: foster.Vec2, half: f32, color, outline: foster.Color) {
-	foster.BatcherRect(batch, {center.x-half-1, center.y-half-1, 2*half+2, 2*half+2}, outline)
-	foster.BatcherRect(batch, {center.x-half, center.y-half, 2*half, 2*half}, color)
+draw_square :: proc(batch: ^r2d.Render2D, center: foster.Vec2, half: f32, color, outline: foster.Color) {
+	r2d.rect(batch, {center.x-half-1, center.y-half-1, 2*half+2, 2*half+2}, outline)
+	r2d.rect(batch, {center.x-half, center.y-half, 2*half, 2*half}, color)
 }
 

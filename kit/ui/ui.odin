@@ -151,11 +151,7 @@ ui_dispose :: proc(ctx: ^UI_Context, allocator := context.allocator) {
 	}
 	delete(ctx.fonts)
 	delete(ctx.font_textures)
-	for &renderer in ctx.font_renderers {
-		if renderer.initialized {
-			foster.MaterialDispose(&renderer.material)
-		}
-	}
+	// MSDF 字体材质归材质库所有，随 material_library_dispose 释放。
 	delete(ctx.font_renderers)
 	delete(ctx.widgets)
 	delete(ctx.previous_widgets)

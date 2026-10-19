@@ -1,14 +1,15 @@
 package ui
 
 import "core:math"
-import "core:mem"
 
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
+import mat "olib:kit/rendering/material"
 import clay "olib:thirdparty/clay-odin"
 
 // 分区：
 //   翻译 —— ui_translate
-//   发射 —— ui_render / 嵌套裁剪 / MSDF 材质
+//   发射 —— ui_render（写入 r2d.Render2D）/ 嵌套裁剪 / MSDF 材质
 //   坐标为逻辑像素，ui_render 统一应用 viewport；颜色为预乘 alpha。
 
 // ------------------------------------------------------------------------------
@@ -230,118 +231,78 @@ ui_ops_dispose :: proc(ops: ^[dynamic]UI_Op) {
 // 发射
 // ------------------------------------------------------------------------------
 
-// 结束布局并复用 ctx 内操作缓冲。调用者仍负责 BatcherClear/BatcherRender。
-ui_draw :: proc(ctx: ^UI_Context, batcher: ^foster.Batcher) {
+// 结束布局并复用 ctx 内操作缓冲。调用者仍负责 r2d.submit。
+ui_draw :: proc(ctx: ^UI_Context, r: ^r2d.Render2D) {
 	ui_translate_into(ctx, ui_end(ctx), &ctx.ops)
-	ui_render(ctx, batcher, &ctx.ops)
+	ui_render(ctx, r, &ctx.ops)
 }
 
-// UI 使用自己的像素变换，退出时恢复 batcher 状态；外部 scissor 作为根裁剪。
-ui_render :: proc(ctx: ^UI_Context, batcher: ^foster.Batcher, ops: ^[dynamic]UI_Op) {
+// UI 使用自己的像素变换，退出时恢复 Render2D 的状态栈；外部 scissor 作为根裁剪。
+ui_render :: proc(ctx: ^UI_Context, r: ^r2d.Render2D, ops: ^[dynamic]UI_Op) {
+	if r.library == nil do return
 	if op_has_rounded(ops) {
-		ui_ensure_corner_texture(ctx, batcher.GraphicsDevice)
+		ui_ensure_corner_texture(ctx, r.library.device)
 	}
-	foster.BatcherPushMatrixTRS(batcher, ctx.viewport_origin, {ctx.scale, ctx.scale}, 0, false)
-	defer foster.BatcherPopMatrix(batcher)
-	foster.BatcherPushSampler(batcher, foster.TextureSamplerMake(.Linear, .Clamp))
-	defer foster.BatcherPopSampler(batcher)
-	foster.BatcherPushBlend(batcher, foster.BlendModePremultiply)
-	defer foster.BatcherPopBlend(batcher)
-	foster.BatcherPushMode(batcher, .Normal)
-	defer foster.BatcherPopMode(batcher)
-	saved_texture := batcher.Texture
-	defer {
-		batcher.Texture = saved_texture
-	}
-	saved_has_material := batcher.HasMaterial
-	defer {
-		batcher.HasMaterial = saved_has_material
-	}
+	r2d.push_matrix_trs(r, ctx.viewport_origin, {ctx.scale, ctx.scale}, 0, false)
+	defer r2d.pop_matrix(r)
+	r2d.push_sampler(r, foster.TextureSamplerMake(.Linear, .Clamp))
+	defer r2d.pop_sampler(r)
+	r2d.push_blend(r, foster.BlendModePremultiply)
+	defer r2d.pop_blend(r)
+	r2d.push_mode(r, .Normal)
+	defer r2d.pop_mode(r)
 	root := ui_pixel_clip(ctx, {0, 0, ctx.width, ctx.height})
-	if batcher.HasScissor {
-		root = ui_clip_intersection(root, batcher.Scissor)
+	if r.has_scissor {
+		root = ui_clip_intersection(root, r.scissor)
 	}
-	foster.BatcherPushScissor(batcher, root)
+	r2d.push_scissor(r, root)
 	clip_depth := 1
 	defer {
 		for clip_depth > 0 {
-			foster.BatcherPopScissor(batcher)
+			r2d.pop_scissor(r)
 			clip_depth -= 1
 		}
 	}
-	current_font := -1
 	for &op in ops^ {
 		switch op.kind {
 		case .Quad:
-			if batcher.Scissor.Width <= 0 || batcher.Scissor.Height <= 0 {
+			if r.scissor.Width <= 0 || r.scissor.Height <= 0 {
 				continue
 			}
-			font_id := op.msdf ? op.font_id : -1
-			if font_id != current_font {
-				if current_font >= 0 {
-					foster.BatcherPopMaterial(batcher)
-					ui_material_boundary(batcher)
-					current_font = -1
-				}
-				if font_id >= 0 {
-					material := ui_msdf_material(ctx, font_id, batcher.GraphicsDevice)
-					if material == nil {
-						continue
-					}
-					foster.BatcherPushMaterial(batcher, material)
-					ui_material_boundary(batcher)
-					current_font = font_id
+			// MSDF 字形用内置 Text_Msdf 材质；其余（位图字形、图片、纯色、圆角）用默认材质。
+			material: ^mat.Material
+			if op.msdf {
+				material = ui_msdf_material(ctx, op.font_id, r.library)
+				if material == nil {
+					continue
 				}
 			}
 			if op.transformed {
-				foster.BatcherPushMatrixRaw(batcher, ui_visual_pixel_matrix(ctx, op.transform), false)
+				r2d.push_matrix_raw(r, ui_visual_pixel_matrix(ctx, op.transform), false)
 			}
 			if op.radius >= 1 && ctx.corner_texture_ok {
-				ui_emit_rounded(batcher, &ctx.corner_texture, op)
+				ui_emit_rounded(r, &ctx.corner_texture, op)
 			} else if op.texture != nil {
-				foster.BatcherQuadTexture(batcher, op.texture,
+				r2d.quad_texture(r, op.texture,
 					{op.x0, op.y0}, {op.x1, op.y0}, {op.x1, op.y1}, {op.x0, op.y1},
-					{op.u0, op.v0}, {op.u1, op.v0}, {op.u1, op.v1}, {op.u0, op.v1}, op.color)
+					{op.u0, op.v0}, {op.u1, op.v0}, {op.u1, op.v1}, {op.u0, op.v1}, op.color, material)
 			} else {
-				foster.BatcherPushMode(batcher, .Fill)
-				foster.BatcherQuad(batcher, foster.Rect{op.x0, op.y0, op.x1 - op.x0, op.y1 - op.y0}, op.color)
-				foster.BatcherPopMode(batcher)
+				r2d.rect(r, foster.Rect{op.x0, op.y0, op.x1 - op.x0, op.y1 - op.y0}, op.color)
 			}
 			if op.transformed {
-				foster.BatcherPopMatrix(batcher)
+				r2d.pop_matrix(r)
 			}
 		case .Scissor_Start:
 			clip := ui_pixel_clip(ctx, {op.clip_x, op.clip_y, op.clip_w, op.clip_h})
-			foster.BatcherPushScissor(batcher, ui_clip_intersection(batcher.Scissor, clip))
+			r2d.push_scissor(r, ui_clip_intersection(r.scissor, clip))
 			clip_depth += 1
 		case .Scissor_End:
 			if clip_depth > 1 {
-				foster.BatcherPopScissor(batcher)
+				r2d.pop_scissor(r)
 				clip_depth -= 1
 			}
 		}
 	}
-	if current_font >= 0 {
-		foster.BatcherPopMaterial(batcher)
-		ui_material_boundary(batcher)
-	}
-}
-
-// Foster 当前按纹理/裁剪等合批，不比较材质；材质切换时显式建立批次边界。
-// 保持相同 Layer 和插入顺序，也覆盖相同纹理在位图/MSDF 路径间切换。
-@(private)
-ui_material_boundary :: proc(b: ^foster.Batcher) {
-	if len(b.Batches) > 0 {
-		last := &b.Batches[len(b.Batches) - 1]
-		last.IndexCount = len(b.Indices) - last.IndexStart
-	}
-	material := new(foster.Material)
-	material^ = foster.MaterialClone(&b.Material)
-	append(&b.Batches, foster.BatcherBatch{
-		IndexStart = len(b.Indices), Material = material,
-		Texture = b.Texture, Sampler = b.Sampler, Blend = b.Blend, Layer = b.Layer,
-		Scissor = b.Scissor, HasScissor = b.HasScissor, Stencil = b.Stencil,
-	})
 }
 
 @(private)
@@ -367,28 +328,25 @@ UI_Font_Kind :: enum {
 
 UI_Font_Renderer :: struct {
 	kind: UI_Font_Kind,
-	material: foster.Material,
-	initialized: bool,
+	material: ^mat.Material, // MSDF 字体：内置 Text_Msdf 材质实例，归材质库所有
 }
 
+// 每种 MSDF 字体一个 Text_Msdf 材质实例，distance_range 取字体图集的距离范围；首次使用时在材质库里创建。
 @(private)
-ui_msdf_material :: proc(ctx: ^UI_Context, id: int, device: ^foster.GraphicsDevice) -> ^foster.Material {
+ui_msdf_material :: proc(ctx: ^UI_Context, id: int, library: ^mat.Material_Library) -> ^mat.Material {
 	if id < 0 || id >= len(ctx.font_renderers) {
 		return nil
 	}
 	renderer := &ctx.font_renderers[id]
-	if !renderer.initialized {
-		if device == nil || !device.Defaults.Initialized {
+	if renderer.material == nil {
+		material, reason := mat.material_create(library, mat.BUILTIN_TEXT)
+		if reason != "" {
 			return nil
 		}
-		renderer.material = foster.MaterialClone(&device.Defaults.MsdfMaterial)
-		distance := ctx.fonts[id].DistanceRange
-		uniform: [size_of(f32)]u8
-		mem.copy(raw_data(uniform[:]), &distance, size_of(distance))
-		foster.MaterialStageSetUniformBuffer(&renderer.material.Fragment, uniform[:], 0)
-		renderer.initialized = true
+		_ = mat.material_set_number(material, mat.BUILTIN_TEXT, "distance_range", {ctx.fonts[id].DistanceRange, 0, 0, 0})
+		renderer.material = material
 	}
-	return &renderer.material
+	return renderer.material
 }
 
 @(private)
@@ -440,25 +398,23 @@ ui_ensure_corner_texture :: proc(ctx: ^UI_Context, device: ^foster.GraphicsDevic
 	return true
 }
 
-// 圆角矩形 9-patch：4 个角采圆盘对应象限（.Normal 模式），5 个矩形条
-// （.Fill 模式）。r 钳到半宽/半高（全圆/胶囊自动成立）。
+// 圆角矩形 9-patch：4 个角采圆盘对应象限（Normal 模式），5 个纯色矩形条（Render2D 自动用 Fill）。
+// r 钳到半宽/半高（全圆/胶囊自动成立）。
 @(private)
-ui_emit_rounded :: proc(batcher: ^foster.Batcher, disc: ^foster.Texture, op: UI_Op) {
+ui_emit_rounded :: proc(r: ^r2d.Render2D, disc: ^foster.Texture, op: UI_Op) {
 	w := op.x1 - op.x0
 	h := op.y1 - op.y0
-	r := min(op.radius, w * 0.5, h * 0.5)
-	if r < 1 { // 退化成直角
-		foster.BatcherPushMode(batcher, .Fill)
-		foster.BatcherQuad(batcher, foster.Rect{op.x0, op.y0, w, h}, op.color)
-		foster.BatcherPopMode(batcher)
+	radius := min(op.radius, w * 0.5, h * 0.5)
+	if radius < 1 { // 退化成直角
+		r2d.rect(r, foster.Rect{op.x0, op.y0, w, h}, op.color)
 		return
 	}
 
 	// 4 角（象限 UV：TL(0,0)-(0.5,0.5) TR/BR/BL 顺时针）
-	corner :: proc(batcher: ^foster.Batcher, disc: ^foster.Texture,
+	corner :: proc(r: ^r2d.Render2D, disc: ^foster.Texture,
 		px, py: f32, u0, v0: f32, size: f32, color: foster.Color,
 	) {
-		foster.BatcherQuadTexture(batcher, disc,
+		r2d.quad_texture(r, disc,
 			foster.Vec2{px, py},
 			foster.Vec2{px + size, py},
 			foster.Vec2{px + size, py + size},
@@ -466,25 +422,23 @@ ui_emit_rounded :: proc(batcher: ^foster.Batcher, disc: ^foster.Texture, op: UI_
 			{u0, v0}, {u0 + 0.5, v0}, {u0 + 0.5, v0 + 0.5}, {u0, v0 + 0.5},
 			color)
 	}
-	corner(batcher, disc, op.x0, op.y0, 0, 0, r, op.color)             // TL
-	corner(batcher, disc, op.x1 - r, op.y0, 0.5, 0, r, op.color)       // TR
-	corner(batcher, disc, op.x1 - r, op.y1 - r, 0.5, 0.5, r, op.color) // BR
-	corner(batcher, disc, op.x0, op.y1 - r, 0, 0.5, r, op.color)       // BL
+	corner(r, disc, op.x0, op.y0, 0, 0, radius, op.color)                       // TL
+	corner(r, disc, op.x1 - radius, op.y0, 0.5, 0, radius, op.color)            // TR
+	corner(r, disc, op.x1 - radius, op.y1 - radius, 0.5, 0.5, radius, op.color) // BR
+	corner(r, disc, op.x0, op.y1 - radius, 0, 0.5, radius, op.color)            // BL
 
 	// 5 个填充条（零尺寸自动跳过）
-	rect :: proc(batcher: ^foster.Batcher, x, y, w, h: f32, color: foster.Color) {
+	bar :: proc(r: ^r2d.Render2D, x, y, w, h: f32, color: foster.Color) {
 		if w <= 0.01 || h <= 0.01 {
 			return
 		}
-		foster.BatcherQuad(batcher, foster.Rect{x, y, w, h}, color)
+		r2d.rect(r, foster.Rect{x, y, w, h}, color)
 	}
-	foster.BatcherPushMode(batcher, .Fill)
-	rect(batcher, op.x0 + r, op.y0, w - 2 * r, r, op.color)          // 上条
-	rect(batcher, op.x0 + r, op.y1 - r, w - 2 * r, r, op.color)     // 下条
-	rect(batcher, op.x0, op.y0 + r, r, h - 2 * r, op.color)         // 左条
-	rect(batcher, op.x1 - r, op.y0 + r, r, h - 2 * r, op.color)     // 右条
-	rect(batcher, op.x0 + r, op.y0 + r, w - 2 * r, h - 2 * r, op.color) // 中心
-	foster.BatcherPopMode(batcher)
+	bar(r, op.x0 + radius, op.y0, w - 2 * radius, radius, op.color)                     // 上条
+	bar(r, op.x0 + radius, op.y1 - radius, w - 2 * radius, radius, op.color)            // 下条
+	bar(r, op.x0, op.y0 + radius, radius, h - 2 * radius, op.color)                     // 左条
+	bar(r, op.x1 - radius, op.y0 + radius, radius, h - 2 * radius, op.color)            // 右条
+	bar(r, op.x0 + radius, op.y0 + radius, w - 2 * radius, h - 2 * radius, op.color)    // 中心
 }
 
 // ------------------------------------------------------------------------------

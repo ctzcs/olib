@@ -129,7 +129,6 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 		}
 	}
 	color_picker_panel(s)
-	foster.BatcherClear(&s.batch)
 	ui.ui_draw(&s.ctx, &s.batch)
 	scroll_memory_restore(s)
 	capture := ui.ui_input_capture(&s.ctx)

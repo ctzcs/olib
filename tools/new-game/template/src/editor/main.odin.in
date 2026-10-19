@@ -7,6 +7,8 @@ import "core:strings"
 
 import reload "olib:core/hotreload"
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
+import mat "olib:kit/rendering/material"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -133,7 +135,8 @@ Feedback :: struct {
 	diagnostic, summary, log_path: string,
 	load_failed: bool,
 	ctx: ui.UI_Context,
-	batch: foster.Batcher,
+	materials: mat.Material_Library,
+	renderer: r2d.Render2D, // 借用 materials；Feedback 初始化后不得搬动
 	theme: ui.UI_Theme,
 }
 
@@ -141,7 +144,11 @@ feedback_init :: proc(f: ^Feedback, root: string, device: ^foster.GraphicsDevice
 	font: ^foster.MsdfFont, texture: foster.Texture) -> bool {
 	f.log_path = fmt.aprintf("%s/build/hotreload-last-error.txt", root)
 	if !ui.ui_init(&f.ctx, 960, 720) do return false
-	foster.BatcherInit(&f.batch, device, "hot reload feedback")
+	f.materials = {device = device}
+	if reason := r2d.init(&f.renderer, &f.materials); reason != "" {
+		fmt.eprintln(reason)
+		return false
+	}
 	f.theme = ui.UI_THEME_DARK
 	f.theme.body_font_id = u16(ui.ui_register_font(&f.ctx, font, texture, .MSDF))
 	f.theme.body_font_size = 16
@@ -150,7 +157,8 @@ feedback_init :: proc(f: ^Feedback, root: string, device: ^foster.GraphicsDevice
 
 feedback_dispose :: proc(f: ^Feedback) {
 	ui.ui_dispose(&f.ctx)
-	foster.BatcherDispose(&f.batch)
+	r2d.dispose(&f.renderer)
+	mat.material_library_dispose(&f.materials)
 	delete(f.diagnostic)
 	delete(f.summary)
 	delete(f.log_path)
@@ -224,7 +232,6 @@ feedback_draw :: proc(f: ^Feedback, target: foster.DrawableTarget, live: bool,
 		ui.ui_label_dim(&f.ctx, &f.theme, "Fix and save, or F5 to retry. Full log:")
 		ui.ui_label_dim(&f.ctx, &f.theme, "build/hotreload-last-error.txt")
 	}
-	foster.BatcherClear(&f.batch)
-	ui.ui_draw(&f.ctx, &f.batch)
-	foster.BatcherRender(&f.batch, target)
+	ui.ui_draw(&f.ctx, &f.renderer)
+	r2d.submit(&f.renderer, {target = target})
 }

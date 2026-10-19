@@ -3,6 +3,7 @@ package shader_lab
 // 渲染到工具自己的原生像素目标，再合成到宿主分配的区域。
 import "core:math"
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
 import ui "olib:kit/ui"
 
 // ==============================================================================
@@ -42,18 +43,16 @@ render :: proc(s: ^Session, target: foster.DrawableTarget, region: foster.Rect, 
 	output := foster.DrawableTargetFromTarget(&s.output)
 	foster.GraphicsDeviceClear(device, output, s.theme.window_bg)
 	// panel 已生成 UI 命令；先单独合成场景，再叠加 UI，避免缩放文字。
-	foster.BatcherClear(&s.compose)
 	if image != nil {
-		quad(&s.compose, image, s.viewport)
+		quad(&s.render, image, s.viewport)
 	} else {
 		// 空工作区直接画到最终输出，不分配替代场景目标。
-		foster.BatcherRect(&s.compose, s.viewport, foster.Color{17, 21, 26, 255})
+		r2d.rect(&s.render, s.viewport, foster.Color{17, 21, 26, 255})
 	}
-	foster.BatcherRender(&s.compose, output)
-	foster.BatcherRender(&s.batch, output)
-	foster.BatcherClear(&s.compose)
-	quad(&s.compose, foster.TargetAttachment(&s.output), s.region)
-	foster.BatcherRender(&s.compose, target)
+	r2d.submit(&s.render, {target = output})
+	r2d.submit(&s.batch, {target = output})
+	quad(&s.render, foster.TargetAttachment(&s.output), s.region)
+	r2d.submit(&s.render, {target = target})
 	texture_retire_flush(s)
 	// UI 可能刚切换效果；等本帧缩略图与合成命令提交完，再释放旧引用。
 	// 新选中项在下一帧开始时创建目标，避免 UI 尚在引用旧纹理时销毁。
@@ -63,8 +62,8 @@ render :: proc(s: ^Session, target: foster.DrawableTarget, region: foster.Rect, 
 	return s.capture
 }
 
-quad :: proc(batch: ^foster.Batcher, texture: ^foster.Texture, rect: foster.Rect) {
-	foster.BatcherQuadTexture(batch, texture, {rect.X, rect.Y}, {(rect.X+rect.Width), rect.Y},
+quad :: proc(r: ^r2d.Render2D, texture: ^foster.Texture, rect: foster.Rect) {
+	r2d.quad_texture(r, texture, {rect.X, rect.Y}, {(rect.X+rect.Width), rect.Y},
 		{(rect.X+rect.Width), (rect.Y+rect.Height)}, {rect.X, (rect.Y+rect.Height)}, {0, 0}, {1, 0}, {1, 1}, {0, 1}, foster.White)
 }
 

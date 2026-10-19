@@ -57,7 +57,7 @@ Session :: struct {
 	output: foster.Target,
 	panel_active: bool,
 	retired_textures: [dynamic]^foster.Texture,
-	batch, compose: foster.Batcher,
+	batch: r2d.Render2D, // UI：panel 记录，preview 叠加到输出时提交；预览合成用 render
 	ctx: ui.UI_Context,
 	theme, heading_theme, small_theme: ui.UI_Theme,
 	camera: world.Camera3D,
@@ -127,10 +127,12 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	s.sidebar_width = 312
 	s.clock = 1
 	dev.parameters_init(&s.parameter_watch, s.source_root)
-	foster.BatcherInit(&s.batch, device)
-	foster.BatcherInit(&s.compose, device)
 	s.library = {device = device}
 	if reason := r2d.init(&s.render, &s.library); reason != "" {
+		fmt.eprintln("Shader Lab:", reason)
+		return false
+	}
+	if reason := r2d.init(&s.batch, &s.library); reason != "" {
 		fmt.eprintln("Shader Lab:", reason)
 		return false
 	}
@@ -191,8 +193,7 @@ dispose :: proc(s: ^Session) {
 	r2d.dispose(&s.render)
 	foster.MeshDispose(&s.sprite_mesh)
 	mat.material_library_dispose(&s.library)
-	foster.BatcherDispose(&s.batch)
-	foster.BatcherDispose(&s.compose)
+	r2d.dispose(&s.batch)
 	ui.ui_dispose(&s.ctx)
 	r2d.atlas_dispose(&s.owned_icons)
 	foster.TextureDispose(&s.texture)

@@ -1,3 +1,4 @@
+#+build !js
 // atlas:aseprite —— .aseprite 目录 -> 单张图集的构建器（对位 DragonLib AsepriteAtlasBuilder）。
 //
 // 解析 .aseprite 二进制（Foster 的 Aseprite），拍平可见图层渲染每一帧

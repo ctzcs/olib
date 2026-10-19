@@ -4,6 +4,7 @@ package shader_lab
 import "core:math"
 
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
 import r3d "olib:kit/rendering/3d"
 import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
@@ -54,11 +55,9 @@ pass_bypass :: proc(s: ^Session, e: ^Effect_Runtime, pass: int, target: ^foster.
 		if producer.output != source_name do continue
 		t := &e.targets[i]
 		texture := foster.TargetAttachment(&t.buffers[t.history ? e.current : 0])
-		foster.BatcherClear(&s.compose)
-		foster.BatcherPushBlend(&s.compose, foster.BlendModeDisabled)
-		quad(&s.compose, texture, {0, 0, f32(target.Width), f32(target.Height)})
-		foster.BatcherPopBlend(&s.compose)
-		foster.BatcherRender(&s.compose, foster.DrawableTargetFromTarget(target))
+		r2d.push_blend(&s.render, foster.BlendModeDisabled)
+		quad(&s.render, texture, {0, 0, f32(target.Width), f32(target.Height)})
+		r2d.submit(&s.render, {target = foster.DrawableTargetFromTarget(target)})
 		return
 	}
 }

@@ -27,7 +27,7 @@ Render2D :: struct {
 	default_material: ^mat.Material, // 内置 Sprite_Default 的实例，归材质库所有
 	draw_calls: int, // 最近一次 submit 的 Draw 数
 	// 以下由渲染器维护。
-	transform: [16]f32, // 与 foster Batcher 相同的 4×4 列主序矩阵
+	transform: [16]f32, // 4×4 矩阵，行向量约定（v * M，下标 行*4+列），存储与 foster Batcher 相同
 	sampler: foster.TextureSampler,
 	blend: foster.BlendMode,
 	mode: foster.BatcherMode,
@@ -119,6 +119,11 @@ dispose :: proc(r: ^Render2D) {
 	if r.tool_values_ready do foster.StorageBufferDispose(&r.tool_values)
 	if r.library != nil do foster.MeshDispose(&r.mesh)
 	r^ = {}
+}
+
+// 丢弃已记录、未提交的内容并恢复默认状态（与 foster BatcherClear 相同），例如目标失效时放弃本帧。
+reset :: proc(r: ^Render2D) {
+	render2d_reset(r)
 }
 
 // ------------------------------------------------------------------------------
@@ -236,6 +241,18 @@ quad :: proc(r: ^Render2D, a, b, c, d: foster.Vec2, color: foster.Color, materia
 	return render2d_record(r, material, nil, {a, b, c, d}, {}, {color, color, color, color}, nil, "")
 }
 
+// 四个顶点各自的颜色，GPU 插值成渐变；顶点顺序同 quad。
+quad_gradient :: proc(r: ^Render2D, a, b, c, d: foster.Vec2, c0, c1, c2, c3: foster.Color,
+	material: ^mat.Material = nil) -> mat.Draw_Error {
+	return render2d_record(r, material, nil, {a, b, c, d}, {}, {c0, c1, c2, c3}, nil, "")
+}
+
+// 矩形渐变：c0..c3 依次为左上、右上、右下、左下。
+rect_gradient :: proc(r: ^Render2D, rect: foster.Rect, c0, c1, c2, c3: foster.Color, material: ^mat.Material = nil) -> mat.Draw_Error {
+	x0, y0, x1, y1 := rect.X, rect.Y, rect.X + rect.Width, rect.Y + rect.Height
+	return quad_gradient(r, {x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}, c0, c1, c2, c3, material)
+}
+
 rect :: proc(r: ^Render2D, rect: foster.Rect, color: foster.Color, material: ^mat.Material = nil) -> mat.Draw_Error {
 	x0, y0, x1, y1 := rect.X, rect.Y, rect.X + rect.Width, rect.Y + rect.Height
 	return quad(r, {x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}, color, material)
@@ -264,6 +281,78 @@ circle :: proc(r: ^Render2D, center: foster.Vec2, radius: f32, steps: int, color
 		p0 := center + foster.Vec2{math.cos(a0), math.sin(a0)} * radius
 		p1 := center + foster.Vec2{math.cos(a1), math.sin(a1)} * radius
 		if error := triangle(r, center, p0, p1, color, material); error != .None do return error
+	}
+	return .None
+}
+
+// 中心到边缘渐变的实心圆，steps < 3 时不记录。
+circle_gradient :: proc(r: ^Render2D, center: foster.Vec2, radius: f32, steps: int, center_color, edge_color: foster.Color,
+	material: ^mat.Material = nil) -> mat.Draw_Error {
+	if steps < 3 do return .None
+	for i in 0..<steps {
+		a0 := f32(i) / f32(steps) * math.TAU
+		a1 := f32(i + 1) / f32(steps) * math.TAU
+		p0 := center + foster.Vec2{math.cos(a0), math.sin(a0)} * radius
+		p1 := center + foster.Vec2{math.cos(a1), math.sin(a1)} * radius
+		error := quad_gradient(r, center, p0, p1, p1, center_color, edge_color, edge_color, edge_color, material)
+		if error != .None do return error
+	}
+	return .None
+}
+
+// 用 foster 的位图字体（SpriteFont）画一段文字，语义同 foster SpriteFontDraw：position 是左上角，
+// size 为 0 时用字体原始字号，justify 为对齐比例（0 左/上，0.5 居中，1 右/下），支持换行与字距。
+// 字形用字体的采样器；字体自带的 foster.Material 不使用（material 为 nil 时用默认材质）。
+text :: proc(r: ^Render2D, font: ^foster.SpriteFont, value: string, position: foster.Vec2, color := foster.White,
+	size: f32 = 0, justify: foster.Vec2 = {}, material: ^mat.Material = nil) -> mat.Draw_Error {
+	if font == nil do return .None
+	size := size > 0 ? size : font.Size
+	scale := font.Size > 0 ? size / font.Size : 1
+	push_matrix(r, {scale, 0, 0, scale, position.x, position.y})
+	defer pop_matrix(r)
+	push_sampler(r, font.Sampler)
+	defer pop_sampler(r)
+	line_start := 0
+	at := foster.Vec2{0, font.Ascent}
+	if justify.y != 0 do at.y -= justify.y * foster.SpriteFontHeightOf(font, value)
+	last := 0
+	for c, index in value {
+		if index == line_start && justify.x != 0 {
+			at.x = -justify.x * foster.SpriteFontWidthOfLine(font, value[index:])
+		}
+		if c == '\n' {
+			at = {0, at.y + font.LineHeight}
+			line_start, last = index + 1, 0
+			continue
+		}
+		glyph, ok := foster.SpriteFontFindCharacter(font, int(c))
+		if !ok do continue
+		if last != 0 do at.x += foster.SpriteFontGetKerning(font, last, int(c))
+		if glyph.Subtexture.Texture != nil {
+			p := at + glyph.Offset
+			if error := image(r, glyph.Subtexture, {1, 0, 0, 1, p.x, p.y}, color, material = material); error != .None {
+				return error
+			}
+		}
+		at.x += glyph.Advance
+		last = int(c)
+	}
+	return .None
+}
+
+// 空心圆：外径 radius、环宽 thickness；环宽不小于半径时画实心圆，steps < 3 时不记录。
+circle_line :: proc(r: ^Render2D, center: foster.Vec2, radius, thickness: f32, steps: int, color: foster.Color,
+	material: ^mat.Material = nil) -> mat.Draw_Error {
+	if steps < 3 do return .None
+	inner := radius - thickness
+	if inner <= 0 do return circle(r, center, radius, steps, color, material)
+	for i in 0..<steps {
+		a0 := f32(i) / f32(steps) * math.TAU
+		a1 := f32(i + 1) / f32(steps) * math.TAU
+		d0 := foster.Vec2{math.cos(a0), math.sin(a0)}
+		d1 := foster.Vec2{math.cos(a1), math.sin(a1)}
+		error := quad(r, center + d0*inner, center + d0*radius, center + d1*radius, center + d1*inner, color, material)
+		if error != .None do return error
 	}
 	return .None
 }

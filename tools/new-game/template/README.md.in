@@ -107,6 +107,6 @@ core/services.odin 通过 `olib:kit/storage` 初始化根，editor/game 入口�
 
 ## 所有权
 
-Editor App 持有窗口、设备、字体、存储容器和监听器；DLL 借用这些资源，持有游戏实例、编辑会话、游戏/编辑器 UI 和 Batcher。切换在帧更新开头等待 GPU idle 后发生；失败候选也完整释放。新增任务/回调时，在卸载前注销、停止并 join，外部注册仅在成功 activate 后进行。
+Editor App 持有窗口、设备、字体、存储容器和监听器；DLL 借用这些资源，持有游戏实例、编辑会话、游戏/编辑器 UI 和各自的 r2d.Render2D（含材质库）。切换在帧更新开头等待 GPU idle 后发生；失败候选也完整释放。新增任务/回调时，在卸载前注销、停止并 join，外部注册仅在成功 activate 后进行。
 
 模板生成后源码归本项目维护，不自动覆盖升级。olib 是唯一库依赖，不依赖 olib_sample 或模板生成器。字体来源、字符集与许可见 assets/fonts。

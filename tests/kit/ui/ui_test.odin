@@ -8,6 +8,8 @@ import "core:testing"
 
 import tween "olib:core/tween"
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
+import mat "olib:kit/rendering/material"
 import clay "olib:thirdparty/clay-odin"
 
 // clay 的 context 是进程级全局：ui_init/ui_dispose 并发会段错误，测试串行化。
@@ -63,14 +65,15 @@ visual_subtree_render_and_pointer_follow_last_display :: proc(t: ^testing.T) {
 	for op in ctx.ops {
 		testing.expect(t, op.transformed && op.color.A == 127, "border must inherit opacity too")
 	}
-	batch: foster.Batcher
-	foster.BatcherInit(&batch, nil)
-	defer foster.BatcherDispose(&batch)
-	foster.BatcherPushMatrixPosition(&batch, {999, 999})
-	saved := batch.Matrix
-	ui_render(&ctx, &batch, &ctx.ops)
-	testing.expect(t, batch.Vertices[0].Pos == foster.Vec2{267, 85.5})
-	testing.expect(t, batch.Matrix == saved && len(batch.MatrixStack) == 1)
+	fixture := new(Test_Render2D)
+	defer test_render2d_dispose(fixture)
+	test_render2d_init(fixture)
+	r := &fixture.render
+	r2d.push_matrix(r, foster.Matrix3x2{1, 0, 0, 1, 999, 999})
+	saved := r.transform
+	ui_render(&ctx, r, &ctx.ops)
+	testing.expect(t, r.vertices[0].Pos == foster.Vec2{267, 85.5})
+	testing.expect(t, r.transform == saved && len(r.transform_stack) == 1)
 	// Child center (30,20) -> (160,110), then viewport conversion.
 	ui_set_pointer(&ctx, 217, 160.5, true)
 	pressed := visual_test_frame(&ctx, v)
@@ -602,12 +605,13 @@ image_uv_and_trimmed_atlas_frame :: proc(t: ^testing.T) {
 @(test)
 nested_scissor_and_scaled_batch_state :: proc(t: ^testing.T) {
 	ctx := UI_Context{width = 200, height = 200, scale = 2, viewport_origin = {10, 20}}
-	batch: foster.Batcher
-	foster.BatcherInit(&batch, nil)
-	defer foster.BatcherDispose(&batch)
-	foster.BatcherPushScissor(&batch, {0, 0, 500, 500})
-	foster.BatcherPushMatrixPosition(&batch, {100, 100})
-	saved_matrix := batch.Matrix
+	fixture := new(Test_Render2D)
+	defer test_render2d_dispose(fixture)
+	test_render2d_init(fixture)
+	r := &fixture.render
+	r2d.push_scissor(r, {0, 0, 500, 500})
+	r2d.push_matrix(r, foster.Matrix3x2{1, 0, 0, 1, 100, 100})
+	saved_matrix := r.transform
 	ops := make([dynamic]UI_Op)
 	defer delete(ops)
 	append(&ops,
@@ -618,14 +622,14 @@ nested_scissor_and_scaled_batch_state :: proc(t: ^testing.T) {
 		quad(1, 1, 5, 5, {255, 255, 255, 255}),
 		UI_Op{kind = .Scissor_End},
 		quad(1, 1, 5, 5, {255, 255, 255, 255}))
-	ui_render(&ctx, &batch, &ops)
-	testing.expect(t, len(batch.Batches) == 3)
-	testing.expect(t, batch.Batches[0].Scissor == foster.RectInt{90, 40, 40, 60})
-	testing.expect(t, batch.Batches[1].Scissor == foster.RectInt{30, 40, 100, 100})
-	testing.expect(t, batch.Batches[2].Scissor == foster.RectInt{10, 20, 400, 400})
-	testing.expect(t, batch.Vertices[0].Pos == foster.Vec2{10, 20})
-	testing.expect(t, batch.Scissor == foster.RectInt{0, 0, 500, 500} && batch.HasScissor)
-	testing.expect(t, batch.Matrix == saved_matrix && len(batch.ScissorStack) == 1)
+	ui_render(&ctx, r, &ops)
+	testing.expect(t, len(r.runs) == 3)
+	testing.expect(t, r.runs[0].scissor.rect == foster.RectInt{90, 40, 40, 60})
+	testing.expect(t, r.runs[1].scissor.rect == foster.RectInt{30, 40, 100, 100})
+	testing.expect(t, r.runs[2].scissor.rect == foster.RectInt{10, 20, 400, 400})
+	testing.expect(t, r.vertices[0].Pos == foster.Vec2{10, 20})
+	testing.expect(t, r.scissor == foster.RectInt{0, 0, 500, 500} && r.has_scissor)
+	testing.expect(t, r.transform == saved_matrix && len(r.scissor_stack) == 1)
 	empty := ui_clip_intersection({0, 0, 10, 10}, {30, 30, 10, 10})
 	testing.expect(t, empty.Width == 0 && empty.Height == 0)
 }
@@ -669,31 +673,80 @@ nine_slice_preserves_corners_and_draws_behind_children :: proc(t: ^testing.T) {
 	}
 }
 
+// MSDF 字形用 Text_Msdf 材质：同一张贴图在默认材质与 MSDF 材质之间切换也会分段，不再需要手工补批次边界。
 @(test)
 msdf_batches_separate_even_with_same_texture :: proc(t: ^testing.T) {
+	fixture := new(Test_Render2D)
+	defer test_render2d_dispose(fixture)
+	test_render2d_init(fixture)
+	r := &fixture.render
 	ctx := UI_Context{width = 100, height = 100, scale = 1}
 	defer delete(ctx.font_renderers)
-	renderer := UI_Font_Renderer{kind = .MSDF, initialized = true}
-	foster.MaterialInit(&renderer.material)
-	foster.MaterialStageSetUniformBuffer(&renderer.material.Fragment, []u8{1, 2, 3, 4}, 0)
-	defer foster.MaterialDispose(&renderer.material)
-	append(&ctx.font_renderers, renderer)
-	batch: foster.Batcher
-	foster.BatcherInit(&batch, nil)
-	defer foster.BatcherDispose(&batch)
-	tex: foster.Texture
+	append(&ctx.font_renderers, UI_Font_Renderer{kind = .MSDF, material = &fixture.text})
 	ops := make([dynamic]UI_Op)
 	defer delete(ops)
 	append(&ops,
-		UI_Op{texture = &tex, x1 = 10, y1 = 10},
-		UI_Op{texture = &tex, x1 = 10, y1 = 10, msdf = true},
-		UI_Op{texture = &tex, x1 = 10, y1 = 10})
-	ui_render(&ctx, &batch, &ops)
-	testing.expect(t, len(batch.Batches) == 3)
-	testing.expect(t, len(batch.Batches[0].Material.Fragment.UniformBuffers[0]) == 0)
-	testing.expect(t, len(batch.Batches[1].Material.Fragment.UniformBuffers[0]) == 4)
-	testing.expect(t, len(batch.Batches[2].Material.Fragment.UniformBuffers[0]) == 0)
-	testing.expect(t, len(batch.Material.Fragment.UniformBuffers[0]) == 0)
+		UI_Op{texture = &fixture.atlas, x1 = 10, y1 = 10},
+		UI_Op{texture = &fixture.atlas, x1 = 10, y1 = 10, msdf = true},
+		UI_Op{texture = &fixture.atlas, x1 = 10, y1 = 10})
+	ui_render(&ctx, r, &ops)
+	testing.expect(t, len(r.runs) == 3)
+	testing.expect(t, r.runs[0].material == &fixture.sprite && r.runs[2].material == &fixture.sprite)
+	testing.expect(t, r.runs[1].material == &fixture.text)
+	testing.expect(t, len(r.vertices) == 12)
+}
+
+// Render2D 只记录、不提交的测试夹具：两个内置效果的最小材质（Sprite_Default、Text_Msdf）。
+// Shader 与贴图句柄是非空占位值，满足记录时的绑定检查，从不交给 GPU。
+@(private)
+Test_Render2D :: struct {
+	device: foster.GraphicsDevice,
+	library: mat.Material_Library,
+	vertex, fragment: foster.Shader,
+	gpu: foster.Material,
+	atlas: foster.Texture,
+	fields: [2]mat.Field,
+	passes: [2]mat.Pass_Desc,
+	effects: [2]mat.Material_Effect,
+	values: [2][2]mat.Value,
+	samplers: [2][1]foster.BoundSampler,
+	bindings: [2][1]mat.Material_Binding,
+	sprite, text: mat.Material,
+	render: r2d.Render2D,
+}
+
+@(private)
+test_render2d_init :: proc(f: ^Test_Render2D) {
+	placeholder :: proc(p: ^$T) { p^ = transmute(T)uintptr(16) }
+	f.vertex.Stage, f.fragment.Stage = .Vertex, .Fragment
+	placeholder(&f.vertex.Resource)
+	placeholder(&f.fragment.Resource)
+	placeholder(&f.library.white.Resource)
+	placeholder(&f.atlas.Resource)
+	f.library.device = &f.device
+	foster.MaterialInitWithShaders(&f.gpu, &f.vertex, &f.fragment)
+	f.fields = {{id = "texture", name = "texture", kind = .Texture},
+		{id = "distance_range", name = "distance_range", kind = .Scalar, maximum = 64}}
+	names := [2]string{mat.BUILTIN_SPRITE, mat.BUILTIN_TEXT}
+	for i in 0..<2 {
+		fields := f.fields[:i + 1]
+		f.passes[i] = {id = "main", params = mat.Params_Ref(names[i]), output = "color", draw = .Sprite, sprite_texture = "texture"}
+		f.effects[i].desc = {name = names[i], output = "color", preview = "2d", uniforms = .Foster, passes = f.passes[i:i + 1]}
+		f.samplers[i][0] = {Texture = &f.library.white}
+		f.bindings[i][0] = {mat.Schema{name = names[i], preview = "2d", fields = fields}, f.values[i][:i + 1], &f.gpu, f.samplers[i][:]}
+	}
+	f.sprite = {owner = &f.library, effect = &f.effects[0], bindings = f.bindings[0][:]}
+	f.text = {owner = &f.library, effect = &f.effects[1], bindings = f.bindings[1][:]}
+	f.render = {library = &f.library, default_material = &f.sprite}
+	r2d.reset(&f.render)
+}
+
+@(private)
+test_render2d_dispose :: proc(f: ^Test_Render2D) {
+	f.render.library = nil // 没有创建网格，只释放 CPU 侧数组
+	r2d.dispose(&f.render)
+	foster.MaterialDispose(&f.gpu)
+	free(f)
 }
 
 @(test)

@@ -3,6 +3,8 @@ package core_editor
 import "core:fmt"
 
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
+import mat "olib:kit/rendering/material"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -26,7 +28,8 @@ Session :: struct {
 	state: State,
 	pending: [dynamic]Edit_Command,
 	ctx: ui.UI_Context,
-	batcher: foster.Batcher,
+	materials: mat.Material_Library,
+	renderer: r2d.Render2D, // 借用 materials；Session 初始化后不得搬动
 	theme: ui.UI_Theme,
 	owner: Pointer_Owner,
 	previous_down, ready: bool,
@@ -39,7 +42,11 @@ Input :: struct {
 init :: proc(e: ^Session, device: ^foster.GraphicsDevice, font: ^foster.MsdfFont,
 	texture: foster.Texture) -> bool {
 	if !ui.ui_init(&e.ctx, 280, 720) do return false
-	foster.BatcherInit(&e.batcher, device, "development editor")
+	e.materials = {device = device}
+	if reason := r2d.init(&e.renderer, &e.materials); reason != "" {
+		fmt.eprintln(reason)
+		return false
+	}
 	e.theme = ui.UI_THEME_DARK
 	e.theme.body_font_id = u16(ui.ui_register_font(&e.ctx, font, texture, .MSDF))
 	e.theme.body_font_size = 16
@@ -49,7 +56,8 @@ init :: proc(e: ^Session, device: ^foster.GraphicsDevice, font: ^foster.MsdfFont
 
 dispose :: proc(e: ^Session) {
 	ui.ui_dispose(&e.ctx)
-	foster.BatcherDispose(&e.batcher)
+	r2d.dispose(&e.renderer)
+	mat.material_library_dispose(&e.materials)
 	delete(e.pending)
 }
 
@@ -128,7 +136,6 @@ draw :: proc(e: ^Session, w: ^Preview, target: foster.DrawableTarget, panel: fos
 		}
 		ui.ui_label_dim(&e.ctx, &e.theme, "Changes affect this run.")
 	}
-	foster.BatcherClear(&e.batcher)
-	ui.ui_draw(&e.ctx, &e.batcher)
-	foster.BatcherRender(&e.batcher, target)
+	ui.ui_draw(&e.ctx, &e.renderer)
+	r2d.submit(&e.renderer, {target = target})
 }

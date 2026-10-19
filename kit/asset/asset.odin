@@ -33,7 +33,7 @@
 //   })
 //   defer asset.assets_dispose(&m)
 //   tex, err := asset.assets_load_path(&m, "textures/belt.png")
-//   // render: foster.BatcherQuadTexture(&batcher, asset.assets_get_texture(&m, tex), ...)
+//   // render: r2d.texture(&renderer, asset.assets_get_texture(&m, tex), transform)
 //
 // 构建（native；本包 v1 仅支持 native 目标，扫描/mtime 依赖 core:os）：
 //   odin build <app> -collection:olib=<olib 根>

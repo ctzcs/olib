@@ -43,6 +43,17 @@ queue_sort_buckets_and_depth :: proc(t: ^testing.T) {
 
 	queue_clear(&q)
 	testing.expect(t, len(q.items) == 0)
+	queue_submit(&q, 0, 20, false, 0)
+	queue_submit(&q, 1, 4, false, 1)
+	queue_submit(&q, 2, 2, false, 0)
+	queue_submit(&q, 3, 8, true, 1)
+	queue_submit(&q, 4, 12, true, 0)
+	queue_submit(&q, 5, 12, true, 1)
+	queue_sort(&q, grouped = true)
+	expected := [6]int{2, 0, 1, 4, 5, 3}
+	for item, i in q.items {
+		testing.expect(t, item.payload == expected[i])
+	}
 }
 
 @(test)

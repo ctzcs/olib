@@ -12,19 +12,13 @@ Material_Binding :: struct {
 	samplers: []foster.BoundSampler, // 按 Schema 的 Texture 字段顺序，含默认纹理。
 }
 
-// 一个 Pass 提交时的 per-instance 数值（按 Schema 里 [Instance] 字段的顺序），
-// 已套用材质值、Property_Block 与 Pass 固定覆盖。count=0 表示该 Pass 没有这类字段。
-Instance_Values :: struct {
-	count: int,
-	numbers: [MAX_INSTANCE_FIELDS][4]f32,
-}
-
 // 选择、单次覆盖与工具扩展：2D、3D 的绘制请求都内嵌同一份，字段含义只在这里说明一次。
-// 业务代码会用到 pass_id 和 properties；其余供 ShaderLab 预览和合批使用。
+// 业务代码会用到 pass_id 和 instance_values；其余供 ShaderLab 预览和合批使用。
 Draw_Options :: struct {
-	// 本次绘制的数值覆盖（类似 Unity 的 MaterialPropertyBlock），不修改共享材质；nil 表示不覆盖。
-	// 优先级：材质实例值 < properties < Pass 的固定 values。
-	properties: ^Property_Block,
+	// 本次绘制这个实例的 [Instance] 字段数值（按槽位，见 instance_slot）：只覆盖被显式设置的槽位，
+	// 其余沿用材质里保存的值；不修改共享材质，取值不同的实例仍可合批。缓冲绘制时数据来自缓冲，忽略它。
+	instance_values: ^Instance_Values,
+	// 优先级：材质实例值 < instance_values < Pass 的固定 values。
 	// 可选预览覆盖：enabled 空值使用声明的 disabled；非空须覆盖全部 Pass。
 	enabled: []bool,
 	// 空值绘制全部；非空按稳定 Pass ID 选择，未知 ID 返回 false，不提交绘制。
@@ -53,13 +47,12 @@ Draw_Error :: enum {
 	Not_Material_Effect,    // 效果不是 Sprite/Model 对象材质
 	Too_Many_Passes,        // 效果没有 Pass 或超过 MAX_PASSES
 	Bad_Pass_Selection,     // Draw_Options.enabled 比 Pass 数少
-	Empty_Pass_Id,          // *_draw_pass 传入了空 Pass ID
 	Unknown_Pass,           // 指定的 Pass ID 不存在
 	Wrong_Pass_Kind,        // Pass 种类与本次绘制（Sprite/Model）不符
 	Missing_Binding,        // 某个 Pass 的参数组没有绑定
 	Invalid_Binding,        // 绑定的 Shader、数值或贴图不完整
 	Missing_Sprite_Texture, // Pass 需要当前帧贴图，但没有提供或字段不是 Texture
-	Instance_Buffer_Required, // 模型 instanced 效果必须用实例缓冲绘制（model_draw_instances）
+	Instance_Buffer_Required, // instanced 效果必须带实例缓冲（模型 model_draw_buffer，精灵 sprite_draw_buffer）
 	Not_Instanced_Effect,   // 用实例缓冲绘制，但效果没有声明 instanced
 	Instance_Mismatch,      // 实例缓冲的字段数与效果的 [Instance] 字段数不一致
 }
@@ -75,13 +68,12 @@ draw_error_text :: proc(error: Draw_Error) -> string {
 	case .Not_Material_Effect: return "Effect is not a Sprite or Model material"
 	case .Too_Many_Passes: return "Effect has no passes or too many passes"
 	case .Bad_Pass_Selection: return "Enabled list is shorter than the pass list"
-	case .Empty_Pass_Id: return "Pass ID is empty"
 	case .Unknown_Pass: return "Unknown pass ID"
 	case .Wrong_Pass_Kind: return "Pass kind does not match this draw call"
 	case .Missing_Binding: return "A pass has no parameter group binding"
 	case .Invalid_Binding: return "A binding has missing shaders, values or textures"
 	case .Missing_Sprite_Texture: return "Pass needs a frame texture that was not provided"
-	case .Instance_Buffer_Required: return "Instanced model effects must be drawn with an instance buffer"
+	case .Instance_Buffer_Required: return "Instanced effects must be drawn with an instance buffer"
 	case .Not_Instanced_Effect: return "Effect is not instanced; it cannot use an instance buffer"
 	case .Instance_Mismatch: return "Instance buffer field count differs from the effect's Instance fields"
 	}
@@ -97,7 +89,7 @@ Material_Draw :: struct {
 	sprite_texture: ^foster.Texture,
 	pass_limit: int, // 0 绘制全部，否则只绘制前 N 个 Pass。
 	options: Draw_Options,
-	// 模型 instanced 绘制：每实例顶点缓冲（按实例步进）与实例数；buffer 为 nil 表示单个对象。
+	// instanced 绘制：每实例顶点缓冲（按实例步进）与实例数；buffer 为 nil 表示单个对象。
 	instance_buffer: ^foster.VertexBuffer,
 	instance_count: int,
 	instance_slots: int, // 缓冲里的 [Instance] 字段数，须等于效果的字段数
@@ -206,7 +198,7 @@ material_pass_submit :: proc(device: ^foster.GraphicsDevice, draw: Material_Draw
 	p: Pass_Desc, pass_index: int, b: Material_Binding) {
 	values := make([]Value, len(b.values), context.temp_allocator)
 	copy(values, b.values)
-	if draw.options.properties != nil do block_apply(draw.options.properties, b.schema, values)
+	instance_values_apply(draw.options.instance_values, b.schema, values)
 	for value in p.values {
 		j := field_index(b.schema, string(value.field))
 		if j >= 0 do values[j].number = value.number
@@ -270,9 +262,9 @@ material_draw :: proc(device: ^foster.GraphicsDevice, effect: Effect_Desc,
 	if device == nil do return .Missing_Device
 	if draw.mesh == nil do return .Missing_Mesh
 	if !effect_is_material(effect) do return .Not_Material_Effect
-	if effect.instanced && draw.kind == .Model && draw.instance_buffer == nil do return .Instance_Buffer_Required
+	if effect.instanced && draw.instance_buffer == nil do return .Instance_Buffer_Required
 	if draw.instance_buffer != nil {
-		if !effect.instanced || draw.kind != .Model do return .Not_Instanced_Effect
+		if !effect.instanced do return .Not_Instanced_Effect
 		for binding in bindings {
 			if instance_count(binding.schema) != draw.instance_slots do return .Instance_Mismatch
 		}

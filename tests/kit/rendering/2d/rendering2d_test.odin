@@ -217,15 +217,17 @@ aseprite_expand_tag_variants :: proc(t: ^testing.T) {
 		"PingPong 应展开为 a b c b: %v", pp)
 	testing.expect(t, len(pp_d) == 4)
 
-	ppr, _ := aseprite_expand_tag(regions, durations, 0, 2, .PingPongReverse)
+	ppr, ppr_d := aseprite_expand_tag(regions, durations, 0, 2, .PingPongReverse)
 	defer delete(ppr)
+	defer delete(ppr_d)
 	// 反转后 c b a -> c b a b
 	testing.expectf(t, len(ppr) == 4 && ppr[0] == "c" && ppr[3] == "b",
 		"PingPongReverse 应展开为 c b a b: %v", ppr)
 
 	// 越界区间被钳制
-	oob, _ := aseprite_expand_tag(regions, durations, 1, 99, .Forward)
+	oob, oob_d := aseprite_expand_tag(regions, durations, 1, 99, .Forward)
 	defer delete(oob)
+	defer delete(oob_d)
 	testing.expect(t, len(oob) == 2 && oob[0] == "b" && oob[1] == "c")
 }
 

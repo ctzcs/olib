@@ -3,8 +3,8 @@
 本包提供图集、帧动画、精灵绘制与合批。材质加载、缓存和 Pass 执行由
 [rendering/material](../material/README.md) 提供；3D 模型绘制见 [rendering/3d](../3d/README.md)。
 
-使用现成效果时，业务流程是：加载材质 → 赋给对象 → 绘制。
-初始化时登记 Effect/Shader，并创建可复用的 `Sprite_Renderer`。
+使用现成效果时，业务流程是：加载材质 → 绘制（材质 + 子图 + 变换）。
+初始化时登记 Effect/Shader，并创建可复用的 `Sprite_Renderer`。不需要为每个精灵创建对象。
 
 ## 精灵绘制
 
@@ -13,46 +13,76 @@ import r2d "olib:kit/rendering/2d"
 
 renderer: r2d.Sprite_Renderer
 r2d.sprite_renderer_init(&renderer, device)
-sprite := r2d.Sprite_Instance{
-    frame = current_animation_frame.subtexture,
-    origin = animation.origin,
-    material = material,
-}
-err := r2d.sprite_draw(&renderer, sprite, transform, {
+err := r2d.sprite_draw(&renderer, material, current_animation_frame.subtexture, transform, {
     target = scene_target, time = elapsed,
-})
+}, origin = animation.origin)
 // err 为 mat.Draw_Error：.None 成功；mat.draw_error_text(err) 给出失败原因。
 // 停止绘制后：
 r2d.sprite_renderer_dispose(&renderer)
 ```
 
-### 最简调用：共享材质 + 一张图
-
-不需要预先创建 `Sprite_Instance`：
+### 常用写法
 
 ```odin
-r2d.sprite_draw_frame(&renderer, material, subtexture, transform, view, tint = {1, 1, 1, 0.8})
+r2d.sprite_draw(&renderer, material, subtexture, transform, view, tint = {1, 1, 1, 0.8})
 r2d.sprite_draw_texture(&renderer, material, &texture, transform, view, origin = {128, 128})
-// 同一材质画不同变体：Property_Block 只覆盖本次绘制，不修改共享材质。
-r2d.sprite_draw_frame(&renderer, material, subtexture, transform, view, properties = &cool)
+// 同一材质画不同变体：Instance_Values 只设置这个精灵的 [Instance] 字段，不修改共享材质，仍可合批。
+hue := mat.instance_slot(material, "hue")                       // 解析一次
+cool: mat.Instance_Values
+mat.instance_values_set(&cool, hue, {0.7, 0, 0, 0})
+r2d.sprite_draw(&renderer, material, subtexture, transform, view, values = &cool)
+// 只画一个 Pass（例如先画全部阴影、再画全部本体）：
+r2d.sprite_draw(&renderer, material, subtexture, transform, view, pass_id = "shadow")
 ```
 
-`sprite_draw_frame` 的 `frame` 可以直接传 `sprite_get_frame_at` 取得的 `frame.subtexture`。
-需要指定 Pass 或复用一组对象字段时，仍可用 `Sprite_Instance`（含 `properties` 字段）加 `sprite_draw_pass`。
+`sprite_draw` 的 `frame` 可以直接传 `sprite_get_frame_at` 取得的 `frame.subtexture`；
+`sprite_draw_texture` 把整张贴图当一帧。`tint`、`origin`、`values`、`pass_id` 都是可选参数。
 
 ### 跨实例合批（`[Instance]` 与 `Instanced`）
 
 默认情况下 tint 和材质参数都在 uniform 里，值不同的精灵会拆成多次 Draw。把效果声明为
 instanced（`.oshader` 里给属性加 `[Instance]`，或顶层写 `Instanced`）后，tint 与 `[Instance]` 字段
 随每个精灵的顶点传入，Fragment uniform 对所有精灵一致，因此**只要贴图（同一图集页）、Shader、
-绘制状态相同就合成一次 Draw**，与 hue、opacity、tint、Property_Block 的取值无关。
+绘制状态相同就合成一次 Draw**，与 hue、opacity、tint 等 `[Instance]` 字段的取值无关。
 着色器约定见 [lang README](../shader/lang/README.md#instanced-效果的-hlsl-约定)。
-instanced 精灵每顶点多携带 tint 和字段数据（最多 80 字节），不同贴图仍会拆批——请使用图集。
+每个精灵写成一条 80 + 16×字段数 字节的实例记录，由硬件实例化一次画出；不同贴图仍会拆批——请使用图集。
+
+### 百万精灵：Sprite_Buffer
+
+同一张图集页上的精灵数量很大（几十万到上百万）时，把精灵数据放进调用方持有的 `Sprite_Buffer`，**一次 Draw 画完**。
+库不缓存、不排序、不剔除：
+
+```odin
+SLOTS :: 2                                                      // 项目里定义的常数 = 效果的 [Instance] 字段数
+buffer: r2d.Sprite_Buffer
+r2d.sprite_buffer_init(&buffer, device, capacity = 1_000_000, slots = SLOTS)
+
+items := make([]r2d.Sprite_Item, count)
+values := make([][4]f32, count*SLOTS)                           // 每个精灵连续 SLOTS 个 float4
+frame := foster.SubtextureFromTexture(&atlas_texture)          // 或 atlas_subtexture 取得的子图
+items[i] = r2d.sprite_item_make(frame, origin, transform, tint)
+hue := mat.instance_slot(material, "hue")                       // 名字只解析一次；百万次赋值里没有字符串比较
+mat.instance_array_set(values, SLOTS, i, hue, {0.7, 0, 0, 0})
+r2d.sprite_buffer_upload(&buffer, items, values = values)       // 加载时一次上传；运行中只更新变化区间（first 参数）
+
+// 每帧：
+err := r2d.sprite_draw_buffer(&renderer, material, &buffer, count, &atlas_texture, view)
+err = r2d.sprite_draw_buffer(&renderer, material, &buffer, count, &atlas_texture, view, pass_id = "body")
+```
+
+- 字段个数由你的项目决定：效果里声明几个 `[Instance]`，`SLOTS` 就是几个（硬上限 `MAX_INSTANCE_FIELDS` = 16），
+  库里没有全局配置。`values` 长度必须是 `len(items) × SLOTS`，传 `nil` 表示全部为 0。
+- 一次 Draw 里的精灵共用同一张贴图（`texture`，即帧贴图字段）；不同图集页各自一个缓冲。
+- 每个精灵 80 + 16×slots 字节：100 万个、2 个字段约 112 MB 显存；上传请在加载时一次完成（帧内上传占用设备暂存区）。
+- 剔除：把精灵按空间分块放进多个缓冲，每块每帧只提交可见的；`count` 可以只画缓冲前 N 个。
+- 绘制顺序：`sprite_draw_buffer` 先提交 begin/end 里已排队的精灵再绘制，保持调用顺序；缓冲内部按下标顺序混合。
+- `[Instance]` 字段以缓冲为准，其余统一参数来自材质、整批共用。非 instanced 效果返回 `.Not_Instanced_Effect`，字段数不一致返回 `.Instance_Mismatch`。
+- 示例 `olib_sample/src/material2d` 的 `swarm`：100 万个精灵、1 次 Draw，每帧 CPU 约 0.02 ms。
 
 ### 帧动画
 
 `Sprite` 是共享的帧动画资源（帧 = 图集子图 + 时长，动画 = 帧区间），不保存播放状态；
-当前时间由调用者自己累计，每帧取出应显示的帧交给 `Sprite_Instance`：
+当前时间由调用者自己累计，每帧取出应显示的帧交给 `sprite_draw`：
 
 ```odin
 // 初始化（一次）：从图集取子图，按时长加入帧，再命名动画区间。
@@ -67,32 +97,31 @@ r2d.sprite_add_animation(&hero, "walk", 0, len(frame_names))
 // 每帧：elapsed 是这个对象自己的动画时间（秒）。
 walk := r2d.sprite_get_animation(&hero, "walk") // 追加新动画后指针失效，不要跨帧缓存
 frame, _ := r2d.sprite_get_frame_at(&hero, walk, elapsed, true) // true 循环；false 停在最后一帧
-instance := r2d.Sprite_Instance{frame = frame.subtexture, origin = hero.origin, material = material}
-err := r2d.sprite_draw(&renderer, instance, transform, view)
+err := r2d.sprite_draw(&renderer, material, frame.subtexture, transform, view, origin = hero.origin)
 ```
 
 `.aseprite` 目录可用 `aseprite_build` 一次打成图集并生成命名动画（`Built_Clip`：区域名 + 时长，
 PingPong / Reverse 已展开）。目前需要自己把 `Built_Clip` 的区域名经 `atlas_subtexture` 转成 `Sprite` 的帧，
 还没有一步到位的转换函数；也没有内置的播放器（暂停、变速、结束回调需自己处理）。
 
-`Sprite` 仍是共享帧动画资源；对象状态放 `Sprite_Instance`。`transform` 使用 Foster
+`Sprite` 是共享帧动画资源，播放状态由调用者保存。`transform` 使用 Foster
 Matrix3x2，单位矩阵须显式传入 `foster.Matrix3x2Identity`，不是零矩阵。
 输入/输出坐标为最终目标像素，左上原点；相机变换可预乘入 transform。
 图集 TexCoords、裁剪 DrawCoords、原图 origin 均保留。多个精灵可共用一个 renderer。
 
 ### 自选 Pass 与自动合批
 
-`sprite_draw` 按声明顺序画一个对象的全部启用 Pass；`sprite_draw_pass` 只画指定 ID。
+`sprite_draw` 默认按声明顺序画全部启用 Pass；传 `pass_id` 只画指定 ID。
 库不定义或调度“阴影阶段”，顺序完全由调用者决定，例如先画所有阴影再画本体：
 
 ```odin
 if r2d.sprite_begin(&renderer) {
-    for sprite, i in sprites {
-        err := r2d.sprite_draw_pass(&renderer, sprite, "shadow", transforms[i], view)
+    for i in 0..<count {
+        err := r2d.sprite_draw(&renderer, material, frame, transforms[i], view, pass_id = "shadow")
         // err != .None：未知 Pass、缺失材质/纹理、设备不一致或无效目标等，见 mat.draw_error_text。
     }
-    for sprite, i in sprites {
-        err := r2d.sprite_draw_pass(&renderer, sprite, "body", transforms[i], view)
+    for i in 0..<count {
+        err := r2d.sprite_draw(&renderer, material, frame, transforms[i], view, pass_id = "body")
     }
     r2d.sprite_end(&renderer)
 }
@@ -108,7 +137,7 @@ if r2d.sprite_begin(&renderer) {
   `sprite_flush` 提交当前批次但不结束范围；穿插模型、另一个 renderer、Batcher、清屏或读回前须 flush。
 - 数值参数在提交请求时保存，之后 `material_set_number` 不影响已排队的图像。
   Shader 和纹理仍借用；重载、销毁或修改 GPU 资源前必须 flush/end，不能跨帧积压。
-- 指定入口不接受空 ID（`.Empty_Pass_Id`）；未知 ID 返回 `.Unknown_Pass`，不退回全部绘制。被禁用的已知 Pass 返回 `.None` 但不绘制，
+- `pass_id` 为空画全部启用的 Pass；未知 ID 返回 `.Unknown_Pass`，不退回全部绘制。被禁用的已知 Pass 返回 `.None` 但不绘制，
   并遵守工具的 enabled/pass_limit 覆盖。全部入口在首个 Pass 前检查所有选中的绑定。
 
 普通 Sprite 可继续使用 Foster Batcher；本渲染器不改变它的状态或隐式提交它的批次。

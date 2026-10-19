@@ -32,9 +32,16 @@ instance_fields_leave_uniform_layout_and_define_olib_instance :: proc(t: ^testin
 	text := hlsl(schema, .Sprite)
 	defer delete(text)
 	testing.expect(t, strings.contains(text, "_olib_param_0;") && !strings.contains(text, "_olib_param_1"))
-	testing.expect(t, strings.contains(text, "nointerpolation float4 tint : TEXCOORD2;"))
-	testing.expect(t, strings.contains(text, "nointerpolation float4 data0 : TEXCOORD3;"))
-	testing.expect(t, strings.contains(text, "nointerpolation float4 data1 : TEXCOORD4;"))
+	// 精灵：顶点输入 sprite0..3 + tint + 字段；传给片元的变量从 TEXCOORD8 起，且为 nointerpolation。
+	testing.expect(t, strings.contains(text, "struct OlibInstanceInput {"))
+	for column in 0..<4 {
+		testing.expect(t, strings.contains(text, fmt.tprintf("float4 sprite%d : TEXCOORD%d;", column, INSTANCE_SEMANTIC_BASE+column)))
+	}
+	testing.expect(t, strings.contains(text, "float4 tint : TEXCOORD10;"))
+	testing.expect(t, strings.contains(text, "nointerpolation float4 tint : TEXCOORD8;"))
+	testing.expect(t, strings.contains(text, "nointerpolation float4 data1 : TEXCOORD10;"))
+	testing.expect(t, strings.contains(text, "void olib_sprite_vertex(OlibInstanceInput i, float2 corner,"))
+	testing.expect(t, !strings.contains(text, "olib_world"))
 	testing.expect(t, strings.contains(text, "#define _hue (olib_instance.data0.x)"))
 	testing.expect(t, strings.contains(text, "#define _tint (olib_instance.data1.xyzw)"))
 	testing.expect(t, strings.contains(text, "#define _strength (_olib_param_0.x)"))
@@ -82,65 +89,87 @@ instanced_effect_rules :: proc(t: ^testing.T) {
 	bad_schemas := []Schema{{name = "Body", preview = "2d", fields = bad}}
 	testing.expect(t, strings.contains(effect_validate(effect, bad_schemas), "Texture cannot be Instance"))
 	many := make([]Field, MAX_INSTANCE_FIELDS+1, context.temp_allocator)
-	many_names := []string{"a", "b", "c", "d", "e"}
 	for &f, i in many {
-		f = {id = many_names[i], name = many_names[i], kind = .Scalar, maximum = 1, instance = true}
+		name := fmt.tprintf("f%d", i)
+		f = {id = name, name = name, kind = .Scalar, maximum = 1, instance = true}
 	}
 	many_schemas := []Schema{{name = "Body", preview = "2d", fields = many}}
-	testing.expect(t, strings.contains(effect_validate(effect, many_schemas), "more than 4 Instance fields"))
+	limit_text := fmt.tprintf("more than %d Instance fields", MAX_INSTANCE_FIELDS)
+	testing.expect(t, strings.contains(effect_validate(effect, many_schemas), limit_text))
 	// clone 保留 instanced。
 	copy := effect_clone(effect)
 	defer effect_dispose(&copy)
 	testing.expect(t, copy.instanced)
 }
 
+@(private)
+slot_material :: proc(effect: ^Material_Effect) -> Material {
+	schemas := make([]Schema, 2, context.temp_allocator)
+	schemas[0], schemas[1] = instance_schema(), instance_schema()
+	schemas[1].name = "Other"
+	effect.schemas = schemas
+	return Material{effect = effect}
+}
+
 @(test)
-property_block_overrides_without_touching_shared_values :: proc(t: ^testing.T) {
+instance_slot_resolves_once_and_rejects_bad_names :: proc(t: ^testing.T) {
+	effect: Material_Effect
+	material := slot_material(&effect)
+	hue := instance_slot(&material, "hue")
+	tint := instance_slot(&material, "tint")
+	testing.expect(t, hue.valid && hue.index == 0 && tint.valid && tint.index == 1)
+	testing.expect(t, !instance_slot(&material, "strength").valid) // 统一参数不是实例字段
+	testing.expect(t, !instance_slot(&material, "image").valid)
+	testing.expect(t, !instance_slot(&material, "nope").valid)
+	testing.expect(t, !instance_slot(nil, "hue").valid)
+	testing.expect(t, !instance_slot(&Material{}, "hue").valid)
+	// 不同参数组里槽位不一致时无法用同一个句柄。
+	effect.schemas[1].fields[0], effect.schemas[1].fields[3] = effect.schemas[1].fields[3], effect.schemas[1].fields[0]
+	testing.expect(t, !instance_slot(&material, "hue").valid)
+}
+
+@(test)
+instance_values_set_marks_slots_and_apply_overrides_only_those :: proc(t: ^testing.T) {
 	schema := instance_schema()
 	values := values_make(schema)
 	defer values_dispose(values)
-	block: Property_Block
-	testing.expect(t, block_set(&block, "hue", {0.7, 0, 0, 0}))
-	testing.expect(t, block_set(&block, "hue", {0.8, 0, 0, 0})) // 同一字段以最后一次为准
-	testing.expect_value(t, block.count, 1)
-	testing.expect(t, block_set(&block, "strength", {99, 0, 0, 0})) // 钳制到最大 5
-	testing.expect(t, block_set(&block, "image", {1, 0, 0, 0})) // 贴图字段被忽略
-	testing.expect(t, block_set(&block, "missing", {1, 0, 0, 0})) // 未知字段被忽略
-	testing.expect(t, block_set(&block, "tint", {0.1, 0.2, 0.3, 0.4}))
-	testing.expect(t, block_set_group(&block, "Other", "hue", {0.1, 0, 0, 0})) // 其它组不影响
-	block_apply(&block, schema, values)
-	testing.expect_value(t, values[0].number[0], 0.8)
-	testing.expect_value(t, values[2].number[0], 5)
-	testing.expect_value(t, values[3].number, [4]f32{0.1, 0.2, 0.3, 0.4})
-	testing.expect_value(t, values[1].texture, "")
-	// 非有限值整条忽略。
-	nan := block
-	block_clear(&nan)
-	block_set(&nan, "hue", {max(f32) * 2, 0, 0, 0})
-	block_apply(&nan, schema, values)
-	testing.expect_value(t, values[0].number[0], 0.8)
-	// 容量满后拒绝新字段，但仍可改已有字段。
-	full: Property_Block
-	for i in 0..<MAX_BLOCK_ENTRIES {
-		full.entries[i] = {"", i == 0 ? "a" : "x", {}}
-		full.count += 1
-	}
-	testing.expect(t, !block_set(&full, "new", {}))
-	testing.expect(t, block_set(&full, "a", {1, 0, 0, 0}))
+	overrides: Instance_Values
+	testing.expect(t, instance_values_set(&overrides, {0, true}, {0.7, 0, 0, 0}))
+	testing.expect_value(t, overrides.set, u32(0b1))
+	testing.expect_value(t, overrides.count, 1)
+	testing.expect(t, !instance_values_set(&overrides, {}, {1, 0, 0, 0})) // 句柄无效
+	testing.expect(t, !instance_values_set(&overrides, {MAX_INSTANCE_FIELDS, true}, {1, 0, 0, 0})) // 越界
+	testing.expect(t, !instance_values_set(nil, {0, true}, {1, 0, 0, 0}))
+	instance_values_apply(&overrides, schema, values)
+	testing.expect_value(t, values[0].number[0], 0.7) // hue 被覆盖
+	testing.expect_value(t, values[3].number, [4]f32{1, 1, 1, 1}) // tint 没设置，沿用材质值
+	// 超出范围的值钳制到字段范围；非有限值忽略。
+	instance_values_set(&overrides, {0, true}, {5, 0, 0, 0})
+	instance_values_apply(&overrides, schema, values)
+	testing.expect_value(t, values[0].number[0], 1)
+	instance_values_set(&overrides, {0, true}, {max(f32) * 2, 0, 0, 0})
+	instance_values_apply(&overrides, schema, values)
+	testing.expect_value(t, values[0].number[0], 1)
+	// 没有显式设置任何槽位，或传 nil：什么都不改。
+	untouched := values_make(schema)
+	defer values_dispose(untouched)
+	instance_values_apply(nil, schema, untouched)
+	instance_values_apply(&Instance_Values{}, schema, untouched)
+	testing.expect_value(t, untouched[0].number[0], 0.15)
 }
 
 @(test)
 draw_collects_instance_values_in_field_order :: proc(t: ^testing.T) {
-	// 与 material_pass_submit 相同的收集规则：材质值 < Property_Block < Pass 固定覆盖。
+	// 与 material_pass_submit 相同的规则：材质值 < Instance_Values < Pass 固定覆盖。
 	schema := instance_schema()
 	values := values_make(schema)
 	defer values_dispose(values)
-	block: Property_Block
-	block_set(&block, "hue", {0.6, 0, 0, 0})
-	block_apply(&block, schema, values)
-	pass_values := []Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}
-	for override in pass_values {
-		values[field_index(schema, string(override.field))].number = override.number
+	overrides: Instance_Values
+	instance_values_set(&overrides, {0, true}, {0.6, 0, 0, 0})
+	instance_values_set(&overrides, {1, true}, {0.1, 0.2, 0.3, 0.4})
+	instance_values_apply(&overrides, schema, values)
+	for fixed in ([]Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}) {
+		values[field_index(schema, string(fixed.field))].number = fixed.number
 	}
 	instance: Instance_Values
 	for f, i in schema.fields {
@@ -149,8 +178,9 @@ draw_collects_instance_values_in_field_order :: proc(t: ^testing.T) {
 		instance.count += 1
 	}
 	testing.expect_value(t, instance.count, 2)
-	testing.expect_value(t, instance.numbers[0][0], 0.9)
-	testing.expect_value(t, instance.numbers[1], [4]f32{1, 1, 1, 1})
+	testing.expect_value(t, instance.numbers[0][0], 0.9) // Pass 固定值最后生效
+	testing.expect_value(t, instance.numbers[1], [4]f32{0.1, 0.2, 0.3, 0.4})
+	testing.expect_value(t, values[2].number[0], 2) // 统一参数保持材质里的值，不受实例值影响
 }
 
 @(test)
@@ -162,7 +192,7 @@ model_instancing_hlsl_declares_input_world_and_varyings :: proc(t: ^testing.T) {
 	testing.expect(t, !strings.contains(text, "%!"))
 	testing.expect(t, strings.contains(text, "struct OlibInstanceInput {"))
 	for column in 0..<4 {
-		testing.expect(t, strings.contains(text, fmt.tprintf("float4 world%d : TEXCOORD%d;", column, INSTANCE_MODEL_SEMANTIC_BASE+column)))
+		testing.expect(t, strings.contains(text, fmt.tprintf("float4 world%d : TEXCOORD%d;", column, INSTANCE_SEMANTIC_BASE+column)))
 	}
 	testing.expect(t, strings.contains(text, "float4 tint : TEXCOORD10;"))
 	testing.expect(t, strings.contains(text, "float4 data0 : TEXCOORD11;") && strings.contains(text, "float4 data1 : TEXCOORD12;"))
@@ -176,5 +206,6 @@ model_instancing_hlsl_declares_input_world_and_varyings :: proc(t: ^testing.T) {
 	// 精灵没有世界矩阵输入。
 	sprite := hlsl(schema, .Sprite)
 	defer delete(sprite)
-	testing.expect(t, !strings.contains(sprite, "OlibInstanceInput") && !strings.contains(sprite, "olib_world"))
+	testing.expect(t, strings.contains(sprite, "OlibInstanceInput") && !strings.contains(sprite, "olib_world"))
+	testing.expect(t, !strings.contains(text, "sprite0") || !strings.contains(sprite, "world0"))
 }

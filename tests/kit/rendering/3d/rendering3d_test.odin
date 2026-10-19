@@ -250,25 +250,37 @@ lod_screen_height_estimates :: proc(t: ^testing.T) {
 	testing.expect(t, inside == f32(math.INF_F32))
 }
 
-// 实例缓冲的布局约定：每实例 世界矩阵 + tint + 字段，Model_Instance 与 4 个字段时同一布局可直接上传。
+@(test)
+instance_value_set_writes_flat_slots :: proc(t: ^testing.T) {
+	values := make([][4]f32, 3*2, context.temp_allocator) // 3 个实例，每个 2 个槽
+	testing.expect(t, mat.instance_array_set(values, 2, 2, {1, true}, {0.5, 0, 0, 0}))
+	testing.expect_value(t, values[5], [4]f32{0.5, 0, 0, 0}) // 实例 2 的槽 1
+	testing.expect(t, !mat.instance_array_set(values, 2, 0, {}, {1, 0, 0, 0})) // 句柄无效
+	testing.expect(t, !mat.instance_array_set(values, 2, 0, {2, true}, {1, 0, 0, 0})) // 槽位越界
+	testing.expect(t, !mat.instance_array_set(values, 2, 3, {0, true}, {1, 0, 0, 0})) // 实例越界
+}
+
+// 实例缓冲的布局约定：每实例 世界矩阵 + tint + 字段，没有字段时 Model_Item 与缓冲同一布局可直接上传。
 @(test)
 instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
-	testing.expect_value(t, instance_buffer_stride(0), 80)
-	testing.expect_value(t, instance_buffer_stride(2), 112)
-	testing.expect_value(t, size_of(Model_Instance), instance_buffer_stride(mat.MAX_INSTANCE_FIELDS))
-	buffer: Instance_Buffer
-	testing.expect(t, !instance_buffer_init(&buffer, nil, 10))
+	testing.expect_value(t, model_stride(0), 80)
+	testing.expect_value(t, model_stride(2), 112)
+	testing.expect_value(t, size_of(Model_Item), model_stride(0))
+	buffer: Model_Buffer
+	testing.expect(t, !model_buffer_init(&buffer, nil, 10))
 	device: foster.GraphicsDevice
-	testing.expect(t, !instance_buffer_init(&buffer, &device, 0))
-	testing.expect(t, !instance_buffer_init(&buffer, &device, 10, mat.MAX_INSTANCE_FIELDS+1))
+	testing.expect(t, !model_buffer_init(&buffer, &device, 0))
+	testing.expect(t, !model_buffer_init(&buffer, &device, 10, mat.MAX_INSTANCE_FIELDS+1))
 	// 未创建的缓冲拒绝上传；越界被拒绝。
-	instances := []Model_Instance{{}, {}}
-	testing.expect(t, !instance_buffer_upload(&buffer, instances))
+	instances := []Model_Item{{}, {}}
+	testing.expect(t, !model_buffer_upload(&buffer, instances))
 	buffer.capacity = 1
-	testing.expect(t, !instance_buffer_upload(&buffer, instances))
-	testing.expect(t, !instance_buffer_upload(&buffer, instances[:1], 1))
+	testing.expect(t, !model_buffer_upload(&buffer, instances))
+	testing.expect(t, !model_buffer_upload(&buffer, instances[:1], 1))
+	buffer.capacity, buffer.slots = 2, 2
+	testing.expect(t, !model_buffer_upload(&buffer, instances, 0, make([][4]f32, 3, context.temp_allocator))) // 应为 2×2
 	// 没有材质的模型给出明确原因，不会碰 GPU。
 	view: Model_View
-	testing.expect_value(t, model_draw_instances({}, &buffer, 1, view), mat.Draw_Error.Missing_Material)
-	testing.expect_value(t, model_draw_instances_pass({}, &buffer, 1, "", view), mat.Draw_Error.Empty_Pass_Id)
+	testing.expect_value(t, model_draw_buffer({}, &buffer, 1, view), mat.Draw_Error.Missing_Material)
+	testing.expect_value(t, model_draw_buffer({}, &buffer, 1, view, "outline"), mat.Draw_Error.Missing_Material)
 }

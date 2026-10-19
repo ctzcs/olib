@@ -14,9 +14,9 @@ HLSL 中使用 `mul(v, M)`。
 | `queue3d.odin` | `Render_Queue($T)`：payload 由游戏定义，不透明从前到后、透明从后到前排序 |
 | `shader3d.odin` | `shader3d_pick_code`（转发到 `mat.shader_pick`）和 DebugLine3D 装载 |
 | `uniforms3d.odin` | `std140_write_matrix` / `std140_write_vec4`、WVP + World 顶点矩阵块、骨骼 palette 打包 |
-| `model_draw.odin` | 业务入口 `model_draw` / `model_draw_pass`，返回 `mat.Draw_Error` |
+| `model_draw.odin` | 业务入口 `model_draw`（可选 `pass_id`），返回 `mat.Draw_Error` |
 | `model_material_draw.odin` | 打包顶点矩阵与帧 uniform，交给材质 Pass 执行器；Shader Lab 共用 |
-| `instance_buffer.odin` | `Instance_Buffer` / `Model_Instance`：调用方持有的实例缓冲，供 `model_draw_instances` 大批量绘制 |
+| `model_buffer.odin` | `Model_Buffer` / `Model_Item`：调用方持有的实例缓冲，供 `model_draw_buffer` 大批量绘制 |
 | `../material/material_library.odin` | 2D/3D 共用的材质加载与缓存；模型绘制见 model_draw.odin |
 | `debug_draw3d.odin` | 立即模式调试线（线、盒、球、视锥、网格、骨架） |
 | `lod3d.odin` | 按屏幕高度选 LOD |
@@ -222,7 +222,7 @@ model.material, reason = mat.material_load(&materials, "materials/hero.json")
 // 每帧；view 包含场景目标、相机 VP、时间。
 err := r3d.model_draw(model, transform, view) // mat.Draw_Error：.None 成功，mat.draw_error_text(err) 给出原因
 // 只画指定 Pass；用循环自行组织“全部本体 → 全部描边”等顺序。
-err = r3d.model_draw_pass(model, "outline", transform, view)
+err = r3d.model_draw(model, transform, view, "outline")
 // 场景退出：先停止绘制所有借用该库的模型，再释放。
 mat.material_library_dispose(&materials)
 ```
@@ -233,14 +233,13 @@ mat.material_library_dispose(&materials)
 
 `Model` 表示一个静态网格/primitive 的材质槽，不是新的场景或模型导入器；多 primitive 模型可持有多项。
 场景仍负责网格、变换、相机、颜色/深度目标以及绘制排序。
-`model_draw` 画全部启用 Pass，`model_draw_pass` 使用稳定 ID，空 ID 返回 `.Empty_Pass_Id`，未知 ID 返回 `.Unknown_Pass`；
+`model_draw` 默认画全部启用 Pass，传 `pass_id` 只画该稳定 ID，未知 ID 返回 `.Unknown_Pass`；
 已禁用的已知 Pass 成功（`.None`）但不绘制，也遵守 view.pass_limit。库不调度绘制阶段。
 3D 仍逐网格提交，不自动合并不同模型或做实例化；按 Pass 分组可以减少 Shader/状态切换，
 实际 Draw 数不因此降低。与精灵混画时，先 `sprite_flush`，再提交模型。
 
-`Model.properties`（`^mat.Property_Block`）按次覆盖材质数值而不创建新实例，规则见
-[Property_Block](../material/README.md#单次覆盖与-per-instance-合批)。普通模型的覆盖值写入 uniform，
-每个模型一次 Draw；同一网格大量重复请用下面的实例化。
+普通模型每个一次 Draw；每个实例不同的值请用 `[Instance]` 字段和下面的实例化
+（见[槽位与句柄](../material/README.md#每个实例的值槽位与句柄)）。整体参数用 `mat.material_set_number` 改材质。
 
 ## 模型实例化
 
@@ -249,31 +248,35 @@ mat.material_library_dispose(&materials)
 
 ```odin
 // 材质效果在 .oshader 里用 [Instance] 声明字段（或写 Instanced），Draw Model；示例见 olib_sample 的 Swarm.oshader。
-buffer: r3d.Instance_Buffer
-r3d.instance_buffer_init(&buffer, device, capacity = 1_000_000, slots = 1) // slots = 效果的 [Instance] 字段数
+SLOTS :: 1                                      // 项目里定义的常数 = 效果的 [Instance] 字段数（硬上限 16）
+buffer: r3d.Model_Buffer
+r3d.model_buffer_init(&buffer, device, capacity = 1_000_000, slots = SLOTS)
 
-instances := make([]r3d.Model_Instance, count) // world / tint / values[0..slots)
-// ...填写...
-r3d.instance_buffer_upload(&buffer, instances)  // 静态场景加载时一次上传；动画交给着色器（Clock）
+instances := make([]r3d.Model_Item, count) // world / tint
+values := make([][4]f32, count*SLOTS)           // 每个实例连续 SLOTS 个 float4，长度 = 实例数 × SLOTS
+hue := mat.instance_slot(model.material, "hue") // 名字只解析一次，百万次赋值里没有字符串比较
+mat.instance_array_set(values, SLOTS, i, hue, {0.7, 0, 0, 0})
+// ...填写 world / tint...
+r3d.model_buffer_upload(&buffer, instances, values = values) // 静态场景加载时一次上传；动画交给着色器（Clock）
 
 // 每帧：
-err := r3d.model_draw_instances(model, &buffer, count, view)
-err = r3d.model_draw_instances_pass(model, &buffer, count, "outline", view) // 自选 Pass 顺序
+err := r3d.model_draw_buffer(model, &buffer, count, view)
+err = r3d.model_draw_buffer(model, &buffer, count, view, "outline") // 自选 Pass 顺序
 ```
 
 - **成本在三角形数**：实例化后 CPU 只有一次 Draw（约 0.1 ms），百万实例的耗时几乎全在 GPU 的三角形和片元上
   （示例：16 个三角形的球约 6 ms，96 个三角形的球约 20 ms）。远处只有几像素的实例请用低模（`Lod_Selector` 选网格，
   每个 LOD 一个缓冲），并把近处的实例排在前面以便提前深度测试。
 - **规模**：每实例 `80 + 16×slots` 字节（100 万实例、1 个字段约 96 MB 显存），上传在加载时一次完成；
-  帧内上传会占用设备暂存区，运行中只更新变化的区间（`instance_buffer_upload(..., first = 偏移)`）。
-- **剔除**：库不做。把实例按空间分块放进多个 `Instance_Buffer`，每块每帧只提交可见的（Foster 的 Draw
+  帧内上传会占用设备暂存区，运行中只更新变化的区间（`model_buffer_upload(..., first = 偏移)`）。
+- **剔除**：库不做。把实例按空间分块放进多个 `Model_Buffer`，每块每帧只提交可见的（Foster 的 Draw
   暂不支持实例子区间）；`count` 可以只画缓冲前 N 个，配合"近处排在前面"的排序实现简单 LOD。
 - **透明排序**：实例化绘制不排序；需要透明混合的实例由调用方分块并从后向前提交，或改用不透明/抖动透明。
 - **着色器**：`Draw Model` 的 instanced 效果的 HLSL 约定见
   [lang README](../shader/lang/README.md#instanced-效果的-hlsl-约定)：`OlibInstanceInput` 作为 `Input` 的
   第一个成员，用 `olib_world` 取世界矩阵；顶点 b0 为 `{ViewProjection, 单位矩阵}`。
-- 非 instanced 的效果调用 `model_draw_instances` 返回 `.Not_Instanced_Effect`；instanced 效果用 `model_draw`
-  返回 `.Instance_Buffer_Required`；缓冲槽数与效果字段数不一致返回 `.Instance_Mismatch`。`Model.properties` 无效。
+- 非 instanced 的效果调用 `model_draw_buffer` 返回 `.Not_Instanced_Effect`；instanced 效果用 `model_draw`
+  返回 `.Instance_Buffer_Required`；缓冲槽数与效果字段数不一致返回 `.Instance_Mismatch`。`[Instance]` 字段以缓冲为准，其余统一参数来自材质、整批共用。
 - 当前只支持静态网格（蒙皮网格需要骨骼 palette，不在此路径内）；ShaderLab 的 3D 预览不支持 instanced 效果。
 
 ## 模型材质执行

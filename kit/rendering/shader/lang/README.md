@@ -50,25 +50,40 @@ Shader "Water"
   除 Float 默认范围 -10000..10000 外，数值控件默认范围 0..1；向量和颜色可写
   `Vector2(-5,5)`、`Color(0,4)` 指定范围。默认值必须落在范围内。
 - `[Step(0.01)]` 设置步长；`[Id("稳定标识")]` 让字段改名后保留值。
-- `[Instance]` 标记 per-instance 数值字段（仅数值，最多 4 个）：它不占 uniform，而是随每个精灵的顶点传入，
+- `[Instance]` 标记 per-instance 数值字段（仅数值，最多 16 个，实际个数由项目决定，见 [material README](../../material/README.md#字段个数由你的项目决定)）：它不占 uniform，而是随每个精灵的顶点传入，
   所以参数取值不同的精灵仍能合批。含 `[Instance]` 字段的效果自动成为 **instanced** 效果；
   只想让 tint 也随顶点（不同 tint 合批）而没有实例字段时，在 Shader 顶层写一行 `Instanced`。
   instanced 支持 `Draw Sprite` 和 `Draw Model`（模型须用实例缓冲绘制，见 [3d README](../3d/README.md#模型实例化)）。
 
 ### instanced 效果的 HLSL 约定
 
-instanced 效果的生成代码里多出 `struct OlibInstance`（顶点输入 TEXCOORD2 为 tint，
-TEXCOORD3.. 依次为各 `[Instance]` 字段）和全局 `olib_instance`。着色器需要做四件事：
+instanced 效果的实例数据（变换、tint、`[Instance]` 字段）通过一个**按实例步进的顶点缓冲**提供：
+逐个 `sprite_draw` 时由渲染器累积并自动合批，也可以用 `Sprite_Buffer` / `Model_Buffer` 一次画上百万个。
+生成代码里多出 `OlibInstanceInput`（顶点输入）、`OlibInstance`（传给片元）和全局 `olib_instance`。
+
+**精灵 instanced**（`Draw Sprite`）：
 
 ```hlsl
-struct Input  { float2 Position : TEXCOORD0; float2 Uv : TEXCOORD1; OlibInstance Instance; };
+cbuffer ViewBlock : register(b0, space1) { float4x4 Projection; };
+struct Input {
+    OlibInstanceInput Instance;   // 必须是第一个成员
+    float2 Corner : TEXCOORD0;    // 单位四边形的角点 (0,0)(1,0)(1,1)(0,1)
+};
 struct Output { float4 Position : SV_Position; float2 Uv : TEXCOORD0; OlibInstance Instance; };
-// vertex_main:   o.Instance = v.Instance;
+Output vertex_main(Input v)
+{
+    Output o;
+    float2 position;
+    olib_sprite_vertex(v.Instance, v.Corner, position, o.Uv);   // 屏幕像素位置与图集 UV
+    o.Position = mul(Projection, float4(position, 0, 1));
+    o.Instance = olib_instance_from(v.Instance);
+    return o;
+}
 // fragment_main: olib_instance = v.Instance;   // 之后 _hue 等 [Instance] 字段和 InstanceTint 才有值
 ```
 
 `InstanceTint` 是 `sprite_draw*` 的 tint；instanced 效果里 Fragment b0 的 `Tint` 固定为白色，请改用 `InstanceTint`。
-没有声明这些成员的旧着色器不受影响。Odin 声明里用结构体标签 `instance:"true"` 对应。
+没有声明 instanced 的旧着色器仍使用原来的 `Position` / `Uv` 顶点输入，不受影响。Odin 声明里用结构体标签 `instance:"true"` 对应。
 
 **模型 instanced** 的 HLSL（`Draw Model`）：
 

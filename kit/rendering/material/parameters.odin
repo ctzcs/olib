@@ -12,8 +12,11 @@ import "core:strings"
 MAX_TEXTURES :: 16
 MAX_UNIFORM_BYTES :: 16384
 PARAM_SLOT_BYTES :: 16
-// 每个绘制对象自带的数值字段（[Instance]）上限；它们随顶点而不是 uniform 传给 Shader。
-MAX_INSTANCE_FIELDS :: 4
+// 每个绘制对象自带的数值字段（[Instance]）的硬上限；它们随顶点而不是 uniform 传给 Shader。
+// 每个实例占 INSTANCE_FIXED_ATTRIBUTES + 字段数个顶点属性，再加网格自己的属性，桌面 GPU 通常支持 16～32 个，
+// 所以取 16。实际用几个由效果里的 [Instance] 字段数和缓冲的 slots 决定，库里没有全局配置；
+// 更多的值请改用把几个标量打包进同一个 float4。
+MAX_INSTANCE_FIELDS :: 16
 
 Kind :: enum {
 	Scalar,
@@ -170,22 +173,28 @@ pack :: proc(schema: Schema, values: []Value, buffer: []u8) -> bool {
 	return true
 }
 
-// instanced 效果按绘制种类生成不同的 per-instance 接口。
+// instanced 效果按绘制种类生成不同的 per-instance 接口。两种都由调用方或渲染器提供一个
+// 按实例步进的顶点缓冲，一次 Draw 画出全部实例。
 Instancing :: enum {
 	None,
-	Sprite, // 精灵：OlibInstance 既是顶点输入（TEXCOORD2..）也是传给片元的变量
-	Model,  // 模型：OlibInstanceInput 为顶点输入（世界矩阵 + tint + 字段），OlibInstance 传给片元
+	Sprite, // 精灵：实例数据含 2D 变换与图集矩形，着色器用 olib_sprite_vertex 展开四边形
+	Model,  // 模型：实例数据含世界矩阵，着色器用 olib_world 取得
 }
 
-// 模型 instanced 顶点输入的语义号起点（只需与网格属性的语义号不重复）。
-INSTANCE_MODEL_SEMANTIC_BASE :: 6
-// 模型 instanced 传给片元的变量从 TEXCOORD8 起（tint、字段），避开常见的 TEXCOORD0..7 自定义变量。
-INSTANCE_MODEL_VARYING_BASE :: 8
+// instanced 顶点输入的语义号起点（只需与网格属性的语义号不重复）；位置由声明顺序决定。
+INSTANCE_SEMANTIC_BASE :: 6
+// 传给片元的变量从 TEXCOORD8 起（tint、字段），避开常见的 TEXCOORD0..7 自定义变量。
+INSTANCE_VARYING_BASE :: 8
+// 每个实例固定的顶点属性数（4 个 float4 的变换/几何 + tint），其后是每个 [Instance] 字段一个 float4。
+INSTANCE_FIXED_ATTRIBUTES :: 5
 
 // 返回的字符串归调用方；由 shaderlang 直接放入每个 Pass 的候选 HLSL。
-// 非 None（或存在 per-instance 字段）时还生成 OlibInstance，见 Instancing 各值的含义。
-// 着色器须在 Output 里声明 OlibInstance，顶点里赋值，片元里把它赋给全局 olib_instance，
-// 之后 _name 与 InstanceTint 即可使用；模型另需用 olib_world(instance) 取世界矩阵。
+// 非 None（或存在 per-instance 字段）时还生成 OlibInstanceInput / OlibInstance：
+// - OlibInstanceInput 是顶点输入，必须是 Input 的第一个成员（网格属性随后），其位置 0..4+字段数；
+// - OlibInstance 传给片元：Output 里声明它，顶点里 o.Instance = olib_instance_from(v.Instance)，
+//   片元里把它赋给全局 olib_instance，之后 _name 与 InstanceTint 即可使用；
+// - Model 用 olib_world(instance) 取世界矩阵；Sprite 用 olib_sprite_vertex(instance, corner, position, uv)
+//   由单位四边形的角点 (0,0)(1,0)(1,1)(0,1) 得到屏幕像素位置和 UV。
 hlsl :: proc(schema: Schema, mode := Instancing.None) -> string {
 	b: strings.Builder
 	strings.builder_init(&b)
@@ -201,40 +210,7 @@ hlsl :: proc(schema: Schema, mode := Instancing.None) -> string {
 	slots := instance_count(schema)
 	kind := mode
 	if kind == .None && slots > 0 do kind = .Sprite
-	switch kind {
-	case .None:
-	case .Sprite:
-		strings.write_string(&b, "struct OlibInstance {\n    nointerpolation float4 tint : TEXCOORD2;\n")
-		for slot in 0..<slots {
-			fmt.sbprintf(&b, "    nointerpolation float4 data%d : TEXCOORD%d;\n", slot, 3+slot)
-		}
-		strings.write_string(&b, "};\nstatic OlibInstance olib_instance;\n#define InstanceTint (olib_instance.tint)\n")
-	case .Model:
-		// 顶点属性的位置由 HLSL 入口里属性的声明顺序决定（不是语义号）：OlibInstanceInput 须是
-		// Input 的第一个成员（位置 0..4+字段数），网格属性随后，绘制时网格属性整体后移。语义号只需互不相同。
-		strings.write_string(&b, "struct OlibInstanceInput {\n")
-		for column in 0..<4 {
-			fmt.sbprintf(&b, "    float4 world%d : TEXCOORD%d;\n", column, INSTANCE_MODEL_SEMANTIC_BASE+column)
-		}
-		fmt.sbprintf(&b, "    float4 tint : TEXCOORD%d;\n", INSTANCE_MODEL_SEMANTIC_BASE+4)
-		for slot in 0..<slots {
-			fmt.sbprintf(&b, "    float4 data%d : TEXCOORD%d;\n", slot, INSTANCE_MODEL_SEMANTIC_BASE+5+slot)
-		}
-		// 含花括号的文本不能直接作 sbprintf 的格式串（花括号是它的占位符语法）。
-		strings.write_string(&b, "};\nstruct OlibInstance {\n")
-		fmt.sbprintf(&b, "    nointerpolation float4 tint : TEXCOORD%d;\n", INSTANCE_MODEL_VARYING_BASE)
-		for slot in 0..<slots {
-			fmt.sbprintf(&b, "    nointerpolation float4 data%d : TEXCOORD%d;\n", slot, INSTANCE_MODEL_VARYING_BASE+1+slot)
-		}
-		strings.write_string(&b, "};\nstatic OlibInstance olib_instance;\n#define InstanceTint (olib_instance.tint)\n")
-		// 与 CPU 写入 uniform 的 Matrix4 同一约定：每个 float4 是矩阵的一列（行向量约定 v * M）。
-		strings.write_string(&b, "float4x4 olib_world(OlibInstanceInput i) {\n    return transpose(float4x4(i.world0, i.world1, i.world2, i.world3));\n}\n")
-		strings.write_string(&b, "OlibInstance olib_instance_from(OlibInstanceInput i) {\n    OlibInstance o;\n    o.tint = i.tint;\n")
-		for slot in 0..<slots {
-			fmt.sbprintf(&b, "    o.data%d = i.data%d;\n", slot, slot)
-		}
-		strings.write_string(&b, "    return o;\n}\n")
-	}
+	if kind != .None do hlsl_instance_block(&b, kind, slots)
 	swizzles := [4]string{"x", "xy", "xyz", "xyzw"}
 	index = 0
 	slot := 0
@@ -254,4 +230,43 @@ hlsl :: proc(schema: Schema, mode := Instancing.None) -> string {
 		}
 	}
 	return strings.to_string(b)
+}
+
+// 生成 instanced 效果的 OlibInstanceInput / OlibInstance 及取世界矩阵、展开精灵四边形的辅助函数。
+@(private)
+hlsl_instance_block :: proc(b: ^strings.Builder, kind: Instancing, slots: int) {
+	// 顶点属性的位置由 HLSL 入口里属性的声明顺序决定（不是语义号）。语义号只需互不相同。
+	member := kind == .Sprite ? "sprite" : "world"
+	strings.write_string(b, "struct OlibInstanceInput {\n")
+	for column in 0..<4 {
+		fmt.sbprintf(b, "    float4 %s%d : TEXCOORD%d;\n", member, column, INSTANCE_SEMANTIC_BASE+column)
+	}
+	fmt.sbprintf(b, "    float4 tint : TEXCOORD%d;\n", INSTANCE_SEMANTIC_BASE+4)
+	for slot in 0..<slots {
+		fmt.sbprintf(b, "    float4 data%d : TEXCOORD%d;\n", slot, INSTANCE_SEMANTIC_BASE+5+slot)
+	}
+	// 含花括号的文本不能直接作 sbprintf 的格式串（花括号是它的占位符语法）。
+	strings.write_string(b, "};\nstruct OlibInstance {\n")
+	fmt.sbprintf(b, "    nointerpolation float4 tint : TEXCOORD%d;\n", INSTANCE_VARYING_BASE)
+	for slot in 0..<slots {
+		fmt.sbprintf(b, "    nointerpolation float4 data%d : TEXCOORD%d;\n", slot, INSTANCE_VARYING_BASE+1+slot)
+	}
+	strings.write_string(b, "};\nstatic OlibInstance olib_instance;\n#define InstanceTint (olib_instance.tint)\n")
+	if kind == .Model {
+		// 与 CPU 写入 uniform 的 Matrix4 同一约定：每个 float4 是矩阵的一列（行向量约定 v * M）。
+		strings.write_string(b, "float4x4 olib_world(OlibInstanceInput i) {\n    return transpose(float4x4(i.world0, i.world1, i.world2, i.world3));\n}\n")
+	} else {
+		// sprite0 = (m11,m12,m21,m22)，sprite1 = (m31,m32, 局部矩形 x0,y0)，
+		// sprite2 = (局部矩形 宽,高, uv0.xy)，sprite3 = (uv 宽,高)。变换沿用 Matrix3x2 的行向量约定。
+		strings.write_string(b, "void olib_sprite_vertex(OlibInstanceInput i, float2 corner, out float2 position, out float2 uv) {\n")
+		strings.write_string(b, "    float2 local = i.sprite1.zw + corner * i.sprite2.xy;\n")
+		strings.write_string(b, "    position = float2(local.x * i.sprite0.x + local.y * i.sprite0.z + i.sprite1.x,\n")
+		strings.write_string(b, "                      local.x * i.sprite0.y + local.y * i.sprite0.w + i.sprite1.y);\n")
+		strings.write_string(b, "    uv = i.sprite2.zw + corner * i.sprite3.xy;\n}\n")
+	}
+	strings.write_string(b, "OlibInstance olib_instance_from(OlibInstanceInput i) {\n    OlibInstance o;\n    o.tint = i.tint;\n")
+	for slot in 0..<slots {
+		fmt.sbprintf(b, "    o.data%d = i.data%d;\n", slot, slot)
+	}
+	strings.write_string(b, "    return o;\n}\n")
 }

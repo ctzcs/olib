@@ -22,7 +22,7 @@ Model_Material_Draw :: struct {
 	options: mat.Draw_Options,
 	// instanced 效果：每实例数据与实例数（超出缓冲容量按容量截断）。此时 world_matrix 被忽略，
 	// 顶点 b0 为 {ViewProjection, 单位矩阵}，世界矩阵来自实例缓冲。
-	instances: ^Instance_Buffer,
+	instances: ^Model_Buffer,
 	instance_count: int,
 }
 
@@ -44,7 +44,7 @@ model_material_draw :: proc(device: ^foster.GraphicsDevice, effect: mat.Effect_D
 		pass_limit = draw.pass_limit, options = draw.options,
 	}
 	if draw.instances != nil {
-		request.mesh_location_offset = 5 + draw.instances.slots
+		request.mesh_location_offset = mat.INSTANCE_FIXED_ATTRIBUTES + draw.instances.slots
 		request.instance_buffer = &draw.instances.buffer
 		request.instance_count = clamp(draw.instance_count, 0, draw.instances.capacity)
 		request.instance_slots = draw.instances.slots

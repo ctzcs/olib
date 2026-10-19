@@ -208,6 +208,7 @@ aseprite_pack_file :: proc(packer: ^foster.Packer, clips: ^[dynamic]Built_Clip, 
 built_clip_dispose :: proc(clip: ^Built_Clip) {
 	delete(clip.controller)
 	delete(clip.name)
+	for name in clip.frames do delete(name) // 区域名是 aseprite_make_clip 克隆的
 	delete(clip.frames)
 	delete(clip.durations)
 }

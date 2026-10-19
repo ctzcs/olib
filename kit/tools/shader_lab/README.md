@@ -159,7 +159,7 @@ Properties 声明是所有 Pass 的模板，值按各 Pass 分别保存。单 Pa
 
 `olib_sample` 的 `Outlined.oshader` 使用两个 `.Model` Pass：本体背面剔除并写深度，描边
 外扩顶点、正面剔除、只读深度。二者必须使用同一个 output 和 target 描述，不接受图目标输入。
-预览调用 `rendering3d.model_material_draw`；游戏里的 `material3d` 示例使用 `model_draw/model_draw_pass`。
+预览调用 `rendering3d.model_material_draw`；游戏里的 `material3d` 示例使用 `model_draw`。
 这里的“当前 Pass”显示从首个 Pass 累积绘制到选中 Pass 的结果，关闭某 Pass 只跳过绘制，
 不会清除其他 Pass 的颜色/深度。旧图像效果仍保留独立目标、输入拓扑和历史帧机制。
 

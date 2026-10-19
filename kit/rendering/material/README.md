@@ -32,42 +32,78 @@ Material_Library ─┬─ Material_Effect ─ Effect_Desc（Pass 列表）+ []S
 一次绘制（精灵为例，模型同理）：
 
 ```
-sprite_draw / sprite_draw_pass        业务入口（sprite_draw.odin），只传 Sprite_Instance、变换、视图
-  └ sprite_draw_selected              取出材质的 Effect 与 Binding
-    └ sprite_material_draw            （sprite_material_draw.odin）组装投影/帧 uniform；无回调时进入合批
+sprite_draw                           业务入口（sprite_draw.odin），传材质、子图、变换、视图
+  └ sprite_material_draw              （sprite_material_draw.odin）取出材质的 Effect 与 Binding，组装投影/帧 uniform；无回调时进入合批
       └ mat.material_draw             逐 Pass：覆盖值 → pack → 绑纹理 → 应用 Pass_State
         └ submit 回调（合批）或 GraphicsDeviceDraw（立即绘制）
 ```
 
-`Draw_Options { enabled, pass_id, user_data, prepare, submit }` 是 2D、3D 绘制请求共用的
+`Draw_Options { enabled, pass_id, instance_values, user_data, prepare, submit }` 是 2D、3D 绘制请求共用的
 选择与工具扩展字段，分别内嵌在 `Material_Draw`、`Sprite_Material_Draw`、`Model_Material_Draw` 的
-`options` 里；业务代码只会用到 `pass_id`。
+`options` 里；业务代码只会用到 `pass_id` 和 `instance_values`（即 `sprite_draw` 的 `values` 参数）。
 
-## 单次覆盖与 per-instance 合批
+## 每个实例的值：槽位与句柄
 
-**Property_Block**（`property_block.odin`）是调用方持有的普通值，类似 Unity 的 MaterialPropertyBlock：
-同一个共享 `Material` 画不同变体时不必为每种取值再建材质实例。
+同一个共享 `Material` 画不同变体（不同 hue、opacity……）时，不必为每种取值再建材质实例，也不必拆批。
+做法分两步：
+
+1. **效果里把参数声明成 `[Instance]`**（`Field.instance`）：它不再占 uniform，而是写进每个对象的**实例记录**，
+   于是取值不同的对象仍能合成一次 Draw。Sprite 与 Model 效果都支持，最多 `MAX_INSTANCE_FIELDS`（16）个，实际个数由项目决定（见[字段个数](#字段个数由你的项目决定)），
+   `Effect_Desc.instanced` 必须为 true（lang 自动设置）。着色器写法见
+   [lang 的 HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。
+2. **按槽位给每个实例设值**：槽位是字段在效果里声明的先后，**名字只解析一次**得到句柄，之后全按槽位赋值，没有字符串比较。
 
 ```odin
-tinted: mat.Property_Block
-mat.block_set(&tinted, "hue", {0.7, 0, 0, 0})              // 所有包含 hue 的 Pass
-mat.block_set_group(&tinted, "Sprite_body", "opacity", {0.5, 0, 0, 0}) // 只覆盖一个参数组
-r2d.sprite_draw_frame(&renderer, material, frame, transform, view, properties = &tinted)
+hue := mat.instance_slot(material, "hue")            // 解析一次；名字写错或不是 [Instance] 时 hue.valid == false
+
+// 逐个绘制：Instance_Values 设置这一次绘制的实例字段，只覆盖显式设置的槽位，其余沿用材质里的值
+cool: mat.Instance_Values
+mat.instance_values_set(&cool, hue, {0.7, 0, 0, 0})
+r2d.sprite_draw(&renderer, material, frame, transform, view, values = &cool)
+
+// 缓冲：同样的槽位，写进平铺数组（每个实例连续 SLOTS 个 float4），上传时一并传入
+mat.instance_array_set(values, SLOTS, i, hue, {0.7, 0, 0, 0})
+r2d.sprite_buffer_upload(&sprite_buffer, items, values = values)
+r3d.model_buffer_upload(&model_buffer, instances, values = values)
 ```
 
-覆盖优先级：材质实例值 < Property_Block < Pass 的固定 `values`。数值按字段范围钳制，
-未知字段、贴图字段和非有限数值被忽略；字符串只借用，调用期间须保持有效。
-不修改共享材质，已排队的批次也不受之后修改的影响。容量 `MAX_BLOCK_ENTRIES`（16）。
+`Instance_Values` 是逐个绘制的"每实例值"：按槽位存的小数组，加"哪些槽位被设置过"的掩码
+（以及材质回调里该 Pass 的字段数 `count`）；大批量缓冲则用平铺的 `[][4]f32`，两者按同一个槽位句柄赋值。回调 `prepare / submit` 的 `^Instance_Values` 是该 Pass 已套用全部覆盖后的实例数值。
+`uniform_size / pack / hlsl` 都已跳过 `[Instance]` 字段，`hlsl(schema, mode)` 生成 `OlibInstanceInput / OlibInstance`。
 
-**`[Instance]` 字段**（`Field.instance`）把数值字段从 uniform 移到每个对象的顶点里，
-使取值不同的对象仍能合成一次 Draw（Property_Block 的覆盖值同样如此）。仅 Sprite 效果支持，
-最多 `MAX_INSTANCE_FIELDS`（4）个；`Effect_Desc.instanced` 必须为 true（lang 自动设置）。
-`uniform_size / pack / hlsl` 都已跳过这些字段，`hlsl(schema, instanced)` 生成 `OlibInstance`，
-着色器写法见 [lang 的 HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。
-回调 `prepare / submit` 多一个 `^Instance_Values`，是该 Pass 已套用全部覆盖后的实例数值。
-模型效果同样可以 instanced：每个实例的世界矩阵、tint 和字段来自调用方持有的
-[Instance_Buffer](../3d/README.md#模型实例化)，一次 Draw 画出全部实例；这时 Property_Block 不起作用，
-数据以实例缓冲为准。非 instanced 的模型只能用 Property_Block（仍是 uniform，每个模型一次 Draw）。
+**覆盖优先级**：材质实例值 < `Instance_Values`（实例字段） < Pass 的固定 `values`。
+数值按字段范围钳制，非有限数值被忽略；不修改共享材质，已排队的批次也不受之后修改的影响。
+
+### 整体参数：不是 `[Instance]` 的字段
+
+不是 `[Instance]` 的字段是**整批共用**的统一参数，值放在 uniform 里，来自材质。想整体改它：
+
+```odin
+mat.material_set_number(material, "Sprite_body", "strength", {0.8, 0, 0, 0})   // 之后所有绘制都用 0.8
+```
+
+- 精灵合批在**提交时**就把 uniform 复制进批次，所以在两次绘制之间改它，已排队的绘制不受影响，可以临时改一下再改回去。
+- 但统一参数取值不同的绘制无法合批，每个不同取值至少多一次 Draw；如果它其实是每个实例不同的值，就把它声明成 `[Instance]`。
+- 只有少数几种固定变体时，再 `material_load` 一个材质文件即可，共享同一份 Shader 和贴图。
+
+### 字段个数：由你的项目决定
+
+库里**没有**全局的字段数配置。每个效果声明了几个 `[Instance]` 字段，就有几个槽位；缓冲的槽数在创建时传入，
+通常在你的项目里放一个常数：
+
+```odin
+SLOTS :: 2   // 项目里的常数，等于 .oshader 里 [Instance] 字段的个数
+r2d.sprite_buffer_init(&buffer, device, capacity, slots = SLOTS)
+values := make([][4]f32, count*SLOTS)            // 平铺数组：每个实例连续 SLOTS 个 float4
+mat.instance_array_set(values, SLOTS, i, hue, {0.7, 0, 0, 0})
+r2d.sprite_buffer_upload(&buffer, items, values = values)
+```
+
+- 硬上限 `MAX_INSTANCE_FIELDS` = 16，只用来保护顶点属性预算：每个实例占 `5 + 槽数` 个属性，网格还要自己的属性
+  （3D 常见 4 个），桌面 GPU 一般支持 16～32 个。需要更多值时，先考虑把几个标量打包进同一个 `float4` 的 xyzw。
+- 内存与槽数成正比：值数组每个实例 `16 × SLOTS` 字节，GPU 记录同理；`Sprite_Item` / `Model_Item` 本身不含字段数值，
+  不会因为上限变大而变大。
+- `Instance_Values`（逐个绘制用）是固定大小的小结构，最多容纳 16 个槽位。
 
 ## 约定
 
@@ -90,7 +126,7 @@ materials := mat.Material_Library{device = device, storage = &resources}
 // 清单与各 Pass 的 spv / dxil / msl 都由 tools/shaders 生成；库按驱动选择后端并登记。
 reason := mat.material_register_manifest(&materials, #load("Hero.shader.json"), passes)
 material, reason := mat.material_load(&materials, "materials/hero.json")
-// 检查 reason 后将 material 赋给 Sprite_Instance.material 或 r3d.Model.material。
+// 检查 reason 后将 material 传给 r2d.sprite_draw 或赋给 r3d.Model.material。
 ```
 
 `passes` 是 `[]mat.Pass_Binaries`，与清单里的 Pass 一一对应（见 `olib_sample/src/material3d/shaders.odin`）。

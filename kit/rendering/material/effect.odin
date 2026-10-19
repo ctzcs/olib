@@ -83,7 +83,7 @@ Effect_Desc :: struct {
 	passes: []Pass_Desc,
 	preview: string, // 效果工作区：2d / 3d；空值兼容旧声明的模型 Pass 推断。
 	// 每个绘制对象的 tint 与 [Instance] 字段随顶点传入（见 hlsl 的 OlibInstance），不同取值可合批。
-	// Sprite 与 Model 效果支持；模型需要用调用方持有的实例缓冲绘制（见 3d 包的 Instance_Buffer）。
+	// Sprite 与 Model 效果支持；模型需要用调用方持有的实例缓冲绘制（见 3d 包的 Model_Buffer）。
 	instanced: bool,
 }
 

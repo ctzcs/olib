@@ -1,5 +1,14 @@
 # Plan：2D 统一到 r2d.Render2D（含 UI 迁移）
 
+> **状态：已完成（2026-10-20）** · 提交 `9a94c1b`..`3b0686f`
+> 偏离：用户明确要求暂不修改 Proj_Sand，因此未迁移、未运行其 check.ps1。内置效果直接借用 Foster 设备默认 Shader；已补齐 GLSL 选择，但 Web 的普通 Olib uniform、实例 storage/实例缓冲因既有后端限制在登记时拒绝，不改 foster。索引缓冲按容量增长后复用，未改为初始化时一次固定分配。grep 复查允许计划明确要求直接使用的 BatcherVertex/BatcherMode 类型与边界说明，没有 kit 内 Batcher 实例或绘制调用。
+> 收尾修复：多 Pass 分别保存实例参数，顶点 b1 选择该 Pass 的偏移；辅助纹理变化分批、4096 四边形上限、禁用 Pass 不记录。仅增加一项多 Pass 回归并扩充既有检查，没有新增测试框架。
+> 本次 olib 提交：`131f771`（kit/UI/模板迁移）、`04c7047`（动画改名）、`5915b34`（收尾修复）、`3b0686f`（文档）。
+> olib_sample：`fc18c2b`（前期材质迁移）、`6542ddd`（UI/gizmo 等迁移）、`67f42bf`（字节码与截图）、`667ce09`（文档）。
+> olib_web_preview 非 Git 仓库，仅修改 `src/game/ui.odin`、`src/editor/editor.odin`。其 tools/check、play.bat 热加载、publish_web.bat 和浏览器显示验证均通过，浏览器无 error/warn。
+> 验收：olib `odin run tools/check` 全部 86 项通过；ui_gallery、game_ui、book_ui、gizmo2d（1280×720/1100×650）、material2d 与 Shader Lab 2D 基准逐像素一致。game_ui 截帧偏移已修正；swarm 有 93150 个像素的颜色差异，最大单通道 2/255，视觉效果一致，具体浮点/编译取整来源未进一步归因。Shader Lab 既有 U+9634（阴）缺字警告仍存在，本次未变更字体。
+> 性能：12 个精灵 × 2 Pass，手动/自动分组均 2 Draw；100 万 swarm 为 1 Draw，render CPU 约 0.05–0.07 ms。UI MSDF 以 1100×760、1.25 倍最终像素验收，诊断为零。截图位于各项目 library/screenshots，基准临时副本验收后删除。
+
 ## 背景
 
 2D 现在有两套绘制：

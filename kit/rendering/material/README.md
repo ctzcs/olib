@@ -61,8 +61,8 @@ cool: mat.Instance_Values
 mat.instance_values_set(&cool, hue, {0.7, 0, 0, 0})
 r2d.sprite_draw(&renderer, material, frame, transform, view, values = &cool)
 
-// 缓冲：同样的槽位，写进平铺数组（每个实例连续 SLOTS 个 float4），上传时一并传入
-mat.instance_array_set(values, SLOTS, i, hue, {0.7, 0, 0, 0})
+// 缓冲：同样的槽位，写进平铺数组（每个实例连续 buffer.slots 个 float4），上传时一并传入
+mat.instance_array_set(values, sprite_buffer.slots, i, hue, {0.7, 0, 0, 0})
 r2d.sprite_buffer_upload(&sprite_buffer, items, values = values)
 r3d.model_buffer_upload(&model_buffer, instances, values = values)
 ```
@@ -88,20 +88,19 @@ mat.material_set_number(material, "Sprite_body", "strength", {0.8, 0, 0, 0})   /
 
 ### 字段个数：由你的项目决定
 
-库里**没有**全局的字段数配置。每个效果声明了几个 `[Instance]` 字段，就有几个槽位；缓冲的槽数在创建时传入，
-通常在你的项目里放一个常数：
+库里**没有**全局的字段数配置。每个效果声明了几个 `[Instance]` 字段，就有几个槽位（`mat.instance_slot_count(material)`；
+各参数组字段数不一致时为 -1）。缓冲创建时从材质读取槽数，存进 `buffer.slots`，调用方不需要自己定义常数：
 
 ```odin
-SLOTS :: 2   // 项目里的常数，等于 .oshader 里 [Instance] 字段的个数
-r2d.sprite_buffer_init(&buffer, device, capacity, slots = SLOTS)
-values := make([][4]f32, count*SLOTS)            // 平铺数组：每个实例连续 SLOTS 个 float4
-mat.instance_array_set(values, SLOTS, i, hue, {0.7, 0, 0, 0})
+r2d.sprite_buffer_init(&buffer, material, capacity)   // buffer.slots = 效果的 [Instance] 字段数
+values := make([][4]f32, count*buffer.slots)         // 平铺数组：每个实例连续 slots 个 float4
+mat.instance_array_set(values, buffer.slots, i, hue, {0.7, 0, 0, 0})
 r2d.sprite_buffer_upload(&buffer, items, values = values)
 ```
 
 - 硬上限 `MAX_INSTANCE_FIELDS` = 16，只用来保护顶点属性预算：每个实例占 `5 + 槽数` 个属性，网格还要自己的属性
   （3D 常见 4 个），桌面 GPU 一般支持 16～32 个。需要更多值时，先考虑把几个标量打包进同一个 `float4` 的 xyzw。
-- 内存与槽数成正比：值数组每个实例 `16 × SLOTS` 字节，GPU 记录同理；`Sprite_Item` / `Model_Item` 本身不含字段数值，
+- 内存与槽数成正比：值数组每个实例 `16 × slots` 字节，GPU 记录同理；`Sprite_Item` / `Model_Item` 本身不含字段数值，
   不会因为上限变大而变大。
 - `Instance_Values`（逐个绘制用）是固定大小的小结构，最多容纳 16 个槽位。
 
@@ -126,7 +125,7 @@ materials := mat.Material_Library{device = device, storage = &resources}
 // 清单与各 Pass 的 spv / dxil / msl 都由 tools/shaders 生成；库按驱动选择后端并登记。
 reason := mat.material_register_manifest(&materials, #load("Hero.shader.json"), passes)
 material, reason := mat.material_load(&materials, "materials/hero.json")
-// 检查 reason 后将 material 传给 r2d.sprite_draw 或赋给 r3d.Model.material。
+// 检查 reason 后将 material 传给 r2d.sprite_draw 或 r3d.model_draw。
 ```
 
 `passes` 是 `[]mat.Pass_Binaries`，与清单里的 Pass 一一对应（见 `olib_sample/src/material3d/shaders.odin`）。
@@ -259,10 +258,10 @@ passes := []mat.Pass_Desc{
 参数值，**不打包 Shader 或 Pass 定义**；运行时资源表必须能把这个名字解析为随游戏发布的同一份定义。
 多个 Pass 引用相同参数组时共用该组数值，可用 Pass.values 固定区分。
 
-GPU 执行见 [rendering3d](../3d/README.md#模型材质执行)。完整实例见
+GPU 执行见 [rendering3d 的 model_material_draw](../3d/REFERENCE.md#model_material_drawshader-lab-的底层入口)。完整实例见
 `olib_sample/src/material3d`，Shader/参数的唯一来源是 `olib_sample/src/shader_lab`。
 游戏业务默认使用 [Material_Library](README.md#公共材质资源)：
-`material_load` 自动解析效果并加载 Shader/纹理，赋给 `Model.material` 后调用 `model_draw`。
+`material_load` 自动解析效果并加载 Shader/纹理，之后直接传给 `model_draw`。
 这里的 Instance 编解码接口留给资源层和工具使用，不要求每个游戏手动组装 GPU 绑定。
 
 2D 使用 `.Sprite` Pass，与 `.Model` 共用 Instance、资源格式和公共加载器。

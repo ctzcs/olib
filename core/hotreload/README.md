@@ -176,4 +176,4 @@ odin run tools/check
 ```
 
 保留无窗口单元测试与构建检查。交互示例位于同级 olib_sample，运行
-`run.bat hotreload` 后可手动修改 UI/玩法体验热重载。
+`run.bat hotreload` 后可手动修改最小示例的 `game/game.odin` 体验热重载。

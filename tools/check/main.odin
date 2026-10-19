@@ -136,7 +136,7 @@ main :: proc() {
 					run(&c, "sample hotreload game DLL",
 						"odin", "build", path_join(s.path, "game"), "-build-mode:dll",
 						fmt.tprintf("-collection:olib=%s", c.root), "-vet",
-						"-vet-packages:game,view,logic,data,def,contract",
+						"-vet-packages:game,contract",
 						fmt.tprintf("-out:%s/sample_hotreload_game.%s", c.out, extension))
 				}
 				if s.has_tests {

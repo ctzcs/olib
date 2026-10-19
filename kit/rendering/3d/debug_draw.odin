@@ -7,6 +7,7 @@
 package rendering3d
 
 import "core:math"
+import "base:builtin"
 import "core:math/linalg"
 
 import dasset "olib:core/dasset"
@@ -79,7 +80,7 @@ debug_draw_line_count :: proc(d: ^Debug_Draw_3D) -> int {
 }
 
 debug_draw_clear :: proc(d: ^Debug_Draw_3D) {
-	clear(&d.vertices)
+	builtin.clear(&d.vertices)
 }
 
 // ------------------------------------------------------------------------------

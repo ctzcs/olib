@@ -7,14 +7,6 @@ import foster "olib:foster"
 import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
 
-// 一帧的绘制视图：颜色/深度目标、相机 VP 与时间（着色器的 Clock）。
-View :: struct {
-	target: foster.DrawableTarget,
-	view_projection: world.Matrix4,
-	time, delta_time: f32,
-	frame: u64,
-}
-
 // ------------------------------------------------------------------------------
 // 绘制入口 —— 业务只提供材质、网格、变换与当前视图。
 // ------------------------------------------------------------------------------

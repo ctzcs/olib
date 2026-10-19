@@ -290,6 +290,52 @@ lod_world_sphere_is_conservative :: proc(t: ^testing.T) {
 
 // 实例缓冲的布局约定：每实例 世界矩阵 + tint + 字段，没有字段时 Model_Item 与缓冲同一布局可直接上传。
 @(test)
+render3d_views_preserve_records :: proc(t: ^testing.T) {
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	r := Render3D{library = &library}
+	defer dispose(&r)
+	shader: foster.Shader
+	shader.Resource = cast(type_of(shader.Resource))uintptr(1) // 仅验证绑定；不调用 GPU
+	fragment := shader
+	fragment.Stage = .Fragment
+	gpu: foster.Material
+	foster.MaterialInitWithShaders(&gpu, &shader, &fragment)
+	defer foster.MaterialDispose(&gpu)
+	effect := mat.Material_Effect{desc = {passes = []mat.Pass_Desc{
+		{id = "body", params = "Body", draw = .Model},
+		{id = "off", params = "Body", draw = .Model, disabled = true}}}}
+	material := mat.Material{owner = &library, effect = &effect,
+		bindings = []mat.Material_Binding{{schema = {name = "Body"}, material = &gpu}}}
+	mesh := foster.Mesh{GraphicsDevice = &device}
+	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
+	bounds := dasset.Dasset_Bounds{min = {-0.1, -0.1, -0.1}, max = {0.1, 0.1, 0.1}}
+	positions := []f32{0, 4}
+	for x in positions {
+		testing.expect_value(t, model(&r, &mesh, &material,
+			world.matrix4_translation(x, 0, 0.5), &bounds), mat.Draw_Error.None)
+	}
+	bounds.max = {} // 调用者改原数据不影响记录
+	view := View{view_projection = world.MATRIX4_IDENTITY}
+	testing.expect_value(t, render3d_prepare(&r, view, "body"), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.queue.items), 1)
+	testing.expect_value(t, r.queue.items[0].payload, 0)
+	view.view_projection = world.matrix4_translation(-4, 0, 0)
+	testing.expect_value(t, render3d_prepare(&r, view, "body"), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.queue.items), 1)
+	testing.expect_value(t, r.queue.items[0].payload, 1)
+	testing.expect_value(t, len(r.records), 2)
+	testing.expect_value(t, render3d_prepare(&r, view, "off"), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.queue.items), 0)
+	testing.expect_value(t, render3d_prepare(&r, view, "typo"), mat.Draw_Error.Unknown_Pass)
+	testing.expect_value(t, submit(&r, view), mat.Draw_Error.Invalid_Target)
+	testing.expect_value(t, len(r.records), 2)
+	clear(&r)
+	testing.expect_value(t, len(r.records), 0)
+	testing.expect_value(t, submit(&r, view, "body"), mat.Draw_Error.None)
+}
+
+@(test)
 instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	testing.expect_value(t, model_stride(0), 80)
 	testing.expect_value(t, model_stride(2), 112)

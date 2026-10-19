@@ -6,6 +6,7 @@
 package rendering3d
 
 import "core:math"
+import "base:builtin"
 
 import world "olib:kit/world"
 
@@ -47,7 +48,7 @@ queue_submit :: proc(q: ^Render_Queue($T), payload: T, view_depth: f32, transpar
 // 稳定 O(n log n) 归并；工作区跨帧复用。默认仍是不透明前到后、透明后到前。
 // grouped 时不透明组按最近深度排列，组内前到后；透明始终全局后到前。
 queue_sort :: proc(q: ^Render_Queue($T), grouped: bool = false) {
-	clear(&q.group_depths)
+	builtin.clear(&q.group_depths)
 	if grouped {
 		for item in q.items {
 			if item.transparent do continue
@@ -77,7 +78,7 @@ queue_sort :: proc(q: ^Render_Queue($T), grouped: bool = false) {
 }
 
 queue_clear :: proc(q: ^Render_Queue($T)) {
-	clear(&q.items)
+	builtin.clear(&q.items)
 }
 
 queue_dispose :: proc(q: ^Render_Queue($T)) {

@@ -1,5 +1,8 @@
 # Plan：重做 kit/rendering/3d 的公开 API
 
+> **状态：已完成（2026-10-19）** · 提交 `45cfdbd`..`adc5dfb`（olib_sample：`03af8a9`..`fa29fcd`）
+> 偏离：① 前置步骤要提交的实例缓冲改动已由用户以另一种实现提交为 `5525113`（单缓冲按块拼接），本计划没有再提交；改动前的基准检查与截图是在该提交之前的工作区上跑的。② `mat.std140_write_matrix` 改为接受任意 64 字节矩阵（`$M where size_of(M) == 64`）：material 被 `tools/shaders` 以相对路径引用，不能 import `kit/world`。③ LOD：只变换 min/max 对平移、旋转、均匀缩放其实是正确的（包围球的球心和半对角线都保留），只有“旋转 + 非均匀缩放”会低估；修法改为用 8 个角点求变换后的包围球（新增私有 `lod_world_sphere` / `lod_sphere_screen_height`），而不是计划写的 8 角点 AABB。④ 顺带把 `debug_draw_expand`、`debug_line_format` 也改为私有。⑤ `model_draw` 没有另加 nil 网格检查，`mat.material_draw` 已返回 `.Missing_Mesh`。⑥ 文档复查：`model_material_draw` 除 REFERENCE.md 外，还作为底层入口的指引保留在 3D README 文件表、2D README、material README 与 shader_lab README。⑦ material2d 的 `swarm_init` 去掉了用不到的 device 参数。⑧ 截图：material3d_swarm 与 forward3d 与改动前逐像素一致；material3d 的颜色随真实帧时间变化，同一版本两次运行的差异像素数也相同，肉眼对比一致。
+
 ## 背景
 
 `kit/rendering/3d` 经过“只保留机制”（archive/rendering3d-mechanism-only.md）和材质系统接入两轮改动后，

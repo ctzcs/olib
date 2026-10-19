@@ -23,7 +23,7 @@ Sprite_Item :: struct {
 	transform: foster.Matrix3x2,
 	rect: [4]f32, // 局部 x0, y0, 宽, 高（像素，已减去锚点）
 	uv: [4]f32, // u0, v0, 宽, 高
-	padding: [2]f32, // 凑满第 4 个 float4，不要使用
+	_: [2]f32, // GPU 布局的保留字节，由 sprite_item_make 置零
 	tint: [4]f32,
 }
 #assert(size_of(Sprite_Item) == 80 && offset_of(Sprite_Item, rect) == 24 &&

@@ -126,44 +126,44 @@ builtin_icons_catalog_bounds :: proc(t: ^testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Sprite 动画采样
+// Animation_Set 动画采样
 // ---------------------------------------------------------------------------
 
 @(test)
-sprite_get_frame_at_walks :: proc(t: ^testing.T) {
-	sprite: Sprite
-	sprite_init(&sprite, "coin")
-	defer sprite_dispose(&sprite)
+animation_set_get_frame_at_walks :: proc(t: ^testing.T) {
+	sprite: Animation_Set
+	animation_set_init(&sprite, "coin")
+	defer animation_set_dispose(&sprite)
 
 	// 3 帧：0.1s / 0.2s / 0.3s，动画覆盖全部
 	durations := [3]f32{0.1, 0.2, 0.3}
 	for i in 0..<3 {
-		sprite_add_frame(&sprite, foster.SubtextureEmpty, durations[i])
+		animation_set_add_frame(&sprite, foster.SubtextureEmpty, durations[i])
 	}
-	sprite_add_animation(&sprite, "spin", 0, 3)
+	animation_set_add_animation(&sprite, "spin", 0, 3)
 
-	anim := sprite_get_animation(&sprite, "spin")
+	anim := animation_set_get_animation(&sprite, "spin")
 	if !testing.expectf(t, anim != nil, "应找到动画") { return }
 	testing.expectf(t, anim.duration == 0.6, "总时长 0.6: %v", anim.duration)
 
 	// 各帧中点采样
 	cases := [3]f32{0.05, 0.2, 0.45}
 	for i in 0..<3 {
-		frame, ok := sprite_get_frame_at(&sprite, anim, cases[i], true)
+		frame, ok := animation_set_get_frame_at(&sprite, anim, cases[i], true)
 		index := frame_duration_index(durations, frame.duration)
 		testing.expectf(t, ok && index == i, "t=%v 应命中帧 %d, 实际 %d", cases[i], i, index)
 	}
 
 	// loop：循环回绕到第 0 帧
-	wrap, ok := sprite_get_frame_at(&sprite, anim, 0.65, true)
+	wrap, ok := animation_set_get_frame_at(&sprite, anim, 0.65, true)
 	testing.expect(t, ok && wrap.duration == durations[0])
 
 	// 不循环：超出夹到最后帧
-	clamp, ok2 := sprite_get_frame_at(&sprite, anim, 99, false)
+	clamp, ok2 := animation_set_get_frame_at(&sprite, anim, 99, false)
 	testing.expect(t, ok2 && clamp.duration == durations[2])
 
 	// 未知动画名
-	testing.expect(t, sprite_get_animation(&sprite, "nope") == nil)
+	testing.expect(t, animation_set_get_animation(&sprite, "nope") == nil)
 }
 
 @(private)

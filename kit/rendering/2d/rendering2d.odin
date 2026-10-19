@@ -8,7 +8,7 @@
 //   render2d.odin       Render2D：2D 唯一的绘制入口（记录后统一提交，olib 材质，含 UI）
 //   render2d_tool.odin  Shader Lab 的立即绘制入口 material_draw
 //   sprite_buffer.odin  常驻显存的精灵实例缓冲（r2d.buffer 绘制）
-//   sprite.odin         帧动画集合（图集子图 + 时长 + 命名动画）
+//   animation_set.odin  帧动画集合（图集子图 + 时长 + 命名动画）
 //
 // 图集与帧动画用 Foster 的 Subtexture / Packer / Aseprite；绘制不使用 foster.Batcher。
 package rendering2d

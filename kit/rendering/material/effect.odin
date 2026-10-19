@@ -85,7 +85,12 @@ Effect_Desc :: struct {
 	// 每个绘制对象的 tint 与 [Instance] 字段随顶点传入（见 hlsl 的 OlibInstance），不同取值可合批。
 	// Sprite 与 Model 效果支持；模型需要用调用方持有的实例缓冲绘制（见 3d 包的 Model_Buffer）。
 	instanced: bool,
+	// uniform 布局：Olib 为 .oshader 约定（顶点 b0 投影/矩阵块，片元 b0 Clock/Pointer/Tint、b1 参数）；
+	// Foster 为借用 foster 默认 Shader 的内置效果（顶点 b0 矩阵，片元 b0 直接放参数，没有帧块）。
+	uniforms: Uniform_Layout,
 }
+
+Uniform_Layout :: enum { Olib, Foster }
 
 // 效果使用的 per-instance 接口种类，供 hlsl 与绘制路径选择。
 effect_instancing :: proc(e: Effect_Desc) -> Instancing {
@@ -276,7 +281,7 @@ effect_clone :: proc(e: Effect_Desc) -> Effect_Desc {
 	r := Effect_Desc{
 		name = clone_text(e.name), output = clone_text(e.output), label = clone_text(e.label),
 		preview = clone_text(e.preview), passes = make([]Pass_Desc, len(e.passes)),
-		instanced = e.instanced,
+		instanced = e.instanced, uniforms = e.uniforms,
 	}
 	for p, i in e.passes {
 		q := &r.passes[i]

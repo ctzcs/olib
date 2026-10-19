@@ -126,22 +126,54 @@ material_replace :: proc(library: ^Material_Library, material: ^Material, file: 
 	next.instance, next.effect, reason = material_read(library, source)
 	defer material_instance_clear(&next)
 	if reason != "" do return reason
-	if !material_effect_prepare(library, next.effect) do return "Cannot prepare material shaders"
-	if reason = material_white_texture(library); reason != "" do return reason
-	next.source = strings.clone(source)
-	next.bindings = make([]Material_Binding, len(next.instance.groups))
-	next.samplers = make([][MAX_TEXTURES]foster.BoundSampler, len(next.instance.groups))
-	for group, i in next.instance.groups {
-		count: int
-		count, reason = material_group_samplers(library, source, group, &next.samplers[i])
-		if reason != "" do return reason
-		for schema, j in next.effect.schemas {
-			if schema.name != group.schema.name do continue
-			next.bindings[i] = {group.schema, group.values, &next.effect.gpu[j], next.samplers[i][:count]}
-		}
-	}
+	if reason = material_bind(library, &next, source); reason != "" do return reason
 	material_instance_clear(material)
 	material^, next = next, {}
+	return ""
+}
+
+// 用默认参数值在代码里创建材质实例，不读材质文件；内置效果（BUILTIN_SPRITE / BUILTIN_TEXT）首次使用时自动登记。
+// 数值用 material_set_number 修改；没有来源文件，material_reload 会返回错误。指针借用至 material_library_dispose。
+material_create :: proc(library: ^Material_Library, effect_name: string) -> (^Material, string) {
+	if library == nil do return nil, "Missing material library"
+	if builtin_is(effect_name) {
+		if reason := builtin_register(library, effect_name); reason != "" do return nil, reason
+	}
+	effect: ^Material_Effect
+	for candidate in library.effects {
+		if candidate.desc.name == effect_name do effect = candidate
+	}
+	if effect == nil do return nil, fmt.tprintf("Unknown material effect: %s", effect_name)
+	next := Material{owner = library, effect = effect}
+	reason: string
+	next.instance, reason = instance_make(effect.desc, effect.schemas)
+	if reason == "" do reason = material_bind(library, &next, "")
+	if reason != "" {
+		material_instance_clear(&next)
+		return nil, reason
+	}
+	result := new(Material)
+	result^ = next
+	append(&library.instances, result)
+	return result, ""
+}
+
+// 准备效果的 GPU 资源并按参数组建立绑定；贴图路径相对于 source（为空时相对于容器根）。
+@(private)
+material_bind :: proc(library: ^Material_Library, material: ^Material, source: string) -> string {
+	if !material_effect_prepare(library, material.effect) do return "Cannot prepare material shaders"
+	if reason := material_white_texture(library); reason != "" do return reason
+	material.source = strings.clone(source)
+	material.bindings = make([]Material_Binding, len(material.instance.groups))
+	material.samplers = make([][MAX_TEXTURES]foster.BoundSampler, len(material.instance.groups))
+	for group, i in material.instance.groups {
+		count, reason := material_group_samplers(library, source, group, &material.samplers[i])
+		if reason != "" do return reason
+		for schema, j in material.effect.schemas {
+			if schema.name != group.schema.name do continue
+			material.bindings[i] = {group.schema, group.values, &material.effect.gpu[j], material.samplers[i][:count]}
+		}
+	}
 	return ""
 }
 

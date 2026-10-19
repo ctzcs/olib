@@ -18,7 +18,7 @@ import world "olib:kit/world"
 View :: struct {
 	target: foster.DrawableTarget,
 	view_projection: world.Matrix4,
-	view_matrix: world.Matrix4, // 零值按单位矩阵处理；排序与调试线朝向使用它
+	view_matrix: world.Matrix4, // 必填（如 camera3d_view）：排序深度与调试线朝向使用它；零矩阵 submit 返回错误
 	draw_debug: Maybe(bool), // 未指定为 true；显式 false 可用于阴影阶段
 	time, delta_time: f32,
 	frame: u64,
@@ -272,11 +272,6 @@ render3d_world_bounds :: proc(bounds: dasset.Dasset_Bounds,
 	return result, true
 }
 
-@(private)
-render3d_view_matrix :: proc(view: View) -> world.Matrix4 {
-	return view.view_matrix == (world.Matrix4{}) ? world.MATRIX4_IDENTITY : view.view_matrix
-}
-
 // 每次从完整记录生成可见队列；Pass 是否存在在剔除之前判断。
 @(private)
 render3d_prepare :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id) -> mat.Draw_Error {
@@ -298,7 +293,7 @@ render3d_prepare :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id) -> mat.
 	}
 	if !found do return .Unknown_Pass
 	frustum := world.frustum_from_view_projection(view.view_projection)
-	view_matrix := render3d_view_matrix(view)
+	view_matrix := view.view_matrix
 	for record, i in r.records {
 		source := &r.sources[record.source]
 		if source.count == 0 do continue
@@ -328,6 +323,8 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 	if len(r.records) == 0 && (!draw_debug || len(r.debug.vertices) == 0) do return .None
 	if r.library == nil || r.library.device == nil do return .Missing_Device
 	if view.target.WidthInPixels <= 0 || view.target.HeightInPixels <= 0 do return .Invalid_Target
+	// 零矩阵不是有效视矩阵；不悄悄当成单位矩阵，否则透明排序与调试线朝向会无声地出错。
+	if view.view_matrix == (world.Matrix4{}) do return .Missing_View_Matrix
 	if error := render3d_prepare(r, view, pass_id); error != .None do return error
 	// 完整预检后再发 Draw；错误保留所有记录。
 	for item in r.queue.items {
@@ -340,6 +337,8 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 			if buf.buffer.Base.Resource == nil || buf.capacity < record.count do return .Instance_Buffer_Required
 			if buf.buffer.Base.GraphicsDevice != r.library.device do return .Device_Mismatch
 			if buf.slots != mat.instance_slot_count(source.material) do return .Instance_Mismatch
+		} else if source.material.effect.desc.instanced && render3d_instance_buffer(r, source.material) == nil {
+			return .Instance_Buffer_Required // 临时实例缓冲创建失败
 		}
 		for i in source.selected[:source.count] {
 			snapshot := &r.snapshots[source.snapshot + i]
@@ -389,16 +388,25 @@ render3d_batch_end :: proc(r: ^Render3D, start: int) -> int {
 	return end
 }
 
+// 自动实例化用的临时缓冲，按 [Instance] 字段数各一个，首次需要时创建；失败返回 nil。
+// submit 在预检阶段调用，保证发 Draw 之前缓冲已就绪。
+@(private)
+render3d_instance_buffer :: proc(r: ^Render3D, m: ^mat.Material) -> ^Model_Buffer {
+	slots := mat.instance_slot_count(m)
+	if slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return nil
+	buf := &r.buffers[slots]
+	if buf.capacity == 0 && model_buffer_init(buf, m, 64, "render3d instances") != "" do return nil
+	return buf
+}
+
 @(private)
 render3d_upload :: proc(r: ^Render3D, start, end, pass: int) -> ^Model_Buffer {
 	first := r.records[r.queue.items[start].payload]
 	m := r.sources[first.source].material
 	slots := mat.instance_slot_count(m)
-	buf := &r.buffers[slots]
+	buf := &r.buffers[slots] // 预检阶段已创建
 	count := end - start
-	if buf.capacity == 0 {
-		assert(model_buffer_init(buf, m, max(count, 64), "render3d instances") == "")
-	} else if buf.capacity < count {
+	if buf.capacity < count {
 		buf.capacity = max(count, buf.capacity * 2)
 		foster.VertexBufferReserve(&buf.buffer, buf.capacity)
 	}

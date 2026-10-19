@@ -148,15 +148,15 @@ text, reason := mat.material_create(&materials, "Text_Msdf")
 mat.material_set_number(text, "Text_Msdf", "distance_range", {4, 0, 0, 0})
 ```
 
-内置效果首次使用时自动登记，直接借用设备的默认 Shader（含 Web GLSL），库只释放材质实例。
+内置效果首次使用时自动登记，直接借用设备的默认 Shader（foster 已按驱动选好，含 Web 的手写 GLSL），库只释放材质实例。
 每种字体可以有独立的 Text_Msdf 实例。material_create 也支持已登记的自定义效果，
 每次创建独立参数、沿用声明默认值；material_library_dispose 统一释放。
 
-`Shader_Binaries { spv, dxil, msl, glsl }` 按驱动选择代码；Private（WebGL2）选 glsl，
-缺少对应格式返回空切片，登记失败。GLSL 必须手写，tools/shaders 不自动转换。
-Web 仅支持 Foster uniform 布局（矩阵与 MSDF distance_range）；普通 Olib Clock/参数块、
-实例 storage buffer 和实例缓冲在登记时返回明确错误，不进入 GPU 创建。
-因此添加 GLSL 源码本身并不能让普通 .oshader 材质在 Web 可用。
+`Shader_Binaries { spv, dxil, msl }` 按驱动选择 tools/shaders 的产物，缺少对应格式返回空切片，登记失败。
+Web 构建（`ODIN_OS == .JS`）没有预编译字节码：`shader_driver_supported` 返回 false，
+`.oshader` 材质登记时返回 "Unsupported shader backend"；直接调用 material_register 时，
+Web 只接受 Foster uniform 布局（矩阵与一个片元 float），Olib Clock/参数块、[Instance] 与实例缓冲都返回明确错误。
+原生的 Private 驱动需要平台私有格式，同样不支持。
 
 `Pass_Binaries.instanced_vertex` 是 Sprite 常驻缓冲的顶点变体；普通批量用 vertex，
 两种变体共用 fragment。自定义效果代码借用到材质库释放，内置 Shader 归设备所有。

@@ -86,12 +86,8 @@ material_effect_gpu_clear :: proc(effect: ^Material_Effect) {
 
 material_register :: proc(library: ^Material_Library, effect: Effect_Desc,
 	schemas: []Schema, code: []Material_Shader_Code) -> string {
-	if library.device != nil && library.device.Driver == .Private {
-		for schema in schemas {
-			if instance_count(schema) > 0 do return "Web does not support Instance storage buffers"
-		}
-		if effect.instanced do return "Web does not support instanced materials"
-		if effect.uniforms != .Foster do return "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported"
+	when ODIN_OS == .JS {
+		if reason := material_web_check(effect, schemas); reason != "" do return reason
 	}
 	if !effect_is_material(effect) do return "Expected Model or Sprite material effect"
 	if len(schemas) != len(code) do return "Shader code count differs from schema count"
@@ -118,6 +114,18 @@ material_register :: proc(library: ^Material_Library, effect: Effect_Desc,
 	copy(entry.code, code)
 	for schema, i in schemas do entry.schemas[i] = schema_clone(schema)
 	append(&library.effects, entry)
+	return ""
+}
+
+// Web 后端只支持 foster 的 uniform 布局（矩阵与一个片元 float），没有 storage buffer 与实例缓冲。
+// 只在 Web 构建时调用；独立成函数以便在桌面上测试。
+@(private)
+material_web_check :: proc(effect: Effect_Desc, schemas: []Schema) -> string {
+	for schema in schemas {
+		if instance_count(schema) > 0 do return "Web does not support Instance storage buffers"
+	}
+	if effect.instanced do return "Web does not support instanced materials"
+	if effect.uniforms != .Foster do return "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported"
 	return ""
 }
 

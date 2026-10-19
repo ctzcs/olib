@@ -58,7 +58,7 @@ err = r3d.submit(&renderer, main_view, "outline")
 ```
 
 目标创建、清理和阶段间资源绑定由游戏负责。View 也可直接填写游戏自己的正交矩阵；
-省略 view_matrix 按单位矩阵处理，不能用它代替实际相机的视矩阵。
+view_matrix 必填（相机用 `world.camera3d_view`）：排序深度和调试线朝向都靠它，零矩阵时 submit 返回 `.Missing_View_Matrix`。
 draw_debug 未指定时开启；调试线在模型之后画，默认深度测试、不写深度，不参与材质 Pass。
 线宽和深度开关在 `renderer.debug.thickness / depth_test_enabled`，还有 `sphere / frustum / axis / grid / skeleton`。
 

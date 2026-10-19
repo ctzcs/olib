@@ -60,8 +60,8 @@ err = r2d.image(&renderer, frame, transform, material = material, values = &cool
 - submit 后记录与栈全部清空，失败也清空；reset 可主动丢弃。另一个目标需要重新记录。
   `renderer.draw_calls` 是最近一次提交的 Draw 数；Clock 来自提交时的 View。
 
-内置精灵和 MSDF 文字支持 Web。自定义 GLSL 受 Foster Web uniform 布局限制，
-`[Instance]` 和常驻实例缓冲不支持 Web；不支持的效果登记时返回原因，见 [材质后端](../material/README.md#内置效果与-web)。
+内置精灵和 MSDF 文字支持 Web。`.oshader` 自定义效果、`[Instance]` 和常驻实例缓冲不支持 Web；
+不支持的效果登记时返回原因，见 [材质后端](../material/README.md#内置效果与-web)。
 
 ## 大量精灵：常驻缓冲
 

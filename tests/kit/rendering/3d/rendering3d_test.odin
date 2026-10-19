@@ -316,7 +316,7 @@ render3d_views_preserve_records :: proc(t: ^testing.T) {
 			world.matrix4_translation(x, 0, 0.5), &bounds), mat.Draw_Error.None)
 	}
 	bounds.max = {} // 调用者改原数据不影响记录
-	view := View{view_projection = world.MATRIX4_IDENTITY}
+	view := View{view_projection = world.MATRIX4_IDENTITY, view_matrix = world.MATRIX4_IDENTITY}
 	testing.expect_value(t, render3d_prepare(&r, view, "body"), mat.Draw_Error.None)
 	testing.expect_value(t, len(r.queue.items), 1)
 	testing.expect_value(t, r.queue.items[0].payload, 0)
@@ -329,6 +329,11 @@ render3d_views_preserve_records :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(r.queue.items), 0)
 	testing.expect_value(t, render3d_prepare(&r, view, "typo"), mat.Draw_Error.Unknown_Pass)
 	testing.expect_value(t, submit(&r, view), mat.Draw_Error.Invalid_Target)
+	// 零视矩阵不当成单位矩阵：有记录时明确报错，记录保留。
+	missing := view
+	missing.target.WidthInPixels, missing.target.HeightInPixels = 4, 4
+	missing.view_matrix = {}
+	testing.expect_value(t, submit(&r, missing), mat.Draw_Error.Missing_View_Matrix)
 	testing.expect_value(t, len(r.records), 2)
 	clear(&r)
 	testing.expect_value(t, len(r.records), 0)
@@ -413,7 +418,7 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(r.sources), 1) // 实例值不进入合批键
 	testing.expect_value(t, r.values[6][0], f32(0.2)) // nil 使用材质默认值
 	line(&r, {0, 0, 0}, {1, 0, 0}, {1, 1, 1, 1})
-	view := View{view_projection = world.MATRIX4_IDENTITY}
+	view := View{view_projection = world.MATRIX4_IDENTITY, view_matrix = world.MATRIX4_IDENTITY}
 	testing.expect_value(t, render3d_prepare(&r, view, "body"), mat.Draw_Error.None)
 	testing.expect_value(t, render3d_batch_end(&r, 0), 2)
 	testing.expect_value(t, render3d_prepare(&r, view, "glass"), mat.Draw_Error.None)

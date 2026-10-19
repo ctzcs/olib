@@ -56,6 +56,7 @@ Draw_Error :: enum {
 	Not_Instanced_Effect,   // 用实例缓冲绘制，但效果没有声明 instanced
 	Instance_Mismatch,      // 实例缓冲的字段数与效果的 [Instance] 字段数不一致
 	Unsupported_Mesh,       // 网格顶点格式不是模型材质路径支持的静态格式（例如蒙皮网格）
+	Missing_View_Matrix,    // 3D 视图没有设置视矩阵（view_matrix 为零矩阵）
 }
 
 draw_error_text :: proc(error: Draw_Error) -> string {
@@ -78,6 +79,7 @@ draw_error_text :: proc(error: Draw_Error) -> string {
 	case .Not_Instanced_Effect: return "Effect is not instanced; it cannot use an instance buffer"
 	case .Instance_Mismatch: return "Instance buffer field count differs from the effect's Instance fields"
 	case .Unsupported_Mesh: return "Model materials only support the static vertex format"
+	case .Missing_View_Matrix: return "3D view needs a view matrix (for example camera3d_view)"
 	}
 	return ""
 }

@@ -47,9 +47,14 @@ material_create_reports_unknown_effects :: proc(t: ^testing.T) {
 	material, reason = material_create(&library, BUILTIN_TEXT)
 	testing.expect(t, material == nil && reason == "Missing graphics device")
 	testing.expect_value(t, len(library.instances), 0)
-	device := foster.GraphicsDevice{Driver = .Private}
-	library.device = &device
+}
+
+// Web 构建登记效果时的限制（material_register 只在 ODIN_OS == .JS 时调用它）。
+@(test)
+web_check_rejects_unsupported_effects :: proc(t: ^testing.T) {
 	schemas := []Schema{{fields = []Field{{kind = .Scalar, instance = true}}}}
-	testing.expect_value(t, material_register(&library, {}, schemas, nil), "Web does not support Instance storage buffers")
-	testing.expect_value(t, material_register(&library, {}, nil, nil), "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported")
+	testing.expect_value(t, material_web_check({}, schemas), "Web does not support Instance storage buffers")
+	testing.expect_value(t, material_web_check({instanced = true}, nil), "Web does not support instanced materials")
+	testing.expect_value(t, material_web_check({}, nil), "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported")
+	testing.expect_value(t, material_web_check({uniforms = .Foster}, nil), "")
 }

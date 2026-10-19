@@ -99,9 +99,10 @@ draw_error_text_covers_every_error :: proc(t: ^testing.T) {
 
 @(test)
 shader_pick_follows_driver :: proc(t: ^testing.T) {
-	binaries := Shader_Binaries{spv = {1}, dxil = {2}, msl = {3}, glsl = {4}}
-	testing.expect_value(t, shader_pick(.Private, binaries)[0], 4)
-	testing.expect_value(t, len(shader_pick(.Private, {spv = {1}})), 0)
+	binaries := Shader_Binaries{spv = {1}, dxil = {2}, msl = {3}}
+	// 原生 Private 驱动需要平台私有格式，olib 不提供。
+	testing.expect_value(t, len(shader_pick(.Private, binaries)), 0)
+	testing.expect(t, !shader_driver_supported(.Private))
 	testing.expect_value(t, shader_pick(.Vulkan, binaries)[0], 1)
 	testing.expect_value(t, shader_pick(.D3D12, binaries)[0], 2)
 	testing.expect_value(t, shader_pick(.Metal, binaries)[0], 3)

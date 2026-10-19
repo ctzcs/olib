@@ -270,7 +270,7 @@ debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, came
 debug_draw_submit :: proc(d: ^Debug_Draw_3D, view: View) {
 	if !d.has_gpu || len(d.vertices) == 0 do return
 	builtin.clear(&d.expanded)
-	inverse, ok := world.matrix4_inverse(render3d_view_matrix(view))
+	inverse, ok := world.matrix4_inverse(view.view_matrix)
 	if !ok do inverse = world.MATRIX4_IDENTITY
 	position := [3]f32{inverse.c0[3], inverse.c1[3], inverse.c2[3]}
 	projection := world.matrix4_multiply(inverse, view.view_projection)

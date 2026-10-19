@@ -11,6 +11,7 @@ import "core:strings"
 
 import foster "olib:foster"
 import r2d "olib:kit/rendering/2d"
+import mat "olib:kit/rendering/material"
 import r3d "olib:kit/rendering/3d"
 import dev "olib:kit/rendering/shader/dev"
 import ui "olib:kit/ui"
@@ -19,7 +20,10 @@ import clay "olib:thirdparty/clay-odin"
 
 Session :: struct {
 	device: ^foster.GraphicsDevice,
-	sprite_renderer: r2d.Sprite_Renderer,
+	// 2D 材质预览：Render2D 借用这个库的设备与默认材质；sprite_mesh 是 BatcherVertex 布局的空网格，供管线探测。
+	library: mat.Material_Library,
+	render: r2d.Render2D,
+	sprite_mesh: foster.Mesh,
 	font: ^foster.MsdfFont, // 借用宿主字体，宿主须在 dispose 后释放。
 	icons: ^r2d.Sprite_Atlas,
 	owned_icons: r2d.Sprite_Atlas,
@@ -125,7 +129,14 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	dev.parameters_init(&s.parameter_watch, s.source_root)
 	foster.BatcherInit(&s.batch, device)
 	foster.BatcherInit(&s.compose, device)
-	r2d.sprite_renderer_init(&s.sprite_renderer, device)
+	s.library = {device = device}
+	if reason := r2d.init(&s.render, &s.library); reason != "" {
+		fmt.eprintln("Shader Lab:", reason)
+		return false
+	}
+	sprite_format := foster.BatcherVertexFormat()
+	defer foster.VertexFormatDispose(&sprite_format)
+	foster.MeshInitWithFormat(&s.sprite_mesh, device, sprite_format, .ThirtyTwo, "sprite probe")
 	format := foster.VertexFormatMake([]foster.VertexElement{{0, .Float2, false},
 		{1, .Float2, false}}, size_of(Vertex2D))
 	defer foster.VertexFormatDispose(&format)
@@ -177,7 +188,9 @@ dispose :: proc(s: ^Session) {
 	delete(s.bank_error)
 	dev.parameters_dispose(&s.parameter_watch)
 	for &mesh in s.meshes do foster.MeshDispose(&mesh)
-	r2d.sprite_renderer_dispose(&s.sprite_renderer)
+	r2d.dispose(&s.render)
+	foster.MeshDispose(&s.sprite_mesh)
+	mat.material_library_dispose(&s.library)
 	foster.BatcherDispose(&s.batch)
 	foster.BatcherDispose(&s.compose)
 	ui.ui_dispose(&s.ctx)

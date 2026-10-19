@@ -14,6 +14,7 @@ import foster "../../../foster"
 // 使用当前设备后端的预编译代码；借用字节至 material_library_dispose，通常来自 #load。
 Material_Shader_Code :: struct {
 	vertex, fragment: []u8,
+	instanced_vertex: []u8, // instanced 精灵效果的缓冲变体顶点，供常驻 Sprite_Buffer；其余效果为空
 }
 
 Material_Library :: struct {
@@ -31,6 +32,7 @@ Material_Effect :: struct {
 	schemas: []Schema,
 	code: []Material_Shader_Code,
 	vertex, fragment: []foster.Shader,
+	instanced_vertex: []foster.Shader, // 只有 instanced 精灵效果有，与 gpu 同序
 	gpu: []foster.Material,
 	ready: bool,
 }
@@ -69,10 +71,12 @@ material_effect_gpu_clear :: proc(effect: ^Material_Effect) {
 	for &gpu in effect.gpu do foster.MaterialDispose(&gpu)
 	for &shader in effect.vertex do foster.ShaderDispose(&shader)
 	for &shader in effect.fragment do foster.ShaderDispose(&shader)
+	for &shader in effect.instanced_vertex do foster.ShaderDispose(&shader)
 	delete(effect.gpu)
 	delete(effect.vertex)
 	delete(effect.fragment)
-	effect.gpu, effect.vertex, effect.fragment = nil, nil, nil
+	delete(effect.instanced_vertex)
+	effect.gpu, effect.vertex, effect.fragment, effect.instanced_vertex = nil, nil, nil, nil
 	effect.ready = false
 }
 
@@ -92,6 +96,9 @@ material_register :: proc(library: ^Material_Library, effect: Effect_Desc,
 			if prior.name == schema.name do return "Duplicate shader group"
 		}
 		if len(code[i].vertex) == 0 || len(code[i].fragment) == 0 do return "Missing compiled shader code"
+		if effect.instanced && effect_is_sprite(effect) && len(code[i].instanced_vertex) == 0 {
+			return "Missing instanced sprite vertex code"
+		}
 		if texture_count(schema) > MAX_TEXTURES do return "Too many texture bindings"
 	}
 	order, reason := effect_order(effect, schemas)
@@ -114,11 +121,25 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 	effect.vertex = make([]foster.Shader, len(effect.code))
 	effect.fragment = make([]foster.Shader, len(effect.code))
 	effect.gpu = make([]foster.Material, len(effect.code))
+	sprite := effect_is_sprite(effect.desc)
+	if sprite && effect.desc.instanced do effect.instanced_vertex = make([]foster.Shader, len(effect.code))
 	for code, i in effect.code {
+		// 精灵批量变体有 [Instance] 字段时从顶点 storage buffer 读取（见 hlsl 的 Sprite_Batch）。
+		storage := sprite && instance_count(effect.schemas[i]) > 0 ? 1 : 0
 		foster.ShaderInit(&effect.vertex[i], library.device, {
-			Stage = .Vertex, Code = code.vertex, UniformBufferCount = 1,
+			Stage = .Vertex, Code = code.vertex, UniformBufferCount = 1, StorageBufferCount = storage,
 			EntryPoint = "vertex_main",
 		}, effect.schemas[i].name)
+		if effect.instanced_vertex != nil {
+			foster.ShaderInit(&effect.instanced_vertex[i], library.device, {
+				Stage = .Vertex, Code = code.instanced_vertex, UniformBufferCount = 1,
+				EntryPoint = "vertex_main",
+			}, effect.schemas[i].name)
+			if effect.instanced_vertex[i].Resource == nil {
+				material_effect_gpu_clear(effect)
+				return false
+			}
+		}
 		foster.ShaderInit(&effect.fragment[i], library.device, {
 			Stage = .Fragment, Code = code.fragment, UniformBufferCount = 2,
 			SamplerCount = texture_count(effect.schemas[i]), EntryPoint = "fragment_main",

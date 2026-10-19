@@ -51,7 +51,7 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 		{id = "body", params = "Body", draw = .Model, output = "color"},
 		{id = "outline", params = "Outline", draw = .Model, output = "color"},
 	}}
-	code := []Material_Shader_Code{{[]u8{1}, []u8{2}}, {[]u8{3}, []u8{4}}}
+	code := []Material_Shader_Code{{vertex = []u8{1}, fragment = []u8{2}}, {vertex = []u8{3}, fragment = []u8{4}}}
 	testing.expect_value(t, material_register(&library, effect, schemas, code), "")
 	testing.expect(t, material_register(&library, effect, schemas, code) != "")
 	testing.expect_value(t, len(library.effects), 1)

@@ -5,11 +5,12 @@
 //   atlas_grid.odin     等分网格来源（tilesheet，无坐标文件）
 //   atlas_kenney.odin   Kenney/Starling XML 坐标来源
 //   atlas_aseprite.odin .aseprite 目录 -> 单张图集的构建器（打包侧）
-//   sprite_draw.odin    精灵绘制入口、实例与渲染器生命周期；共用 kit/rendering/material 的材质资源
-//   sprite_material_draw.odin  合批提交、几何与 ShaderLab 集成接口
+//   render2d.odin       Render2D：2D 唯一的绘制入口（记录后统一提交，olib 材质，含 UI）
+//   render2d_tool.odin  Shader Lab 的立即绘制入口 material_draw
+//   sprite_buffer.odin  常驻显存的精灵实例缓冲（r2d.buffer 绘制）
 //   sprite.odin         帧动画集合（图集子图 + 时长 + 命名动画）
 //
-// 渲染底座全部用 Foster 现成能力：Subtexture / Packer / Aseprite / Batcher。
+// 图集与帧动画用 Foster 的 Subtexture / Packer / Aseprite；绘制不使用 foster.Batcher。
 package rendering2d
 
 import "core:strings"

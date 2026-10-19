@@ -62,14 +62,14 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 		}
 		size := f32(min(target.Width, target.Height))*0.7
 		scale := size/f32(max(texture.Width, texture.Height))
-		draw_error := r2d.sprite_material_draw(&s.sprite_renderer, e.desc, bindings, {
+		draw_error := r2d.material_draw(&s.render, e.desc, bindings, {
 			frame = foster.SubtextureFromTexture(texture),
 			origin = {f32(texture.Width)/2, f32(texture.Height)/2},
 			transform = {scale, 0, 0, scale, f32(target.Width)/2, f32(target.Height)/2},
 			view = {target = foster.DrawableTargetFromTarget(target), time = e.time,
-				delta_time = e.last_delta, frame = e.frame, pass_limit = s.preview_pass+1},
-			tint = {1, 1, 1, 1},
-			pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height},
+				delta_time = e.last_delta, frame = e.frame,
+				pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height}},
+			color = foster.White, pass_limit = s.preview_pass+1,
 			options = {enabled = e.enabled[:len(e.desc.passes)],
 				user_data = &host, prepare = material_preview_prepare, submit = material_preview_submit},
 		})

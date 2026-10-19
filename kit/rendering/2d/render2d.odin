@@ -46,6 +46,18 @@ Render2D :: struct {
 	snapshot_count: int,
 	mesh: foster.Mesh,
 	index_quads: int, // 索引缓冲已覆盖的四边形数（索引是固定的四边形图案，只在增长时重建）
+	// 带 [Instance] 字段的效果：每个精灵一组 float4，顶点 mode 字节存它的起始偏移；[0] 保留不用。submit 时上传一次。
+	instance_values: [dynamic][4]f32,
+	instance_buffer: foster.StorageBuffer,
+	instance_ready: bool,
+	// r2d.buffer 用的单位四边形角点网格，首次使用时创建。
+	corner_mesh: foster.Mesh,
+	corner_ready: bool,
+	// material_draw（Shader Lab 立即绘制）用的单个四边形与实例数值，首次使用时创建。
+	tool_mesh: foster.Mesh,
+	tool_ready: bool,
+	tool_values: foster.StorageBuffer,
+	tool_values_ready: bool,
 }
 
 Render2D_Scissor :: struct {
@@ -65,6 +77,11 @@ Render2D_Run :: struct {
 	blend: foster.BlendMode,
 	scissor: Render2D_Scissor,
 	quad_start, quad_count: int,
+	storage: bool, // 顶点从 instance_values 读 [Instance] 字段
+	// r2d.buffer 记录的常驻缓冲：不与其他记录合并，用缓冲变体顶点着色器实例化绘制。
+	buffer: ^Sprite_Buffer,
+	instance_count: int,
+	transform: [16]f32, // 记录时的变换栈，提交时乘进投影
 }
 
 // ------------------------------------------------------------------------------
@@ -95,6 +112,11 @@ dispose :: proc(r: ^Render2D) {
 	delete(r.blend_stack)
 	delete(r.mode_stack)
 	delete(r.scissor_stack)
+	delete(r.instance_values)
+	if r.instance_ready do foster.StorageBufferDispose(&r.instance_buffer)
+	if r.corner_ready do foster.MeshDispose(&r.corner_mesh)
+	if r.tool_ready do foster.MeshDispose(&r.tool_mesh)
+	if r.tool_values_ready do foster.StorageBufferDispose(&r.tool_values)
 	if r.library != nil do foster.MeshDispose(&r.mesh)
 	r^ = {}
 }
@@ -190,10 +212,7 @@ image :: proc(r: ^Render2D, frame: foster.Subtexture, transform: foster.Matrix3x
 	origin: foster.Vec2 = {}, material: ^mat.Material = nil, values: ^mat.Instance_Values = nil,
 	pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
 	if frame.Texture == nil || frame.Texture.Resource == nil do return .Missing_Sprite_Texture
-	corners: [4]foster.Vec2
-	for &corner, i in corners {
-		corner = foster.Matrix3x2TransformPoint(transform, frame.DrawCoords[i] - origin)
-	}
+	corners := render2d_frame_corners(frame, origin, transform)
 	return render2d_record(r, material, frame.Texture, corners, frame.TexCoords, {color, color, color, color}, values, pass_id)
 }
 
@@ -265,17 +284,33 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 		f32(w), f32(h), 1, 1, 1, 1}
 	for &run in r.runs {
 		effect := run.material.effect.desc
+		vertex_uniform := projection
+		// 常驻缓冲的实例在像素坐标里，记录时的变换栈（相机）在 GPU 上乘进投影。
+		if run.buffer != nil do vertex_uniform = render2d_projection_with(projection, run.transform)
 		for i in 0..<run.selection.count {
 			snapshot := &r.snapshots[run.snapshot + i]
-			foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(projection[:]), 0)
+			foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(vertex_uniform[:]), 0)
 			if effect.uniforms == .Olib {
 				foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, mem.slice_to_bytes(frame[:]), 0)
 			}
 			command: foster.DrawCommand
-			foster.DrawCommandFromMesh(&command, view.target, &r.mesh, snapshot)
-			command.IndexOffset = run.quad_start*6
-			command.IndexCount = run.quad_count*6
-			command.VertexCount = 0
+			shifted: foster.VertexBuffer
+			if run.buffer != nil {
+				// 角点网格的属性后移，让实例属性占据 0..4+slots；浅拷贝只换格式，共享 GPU 资源。
+				foster.DrawCommandFromMesh(&command, view.target, &r.corner_mesh, snapshot)
+				shifted = r.corner_mesh.VertexData
+				shifted.Format = foster.VertexFormatClone(r.corner_mesh.VertexData.Format)
+				for &element in shifted.Format.Elements do element.Index += mat.INSTANCE_FIXED_ATTRIBUTES + run.buffer.slots
+				command.VertexBuffers[0].Buffer = &shifted
+				append(&command.VertexBuffers, foster.VertexBufferBinding{Buffer = &run.buffer.buffer, InstanceInputRate = true})
+				command.InstanceCount = run.instance_count
+			} else {
+				foster.DrawCommandFromMesh(&command, view.target, &r.mesh, snapshot)
+				command.IndexOffset = run.quad_start*6
+				command.IndexCount = run.quad_count*6
+				command.VertexCount = 0
+				if run.storage do append(&command.VertexStorageBuffers, &r.instance_buffer)
+			}
 			command.BlendMode = run.blend
 			command.CullMode = .None
 			command.DepthTestEnabled = false
@@ -285,7 +320,42 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 			mat.pass_state_apply(&command, effect.passes[run.selection.passes[i]].state)
 			foster.GraphicsDeviceDraw(r.library.device, &command)
 			foster.DrawCommandDispose(&command)
+			if run.buffer != nil do foster.VertexFormatDispose(&shifted.Format)
 			r.draw_calls += 1
+		}
+	}
+	return .None
+}
+
+// 记录常驻缓冲 buf 的前 count 个精灵：每个 Pass 一次实例化 Draw，帧贴图都是 texture（图集页）。
+// 材质须是 instanced 精灵效果（有缓冲变体）；[Instance] 字段以缓冲为准，统一参数来自材质。
+// 当前变换栈（如相机）同样作用于这些精灵；按记录顺序与其他图元叠放，不与它们合批。
+buffer :: proc(r: ^Render2D, material: ^mat.Material, buf: ^Sprite_Buffer, count: int,
+	texture: ^foster.Texture, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
+	if r.library == nil || r.library.device == nil do return .Missing_Device
+	if material == nil || material.owner == nil || material.effect == nil do return .Missing_Material
+	if material.owner.device != r.library.device do return .Device_Mismatch
+	effect := material.effect
+	if !mat.effect_is_sprite(effect.desc) || !effect.desc.instanced || effect.instanced_vertex == nil {
+		return .Not_Instanced_Effect
+	}
+	if buf == nil || buf.capacity <= 0 do return .Instance_Buffer_Required
+	if buf.slots != mat.instance_slot_count(material) do return .Instance_Mismatch
+	if texture == nil || texture.Resource == nil do return .Missing_Sprite_Texture
+	selection: mat.Pass_Selection
+	request := mat.Material_Draw{kind = .Sprite, sprite_texture = texture, options = {pass_id = pass_id}}
+	if error := mat.material_select(effect.desc, material.bindings, request, &selection); error != .None do return error
+	if !render2d_corner_mesh(r) do return .Missing_Device
+	render2d_run_begin(r, material, pass_id, texture, selection, nil)
+	run := &r.runs[len(r.runs) - 1]
+	run.buffer, run.instance_count, run.transform = buf, clamp(count, 0, buf.capacity), r.transform
+	// 顶点阶段换成缓冲变体；片元、参数与贴图与批量变体相同。
+	for i in 0..<selection.count {
+		group := material.bindings[selection.bindings[i]].schema.name
+		for schema, j in effect.schemas {
+			if schema.name == group {
+				foster.MaterialStageSetShader(&r.snapshots[run.snapshot + i].Vertex, &effect.instanced_vertex[j])
+			}
 		}
 	}
 	return .None
@@ -324,6 +394,7 @@ render2d_reset_state :: proc(r: ^Render2D) {
 render2d_reset :: proc(r: ^Render2D) {
 	clear(&r.vertices)
 	clear(&r.runs)
+	clear(&r.instance_values)
 	r.snapshot_count = 0
 	render2d_reset_state(r)
 }
@@ -353,15 +424,35 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 	request := mat.Material_Draw{kind = .Sprite, sprite_texture = frame_texture,
 		options = {pass_id = pass_id, instance_values = values}}
 	if error := mat.material_select(m.effect.desc, m.bindings, request, &selection); error != .None do return error
+	slots := m.effect.desc.uniforms == .Olib ? mat.instance_count(m.bindings[selection.bindings[0]].schema) : 0
+	if slots > 0 {
+		// 这个精灵的 [Instance] 数值（材质值 + values 覆盖，取第一个 Pass）写进实例数值数组，mode 存起始偏移。
+		if len(r.instance_values) == 0 do append(&r.instance_values, [4]f32{})
+		offset := len(r.instance_values)
+		p := m.effect.desc.passes[selection.passes[0]]
+		_, instance := mat.material_pass_values(p, m.bindings[selection.bindings[0]], values)
+		append(&r.instance_values, ..instance.numbers[:slots])
+		mode = {u8(offset), u8(offset >> 8), u8(offset >> 16), u8(offset >> 24)}
+	}
 	if !render2d_run_matches(r, last, m, pass_id, frame_texture, selection, values) {
 		render2d_run_begin(r, m, pass_id, frame_texture, selection, values)
 		last = &r.runs[len(r.runs) - 1]
+		last.storage = slots > 0
 	}
 	for i in 0..<4 {
 		append(&r.vertices, foster.BatcherVertex{Pos = render2d_transform(r, corners[i]), Tex = uvs[i], Col = colors[i], Mode = mode})
 	}
 	last.quad_count += 1
 	return .None
+}
+
+// 子图四角（裁剪后的 DrawCoords 减去锚点）经 transform 变换，顺序与 TexCoords 一致。
+@(private)
+render2d_frame_corners :: proc(frame: foster.Subtexture, origin: foster.Vec2, transform: foster.Matrix3x2) -> (corners: [4]foster.Vec2) {
+	for &corner, i in corners {
+		corner = foster.Matrix3x2TransformPoint(transform, frame.DrawCoords[i] - origin)
+	}
+	return
 }
 
 @(private)
@@ -379,7 +470,7 @@ render2d_param_slot :: proc(effect: mat.Effect_Desc) -> int {
 @(private)
 render2d_run_matches :: proc(r: ^Render2D, run: ^Render2D_Run, m: ^mat.Material, pass_id: mat.Pass_Id,
 	texture: ^foster.Texture, selection: mat.Pass_Selection, values: ^mat.Instance_Values) -> bool {
-	if run == nil || run.material != m || run.pass_id != pass_id || run.texture != texture ||
+	if run == nil || run.buffer != nil || run.material != m || run.pass_id != pass_id || run.texture != texture ||
 		run.sampler != r.sampler || run.blend != r.blend ||
 		run.scissor != (Render2D_Scissor{r.scissor, r.has_scissor}) || run.selection != selection {
 		return false
@@ -446,4 +537,38 @@ render2d_upload :: proc(r: ^Render2D) {
 		r.index_quads = capacity
 	}
 	foster.MeshSetVerticesTyped(foster.BatcherVertex, &r.mesh, r.vertices[:])
+	if len(r.instance_values) > 1 {
+		if !r.instance_ready {
+			foster.StorageBufferInitTyped([4]f32, &r.instance_buffer, r.library.device, "render2d instance values")
+			r.instance_ready = true
+		}
+		foster.StorageBufferUploadTyped([4]f32, &r.instance_buffer, r.instance_values[:])
+	}
+}
+
+// 单位四边形的四个角点，缓冲变体用 olib_sprite_vertex 把它展开成屏幕上的矩形。
+@(private)
+render2d_corner_mesh :: proc(r: ^Render2D) -> bool {
+	if r.corner_ready do return true
+	if r.library == nil || r.library.device == nil do return false
+	format := foster.VertexFormatMake([]foster.VertexElement{{0, .Float2, false}}, size_of([2]f32))
+	defer foster.VertexFormatDispose(&format)
+	foster.MeshInitWithFormat(&r.corner_mesh, r.library.device, format, .ThirtyTwo, "render2d corners")
+	corners := [4][2]f32{{0, 0}, {1, 0}, {1, 1}, {0, 1}}
+	foster.MeshSetVerticesTyped([2]f32, &r.corner_mesh, corners[:])
+	indices := [6]u32{0, 1, 2, 0, 2, 3}
+	foster.MeshSetIndicesTyped(u32, &r.corner_mesh, indices[:])
+	r.corner_ready = true
+	return true
+}
+
+// 投影（列主序，mul(P, v)）接上变换栈（行向量约定 v * T）：T 的存储正好是 Tᵀ 的列主序存储，结果为 P · Tᵀ。
+@(private)
+render2d_projection_with :: proc(projection, transform: [16]f32) -> (out: [16]f32) {
+	for col in 0..<4 {
+		for row in 0..<4 {
+			for k in 0..<4 do out[col*4 + row] += projection[k*4 + row] * transform[col*4 + k]
+		}
+	}
+	return
 }

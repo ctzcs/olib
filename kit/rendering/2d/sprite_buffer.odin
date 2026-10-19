@@ -1,9 +1,9 @@
 package rendering2d
 
-// 精灵实例缓冲：调用方持有的 GPU 缓冲，一次 Draw 画出几十万到上百万个精灵（instanced 材质效果）。
+// 精灵实例缓冲：调用方持有、常驻显存的 GPU 缓冲，r2d.buffer 一次 Draw 画出几十万到上百万个精灵。
 // 库不缓存、不排序、不剔除：调用方决定写入哪些精灵、何时更新、分成几块。
-// 逐个 sprite_draw 的 instanced 精灵内部也使用同样的实例记录自动合批，两者共用一份着色器。
-// 分区：实例记录 / 缓冲创建与上传 / 绘制。
+// 使用 instanced 精灵效果的缓冲变体（实例记录 + 角点）；逐个绘制走 Render2D 的批量变体，片元代码相同。
+// 分区：实例记录 / 缓冲创建与上传。
 import "core:mem"
 
 import foster "olib:foster"
@@ -18,7 +18,7 @@ import mat "olib:kit/rendering/material"
 // 没有 [Instance] 字段时整块上传，有字段时按块拷贝拼接，不做逐字段打包。
 // [Instance] 字段的数值不放在这里：它们的个数由效果决定，由调用方另备一个平铺数组，上传时一并传入
 // （sprite_buffer_upload 的 values，用 mat.instance_array_set 写入）。
-// 一次 Draw 里所有精灵共用同一张贴图（图集页），贴图在 sprite_draw_buffer 时指定。
+// 一次 Draw 里所有精灵共用同一张贴图（图集页），贴图在 r2d.buffer 时指定。
 Sprite_Item :: struct {
 	transform: foster.Matrix3x2,
 	rect: [4]f32, // 局部 x0, y0, 宽, 高（像素，已减去锚点）
@@ -49,19 +49,6 @@ sprite_stride :: proc(slots: int) -> int {
 	return mat.INSTANCE_FIXED_ATTRIBUTES*16 + 16*slots
 }
 
-// 把一个精灵写成 GPU 记录：Sprite_Item 的字节加上 [Instance] 数值，与 hlsl 生成的
-// OlibInstanceInput / olib_sprite_vertex 的约定一致。
-// dst 至少 sprite_stride(slots) 字节；values 是这个精灵的 [Instance] 数值（至多 slots 个，不足的补 0）。
-@(private)
-sprite_item_pack :: proc(dst: []u8, item: Sprite_Item, slots: int, values: [][4]f32 = nil) {
-	item := item // 取地址需要一个可寻址的副本
-	mem.copy(raw_data(dst), &item, size_of(Sprite_Item))
-	if slots <= 0 do return
-	copied := min(len(values), slots)
-	if copied > 0 do mem.copy(raw_data(dst[80:]), raw_data(values), 16*copied)
-	if copied < slots do mem.zero(raw_data(dst[80+16*copied:]), 16*(slots-copied))
-}
-
 // 实例缓冲的顶点格式：每个 float4 一个属性，位置 0..4+slots（角点网格的属性整体后移）。
 @(private)
 sprite_instance_format :: proc(slots: int) -> foster.VertexFormat {
@@ -80,19 +67,26 @@ Sprite_Buffer :: struct {
 	capacity: int,
 }
 
-// 为 material 的 instanced 效果预留 capacity 个精灵的 GPU 空间（实际按 2 的幂向上取整）。
-// 设备与槽数（效果的 [Instance] 字段数）都取自材质；材质未加载、效果不是 instanced 或各参数组字段数不一致时返回 false。
+// 为 material 的 instanced 效果预留 capacity 个精灵的 GPU 空间（实际按 2 的幂向上取整），用 r2d.buffer 绘制。
+// 设备与槽数（效果的 [Instance] 字段数）都取自材质。返回 "" 表示成功，否则是失败原因。
 // 每个精灵 80 + 16×slots 字节，100 万个精灵（1 个字段）约 96 MB。
-sprite_buffer_init :: proc(buf: ^Sprite_Buffer, material: ^mat.Material, capacity: int, name := "") -> bool {
-	if material == nil || material.owner == nil || material.owner.device == nil || material.effect == nil do return false
+sprite_buffer_init :: proc(buf: ^Sprite_Buffer, material: ^mat.Material, capacity: int, name := "") -> string {
+	if material == nil || material.owner == nil || material.owner.device == nil || material.effect == nil {
+		return "Material is not loaded"
+	}
+	if !mat.effect_is_sprite(material.effect.desc) || !material.effect.desc.instanced {
+		return "Sprite buffers require an Instanced sprite effect"
+	}
 	slots := mat.instance_slot_count(material)
-	if !material.effect.desc.instanced || capacity <= 0 || slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return false
+	if slots < 0 do return "Instance field count differs between parameter groups"
+	if slots > mat.MAX_INSTANCE_FIELDS do return "Too many Instance fields"
+	if capacity <= 0 do return "Sprite buffer capacity must be positive"
 	format := sprite_instance_format(slots)
 	defer foster.VertexFormatDispose(&format)
 	buf^ = {slots = slots, capacity = capacity}
 	foster.VertexBufferInit(&buf.buffer, material.owner.device, format, name)
 	foster.VertexBufferReserve(&buf.buffer, capacity)
-	return true
+	return ""
 }
 
 sprite_buffer_dispose :: proc(buf: ^Sprite_Buffer) {
@@ -137,32 +131,4 @@ sprite_buffer_upload :: proc(buf: ^Sprite_Buffer, items: []Sprite_Item, first :=
 		foster.VertexBufferUpload(&buf.buffer, raw_data(scratch), len(chunk), first+start)
 	}
 	return true
-}
-
-// ------------------------------------------------------------------------------
-// 绘制
-// ------------------------------------------------------------------------------
-
-// instanced 效果：缓冲里前 count 个精灵每个 Pass 一次 Draw，全部使用 texture（图集页）作为帧贴图。
-// 先提交 begin/end 里已排队的精灵再绘制，保持调用顺序；pass_id 为空画全部启用的 Pass，规则同 sprite_draw。
-// [Instance] 字段的数据以缓冲为准；统一参数（非 [Instance]）来自材质，整批共用。
-sprite_draw_buffer :: proc(renderer: ^Sprite_Renderer, material: ^mat.Material, buf: ^Sprite_Buffer,
-	count: int, texture: ^foster.Texture, view: Sprite_View, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
-	if material == nil || material.owner == nil || material.effect == nil do return .Missing_Material
-	if material.owner.device != renderer.device do return .Device_Mismatch
-	if buf == nil || buf.capacity <= 0 do return .Instance_Buffer_Required
-	w, h := view.target.WidthInPixels, view.target.HeightInPixels
-	if w <= 0 || h <= 0 do return .Invalid_Target
-	mesh := sprite_corner_mesh(renderer)
-	if mesh == nil do return .Missing_Device
-	sprite_flush(renderer)
-	projection, frame := sprite_uniforms(view, {}, {1, 1, 1, 1})
-	return mat.material_draw(renderer.device, material.effect.desc, material.bindings, {
-		mesh = mesh, target = view.target, kind = .Sprite,
-		vertex_uniform = mem.slice_to_bytes(projection[:]), frame_uniform = mem.slice_to_bytes(frame[:]),
-		sprite_texture = texture, pass_limit = view.pass_limit,
-		options = {pass_id = pass_id},
-		instance_buffer = &buf.buffer, instance_count = clamp(count, 0, buf.capacity),
-		instance_slots = buf.slots, mesh_location_offset = mat.INSTANCE_FIXED_ATTRIBUTES + buf.slots,
-	})
 }

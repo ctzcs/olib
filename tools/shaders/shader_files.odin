@@ -77,6 +77,28 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 				append(&files, fmt.aprintf("%s.%s", stem, format))
 			}
 		}
+		// instanced 精灵效果的缓冲变体：片元与批量变体相同，只编译顶点阶段。
+		if doc.instanced_programs[i] != "" {
+			instanced := path_join(workspace, fmt.tprintf("%s.instanced.hlsl", schema.name))
+			if !write_shader_file(instanced, transmute([]u8)doc.instanced_programs[i]) {
+				return false
+			}
+			stem := fmt.tprintf("%s.instanced.vertex", schema.name)
+			spv := path_join(workspace, fmt.tprintf("%s.spv", stem))
+			if !shadercross(instanced, "-s", "HLSL", "-d", "SPIRV", "-t", "vertex",
+				"-e", "vertex_main", "-I", include_directory, "-o", spv) {
+				return false
+			}
+			for format in ([]string{"dxil", "msl"}) {
+				if !shadercross(spv, "-s", "SPIRV", "-d", format == "dxil" ? "DXIL" : "MSL",
+					"-t", "vertex", "-e", "vertex_main", "-o", path_join(workspace, fmt.tprintf("%s.%s", stem, format))) {
+					return false
+				}
+			}
+			for format in ([]string{"spv", "dxil", "msl"}) {
+				append(&files, fmt.aprintf("%s.%s", stem, format))
+			}
+		}
 		// 发布描述只保留可移植的 GPU 资源键，不泄露开发机绝对路径。
 		delete(schema.shader)
 		schema.shader = strings.clone(schema.name)

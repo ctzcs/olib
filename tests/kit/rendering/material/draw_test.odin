@@ -69,13 +69,13 @@ material_draw_checks_instance_buffer_rules :: proc(t: ^testing.T) {
 	// 字段数一致后才进入绑定检查（这里没有可用 Shader）。
 	draw.instance_slots = 1
 	testing.expect_value(t, material_draw(&device, instanced, bindings, draw), Draw_Error.Invalid_Binding)
-	// 精灵 instanced 效果同样走实例缓冲（逐个 sprite_draw 时由渲染器自己提供）。
+	// 精灵 instanced 效果既可用实例缓冲（缓冲变体），也可以逐个绘制（批量变体），不再要求缓冲。
 	draw.kind = .Sprite
 	sprite := instanced
 	sprite.passes = []Pass_Desc{{id = "body", params = "Body", draw = .Sprite, output = "color"}}
 	testing.expect_value(t, material_draw(&device, sprite, bindings, draw), Draw_Error.Invalid_Binding)
 	draw.instance_buffer = nil
-	testing.expect_value(t, material_draw(&device, sprite, bindings, draw), Draw_Error.Instance_Buffer_Required)
+	testing.expect_value(t, material_draw(&device, sprite, bindings, draw), Draw_Error.Invalid_Binding)
 }
 
 @(test)

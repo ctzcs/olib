@@ -17,8 +17,10 @@ Shader_Binaries :: struct {
 }
 
 // 一个 Pass 的顶点与片元字节码，顺序与 Effect 声明里的 Schema（参数组）一致。
+// instanced_vertex 是 instanced 精灵效果的缓冲变体顶点（tools/shaders 产出的 <组名>.instanced.vertex.*），其余效果留空。
 Pass_Binaries :: struct {
 	vertex, fragment: Shader_Binaries,
+	instanced_vertex: Shader_Binaries,
 }
 
 // 驱动是否走预编译字节码（SPIR-V / DXIL / MSL）。Web 走手写 GLSL，不在此列。
@@ -66,7 +68,7 @@ material_register_manifest :: proc(library: ^Material_Library, manifest: []u8,
 	}
 	code := make([]Material_Shader_Code, len(passes), context.temp_allocator)
 	for pass, i in passes {
-		code[i] = {shader_pick(driver, pass.vertex), shader_pick(driver, pass.fragment)}
+		code[i] = {shader_pick(driver, pass.vertex), shader_pick(driver, pass.fragment), shader_pick(driver, pass.instanced_vertex)}
 	}
 	return material_register(library, parsed.effect, parsed.schemas, code)
 }

@@ -144,6 +144,19 @@ ENDHLSL
 	testing.expect(t, doc.schemas[0].fields[2].instance && doc.schemas[0].fields[2].id == "amount")
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Hue (olib_instance.data0.x)"))
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Amount (olib_instance.data1.x)"))
+	// Sprite Pass：programs 是批量变体（BatcherVertex 输入，字段从顶点 storage buffer 按 mode 偏移读取），
+	// instanced 效果另有缓冲变体（实例记录 + 角点）；两者都提供 OlibSpriteInput / olib_sprite。
+	batch, buffer := doc.programs[0], doc.instanced_programs[0]
+	testing.expect(t, strings.contains(batch, "float4 Mode : TEXCOORD3;"))
+	testing.expect(t, strings.contains(batch, "StructuredBuffer<float4> OlibInstanceValues : register(t0, space0);"))
+	testing.expect(t, strings.contains(batch, "s.instance.data1 = OlibInstanceValues[offset + 1];"))
+	testing.expect(t, !strings.contains(batch, "OlibInstanceInput"))
+	testing.expect(t, strings.contains(buffer, "struct OlibSpriteInput {\n    OlibInstanceInput Instance;"))
+	testing.expect(t, strings.contains(buffer, "olib_sprite_vertex(i.Instance, i.Corner, s.position, s.uv);"))
+	testing.expect(t, !strings.contains(buffer, "StructuredBuffer"))
+	for program in ([2]string{batch, buffer}) {
+		testing.expect(t, strings.contains(program, "OlibSprite olib_sprite(OlibSpriteInput i)"))
+	}
 
 	// 只写 Instanced：效果启用顶点 tint，没有实例字段。
 	flag_only := `Shader "Tinted" {
@@ -159,6 +172,13 @@ ENDHLSL
 	defer dispose(&tinted)
 	testing.expectf(t, tinted.error == "" && tinted.effect.instanced, "%s", tinted.error)
 	testing.expect(t, strings.contains(tinted.programs[0], "OlibInstance"))
+	// 没有实例字段：批量变体不声明 storage buffer，tint 直接取顶点色。
+	testing.expect(t, !strings.contains(tinted.programs[0], "StructuredBuffer"))
+	testing.expect(t, strings.contains(tinted.programs[0], "s.instance.tint = i.Color;"))
+	// 非 Sprite 的效果没有缓冲变体。
+	water := parse(SOURCE, "water.oshader")
+	defer dispose(&water)
+	for program in water.instanced_programs do testing.expect_value(t, program, "")
 
 	// Texture 不能是 Instance。
 	bad := parse(`Shader "Bad" {

@@ -188,7 +188,8 @@ pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: mat.P
 	mesh := preview3d ? (s.mode == 3 ? 2 : 1) : 0
 	command: foster.DrawCommand
 	geometry := &s.meshes[mesh]
-	if draw == .Sprite do geometry = &s.sprite_renderer.mesh
+	// 材质预览时 Render2D 的工具四边形存着当前精灵；探测管线时只需要同样的顶点格式。
+	if draw == .Sprite do geometry = s.render.tool_ready ? &s.render.tool_mesh : &s.sprite_mesh
 	foster.DrawCommandFromMesh(&command, target, geometry, &bank.materials[index])
 	command.DepthTestEnabled = preview3d
 	command.DepthWriteEnabled = preview3d

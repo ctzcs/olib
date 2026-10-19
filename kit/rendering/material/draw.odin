@@ -216,12 +216,17 @@ material_pass_values :: proc(p: Pass_Desc, b: Material_Binding, overrides: ^Inst
 
 // 提交单个 Pass：应用固定覆盖值、写入 uniform 与采样器、套用 Pass 状态后绘制。
 @(private)
-material_pass_submit :: proc(device: ^foster.GraphicsDevice, draw: Material_Draw,
+material_pass_submit :: proc(device: ^foster.GraphicsDevice, draw: Material_Draw, layout: Uniform_Layout,
 	p: Pass_Desc, pass_index: int, b: Material_Binding) {
 	buffer, instance := material_pass_values(p, b, draw.options.instance_values)
 	foster.MaterialStageSetUniformBuffer(&b.material.Vertex, draw.vertex_uniform)
-	foster.MaterialStageSetUniformBuffer(&b.material.Fragment, draw.frame_uniform)
-	foster.MaterialStageSetUniformBuffer(&b.material.Fragment, buffer, 1)
+	if layout == .Foster {
+		// 借用 foster 默认 Shader 的内置效果：片元 b0 直接是参数，没有帧块。
+		foster.MaterialStageSetUniformBuffer(&b.material.Fragment, buffer)
+	} else {
+		foster.MaterialStageSetUniformBuffer(&b.material.Fragment, draw.frame_uniform)
+		foster.MaterialStageSetUniformBuffer(&b.material.Fragment, buffer, 1)
+	}
 	b.material.Fragment.Samplers = {}
 	copy(b.material.Fragment.Samplers[:], b.samplers)
 	if p.sprite_texture != "" {
@@ -270,7 +275,8 @@ material_draw :: proc(device: ^foster.GraphicsDevice, effect: Effect_Desc,
 	if device == nil do return .Missing_Device
 	if draw.mesh == nil do return .Missing_Mesh
 	if !effect_is_material(effect) do return .Not_Material_Effect
-	if effect.instanced && draw.instance_buffer == nil do return .Instance_Buffer_Required
+	// 模型的 instanced 效果只有实例缓冲一种接口；精灵的批量变体可以逐个绘制。
+	if effect.instanced && draw.kind == .Model && draw.instance_buffer == nil do return .Instance_Buffer_Required
 	if draw.instance_buffer != nil {
 		if !effect.instanced do return .Not_Instanced_Effect
 		for binding in bindings {
@@ -282,7 +288,7 @@ material_draw :: proc(device: ^foster.GraphicsDevice, effect: Effect_Desc,
 	if draw.instance_buffer != nil && draw.instance_count <= 0 do return .None
 	for i in 0..<selection.count {
 		pass := selection.passes[i]
-		material_pass_submit(device, draw, effect.passes[pass], pass, bindings[selection.bindings[i]])
+		material_pass_submit(device, draw, effect.uniforms, effect.passes[pass], pass, bindings[selection.bindings[i]])
 	}
 	return .None
 }

@@ -7,14 +7,14 @@ import "core:testing"
 import foster "olib:foster"
 
 @(test)
-sprite_material_vertices_preserve_trim_atlas_and_origin :: proc(t: ^testing.T) {
+frame_corners_preserve_trim_atlas_and_origin :: proc(t: ^testing.T) {
 	texture := foster.Texture{Width = 256, Height = 128}
 	frame := foster.SubtextureMake(&texture, {64, 32, 32, 16}, {-4, -6, 48, 32})
-	vertices := sprite_vertices(frame, {24, 16}, {2, 0, 0, 3, 100, 50})
-	testing.expect_value(t, vertices[0].position, [2]f32{60, 20})
-	testing.expect_value(t, vertices[2].position, [2]f32{124, 68})
-	testing.expect_value(t, vertices[0].uv, [2]f32{0.25, 0.25})
-	testing.expect_value(t, vertices[2].uv, [2]f32{0.375, 0.375})
+	corners := render2d_frame_corners(frame, {24, 16}, {2, 0, 0, 3, 100, 50})
+	testing.expect_value(t, corners[0], foster.Vec2{60, 20})
+	testing.expect_value(t, corners[2], foster.Vec2{124, 68})
+	testing.expect_value(t, frame.TexCoords[0], foster.Vec2{0.25, 0.25})
+	testing.expect_value(t, frame.TexCoords[2], foster.Vec2{0.375, 0.375})
 }
 
 // ---------------------------------------------------------------------------

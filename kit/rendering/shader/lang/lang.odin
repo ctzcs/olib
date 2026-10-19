@@ -15,7 +15,11 @@ Document :: struct {
 	schemas: []mat.Schema,
 	effect: mat.Effect_Desc,
 	// 与 schemas 一一对应，已包含参数布局、共享代码和原文件 #line。
+	// Sprite Pass 的 programs 是批量变体（foster BatcherVertex 输入，Render2D 逐个绘制用）；
+	// instanced 效果另有 instanced_programs：缓冲变体（实例记录 + 角点，常驻 Sprite_Buffer 用），只需编译顶点阶段。
+	// 其他 Pass 或非 instanced 效果对应项为空串。
 	programs: []string,
+	instanced_programs: []string,
 	error: string,
 }
 
@@ -29,6 +33,10 @@ dispose :: proc(d: ^Document) {
 		delete(text)
 	}
 	delete(d.programs)
+	for text in d.instanced_programs {
+		delete(text)
+	}
+	delete(d.instanced_programs)
 	delete(d.error)
 	d^ = {}
 }
@@ -82,7 +90,7 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 		fail(&p, "Shader name must be an identifier; use Label for display names")
 	}
 	source := shader_body(&p, name)
-	schemas, programs := shader_programs(&source, name, source_path)
+	schemas, programs, instanced_programs := shader_programs(&source, name, source_path)
 	if p.error == "" {
 		_, error := mat.effect_order(source.effect, schemas)
 		if error != "" {
@@ -97,9 +105,11 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 	result.effect = mat.effect_clone(source.effect)
 	result.schemas = make([]mat.Schema, len(schemas))
 	result.programs = make([]string, len(programs))
+	result.instanced_programs = make([]string, len(programs))
 	for s, i in schemas {
 		result.schemas[i] = mat.schema_clone(s)
 		result.programs[i] = strings.clone(programs[i])
+		result.instanced_programs[i] = strings.clone(instanced_programs[i])
 	}
 	return
 }
@@ -158,11 +168,13 @@ shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 }
 
 // 每个 Pass 一份参数组 Schema 和候选 HLSL（参数布局 + 共享代码 + Pass 代码，带原文件 #line）。
-// 会把 Pass 的 params 指向生成的组名 `<Shader>_<Pass>`。
+// 会把 Pass 的 params 指向生成的组名 `<Shader>_<Pass>`。Sprite Pass 生成批量变体，instanced 效果再生成缓冲变体。
 @(private)
-shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (schemas: []mat.Schema, programs: []string) {
+shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (schemas: []mat.Schema,
+	programs, instanced_programs: []string) {
 	schemas = make([]mat.Schema, len(source.passes))
 	programs = make([]string, len(source.passes))
+	instanced_programs = make([]string, len(source.passes))
 	for &pass, i in source.passes {
 		group := fmt.tprintf("%s_%s", name, pass.id)
 		pass.params = mat.Params_Ref(group)
@@ -175,19 +187,32 @@ shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (s
 		}
 		schemas[i] = {name = group, shader = source_path, preview = dimension,
 			label = pass.label, fields = source.fields}
-		b: strings.Builder
-		strings.builder_init(&b)
-		strings.write_string(&b, mat.hlsl(schemas[i], mat.effect_instancing(source.effect)))
-		for block in ([2]Code{source.shared, source.codes[i]}) {
-			if block.text == "" {
-				continue
+		if pass.draw == .Sprite {
+			programs[i] = shader_program(source, i, schemas[i], .Sprite_Batch, source_path)
+			if source.effect.instanced {
+				instanced_programs[i] = shader_program(source, i, schemas[i], .Sprite, source_path)
 			}
-			path, _ := strings.replace_all(source_path, "\\", "/")
-			fmt.sbprintf(&b, "\n#line %d %q\n%s\n", block.line, path, block.text)
+		} else {
+			programs[i] = shader_program(source, i, schemas[i], mat.effect_instancing(source.effect), source_path)
 		}
-		programs[i] = strings.to_string(b)
 	}
 	return
+}
+
+@(private)
+shader_program :: proc(source: ^Shader_Source, index: int, schema: mat.Schema, mode: mat.Instancing,
+	source_path: string) -> string {
+	b: strings.Builder
+	strings.builder_init(&b)
+	strings.write_string(&b, mat.hlsl(schema, mode))
+	for block in ([2]Code{source.shared, source.codes[index]}) {
+		if block.text == "" {
+			continue
+		}
+		path, _ := strings.replace_all(source_path, "\\", "/")
+		fmt.sbprintf(&b, "\n#line %d %q\n%s\n", block.line, path, block.text)
+	}
+	return strings.to_string(b)
 }
 
 // ==============================================================================

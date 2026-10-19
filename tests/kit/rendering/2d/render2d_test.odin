@@ -82,16 +82,17 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	render2d_reset_state(&r)
 
 	fields := []mat.Field{{id = "texture", name = "texture", kind = .Texture},
-		{id = "strength", name = "strength", kind = .Scalar, maximum = 1}}
+		{id = "strength", name = "strength", kind = .Scalar, maximum = 1},
+		{id = "mask", name = "mask", kind = .Texture}}
 	schema := mat.Schema{name = "Glow", preview = "2d", fields = fields}
 	effect := mat.Material_Effect{desc = {name = "Glow", output = "color", preview = "2d", passes = []mat.Pass_Desc{
 		{id = "main", params = "Glow", output = "color", draw = .Sprite, sprite_texture = "texture"}}}}
 	gpu: foster.Material
 	foster.MaterialInit(&gpu)
 	defer foster.MaterialDispose(&gpu)
-	values := []mat.Value{{}, {number = {0.5, 0, 0, 0}}}
+	values := []mat.Value{{}, {number = {0.5, 0, 0, 0}}, {}}
 	white, atlas: foster.Texture
-	samplers := []foster.BoundSampler{{Texture = &white}}
+	samplers := []foster.BoundSampler{{Texture = &white}, {Texture = &white}}
 	material := mat.Material{owner = &library, effect = &effect,
 		bindings = []mat.Material_Binding{{schema, values, &gpu, samplers}}}
 	selection := mat.Pass_Selection{count = 1}
@@ -99,6 +100,12 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	render2d_run_begin(&r, &material, "", &atlas, selection, nil)
 	run := &r.runs[0]
 	testing.expect(t, render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
+	samplers[1].Texture = &atlas
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
+	samplers[1].Texture = &white
+	run.quad_count = RENDER2D_BATCH_QUADS
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
+	run.quad_count = 0
 	testing.expect(t, r.snapshots[0].Fragment.Samplers[0].Texture == &atlas) // 帧贴图替换到 sprite_texture 槽
 	testing.expect_value(t, len(r.snapshots[0].Fragment.UniformBuffers[1]), 16) // .oshader 效果的参数在片元槽 1
 
@@ -120,4 +127,22 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(r.runs), 0)
 	testing.expect_value(t, r.snapshot_count, 0)
 	testing.expect_value(t, len(r.snapshots), 1)
+}
+
+@(test)
+render2d_instance_values_preserve_each_pass :: proc(t: ^testing.T) {
+	r: Render2D
+	defer dispose(&r)
+	schema := mat.Schema{fields = []mat.Field{{id = "hue", name = "hue", kind = .Scalar, instance = true, maximum = 1}}}
+	effect := mat.Material_Effect{desc = {passes = []mat.Pass_Desc{{}, {}}}}
+	m := mat.Material{effect = &effect, bindings = []mat.Material_Binding{
+		{schema = schema, values = []mat.Value{{number = {0.2, 0, 0, 0}}}},
+		{schema = schema, values = []mat.Value{{number = {0.8, 0, 0, 0}}}},
+	}}
+	selection := mat.Pass_Selection{count = 2}
+	selection.passes[1], selection.bindings[1] = 1, 1
+	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil), 1)
+	testing.expect_value(t, r.instance_values[1][0], 0.2)
+	testing.expect_value(t, r.instance_values[2][0], 0.8)
+	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil), 3)
 }

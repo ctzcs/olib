@@ -306,12 +306,16 @@ hlsl_sprite_block :: proc(b: ^strings.Builder, mode: Instancing, slots: int) {
 	}
 	strings.write_string(b, "struct OlibSpriteInput {\n    float2 Position : TEXCOORD0;\n    float2 Uv : TEXCOORD1;\n")
 	strings.write_string(b, "    float4 Color : TEXCOORD2;\n    float4 Mode : TEXCOORD3;\n};\n")
-	if slots > 0 do strings.write_string(b, "StructuredBuffer<float4> OlibInstanceValues : register(t0, space0);\n")
+	if slots > 0 {
+		strings.write_string(b, "StructuredBuffer<float4> OlibInstanceValues : register(t0, space0);\n")
+		strings.write_string(b, "cbuffer OlibSpritePass : register(b1, space1) { uint _olib_pass_offset; };\n")
+	}
 	strings.write_string(b, "OlibSprite olib_sprite(OlibSpriteInput i) {\n    OlibSprite s;\n")
 	strings.write_string(b, "    s.position = i.Position;\n    s.uv = i.Uv;\n    s.instance.tint = i.Color;\n")
 	if slots > 0 {
 		strings.write_string(b, "    uint4 bytes = (uint4)round(i.Mode * 255.0);\n")
 		strings.write_string(b, "    uint offset = bytes.x | (bytes.y << 8) | (bytes.z << 16) | (bytes.w << 24);\n")
+		strings.write_string(b, "    offset += _olib_pass_offset;\n")
 		for slot in 0..<slots {
 			fmt.sbprintf(b, "    s.instance.data%d = OlibInstanceValues[offset + %d];\n", slot, slot)
 		}

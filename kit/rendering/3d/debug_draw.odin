@@ -361,8 +361,14 @@ Debug_Line_Shaders :: struct {
 debug_line_shaders_init :: proc(pair: ^Debug_Line_Shaders, device: ^foster.GraphicsDevice) -> bool {
 	if !mat.shader_driver_supported(device.Driver) do return false
 
-	vs_code := mat.shader_pick(device.Driver, {debugline_vertex_spv, debugline_vertex_dxil, debugline_vertex_msl})
-	fs_code := mat.shader_pick(device.Driver, {debugline_fragment_spv, debugline_fragment_dxil, debugline_fragment_msl})
+	vs_code := mat.shader_pick(device.Driver, {
+		spv = debugline_vertex_spv,
+		dxil = debugline_vertex_dxil,
+		msl = debugline_vertex_msl})
+	fs_code := mat.shader_pick(device.Driver, {
+		spv = debugline_fragment_spv,
+		dxil = debugline_fragment_dxil,
+		msl = debugline_fragment_msl})
 
 	foster.ShaderInit(&pair.vertex, device, foster.ShaderCreateInfo{
 		Stage              = .Vertex,

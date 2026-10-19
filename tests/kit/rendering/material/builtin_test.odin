@@ -47,4 +47,9 @@ material_create_reports_unknown_effects :: proc(t: ^testing.T) {
 	material, reason = material_create(&library, BUILTIN_TEXT)
 	testing.expect(t, material == nil && reason == "Missing graphics device")
 	testing.expect_value(t, len(library.instances), 0)
+	device := foster.GraphicsDevice{Driver = .Private}
+	library.device = &device
+	schemas := []Schema{{fields = []Field{{kind = .Scalar, instance = true}}}}
+	testing.expect_value(t, material_register(&library, {}, schemas, nil), "Web does not support Instance storage buffers")
+	testing.expect_value(t, material_register(&library, {}, nil, nil), "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported")
 }

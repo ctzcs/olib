@@ -10,10 +10,11 @@ import foster "../../../foster"
 // 驱动与字节码选择
 // ------------------------------------------------------------------------------
 
-// 同一份着色器编译出的三种后端格式；通常三个字段都来自 #load。
+// 同一份着色器的后端代码；glsl 是手写的 Web 源码，其余格式通常来自 tools/shaders。
 // Metal 驱动需要 msl，没有时 shader_pick 返回空切片。
 Shader_Binaries :: struct {
 	spv, dxil, msl: []u8,
+	glsl: []u8,
 }
 
 // 一个 Pass 的顶点与片元字节码，顺序与 Effect 声明里的 Schema（参数组）一致。
@@ -23,7 +24,7 @@ Pass_Binaries :: struct {
 	instanced_vertex: Shader_Binaries,
 }
 
-// 驱动是否走预编译字节码（SPIR-V / DXIL / MSL）。Web 走手写 GLSL，不在此列。
+// 可选择后端代码的驱动；Private 是 WebGL2，仍受 Foster 的 Web uniform 能力限制。
 shader_driver_supported :: proc(driver: foster.GraphicsDriver) -> bool {
 	#partial switch driver {
 	case .Vulkan, .Private, .D3D12, .Metal:
@@ -33,15 +34,19 @@ shader_driver_supported :: proc(driver: foster.GraphicsDriver) -> bool {
 	}
 }
 
-// 按驱动取 spv / dxil / msl；字节码借用调用方的切片，不复制。
+// 按驱动取代码；借用调用方的切片，不复制。未知驱动和缺失格式都返回空切片。
 shader_pick :: proc(driver: foster.GraphicsDriver, binaries: Shader_Binaries) -> []u8 {
 	#partial switch driver {
 	case .D3D12:
 		return binaries.dxil
 	case .Metal:
 		return binaries.msl
-	case:
+	case .Private:
+		return binaries.glsl
+	case .Vulkan:
 		return binaries.spv
+	case:
+		return nil
 	}
 }
 

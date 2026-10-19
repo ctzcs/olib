@@ -86,6 +86,13 @@ material_effect_gpu_clear :: proc(effect: ^Material_Effect) {
 
 material_register :: proc(library: ^Material_Library, effect: Effect_Desc,
 	schemas: []Schema, code: []Material_Shader_Code) -> string {
+	if library.device != nil && library.device.Driver == .Private {
+		for schema in schemas {
+			if instance_count(schema) > 0 do return "Web does not support Instance storage buffers"
+		}
+		if effect.instanced do return "Web does not support instanced materials"
+		if effect.uniforms != .Foster do return "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported"
+	}
 	if !effect_is_material(effect) do return "Expected Model or Sprite material effect"
 	if len(schemas) != len(code) do return "Shader code count differs from schema count"
 	for prior in library.effects {
@@ -127,7 +134,7 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 		// 精灵批量变体有 [Instance] 字段时从顶点 storage buffer 读取（见 hlsl 的 Sprite_Batch）。
 		storage := sprite && instance_count(effect.schemas[i]) > 0 ? 1 : 0
 		foster.ShaderInit(&effect.vertex[i], library.device, {
-			Stage = .Vertex, Code = code.vertex, UniformBufferCount = 1, StorageBufferCount = storage,
+			Stage = .Vertex, Code = code.vertex, UniformBufferCount = 1 + storage, StorageBufferCount = storage,
 			EntryPoint = "vertex_main",
 		}, effect.schemas[i].name)
 		if effect.instanced_vertex != nil {
@@ -141,7 +148,7 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 			}
 		}
 		foster.ShaderInit(&effect.fragment[i], library.device, {
-			Stage = .Fragment, Code = code.fragment, UniformBufferCount = 2,
+			Stage = .Fragment, Code = code.fragment, UniformBufferCount = effect.desc.uniforms == .Foster ? 1 : 2,
 			SamplerCount = texture_count(effect.schemas[i]), EntryPoint = "fragment_main",
 		}, effect.schemas[i].name)
 		if effect.vertex[i].Resource == nil || effect.fragment[i].Resource == nil {

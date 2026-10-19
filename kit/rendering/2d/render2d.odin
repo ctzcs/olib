@@ -10,6 +10,9 @@ import "core:mem"
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
 
+@(private)
+RENDER2D_BATCH_QUADS :: 4096
+
 // ------------------------------------------------------------------------------
 // 类型
 // ------------------------------------------------------------------------------
@@ -78,6 +81,7 @@ Render2D_Run :: struct {
 	scissor: Render2D_Scissor,
 	quad_start, quad_count: int,
 	storage: bool, // 顶点从 instance_values 读 [Instance] 字段
+	pass_offsets: [mat.MAX_PASSES]u32, // 每个精灵的数值记录内，各 Pass 的 float4 偏移
 	// r2d.buffer 记录的常驻缓冲：不与其他记录合并，用缓冲变体顶点着色器实例化绘制。
 	buffer: ^Sprite_Buffer,
 	instance_count: int,
@@ -378,6 +382,11 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 		if run.buffer != nil do vertex_uniform = render2d_projection_with(projection, run.transform)
 		for i in 0..<run.selection.count {
 			snapshot := &r.snapshots[run.snapshot + i]
+			storage := run.storage && mat.instance_count(run.material.bindings[run.selection.bindings[i]].schema) > 0
+			if storage {
+				pass_offset := [4]u32{run.pass_offsets[i], 0, 0, 0}
+				foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(pass_offset[:]), 1)
+			}
 			foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(vertex_uniform[:]), 0)
 			if effect.uniforms == .Olib {
 				foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, mem.slice_to_bytes(frame[:]), 0)
@@ -398,7 +407,7 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 				command.IndexOffset = run.quad_start*6
 				command.IndexCount = run.quad_count*6
 				command.VertexCount = 0
-				if run.storage do append(&command.VertexStorageBuffers, &r.instance_buffer)
+				if storage do append(&command.VertexStorageBuffers, &r.instance_buffer)
 			}
 			command.BlendMode = run.blend
 			command.CullMode = .None
@@ -434,10 +443,12 @@ buffer :: proc(r: ^Render2D, material: ^mat.Material, buf: ^Sprite_Buffer, count
 	selection: mat.Pass_Selection
 	request := mat.Material_Draw{kind = .Sprite, sprite_texture = texture, options = {pass_id = pass_id}}
 	if error := mat.material_select(effect.desc, material.bindings, request, &selection); error != .None do return error
+	if selection.count == 0 do return .None
 	if !render2d_corner_mesh(r) do return .Missing_Device
 	render2d_run_begin(r, material, pass_id, texture, selection, nil)
 	run := &r.runs[len(r.runs) - 1]
 	run.buffer, run.instance_count, run.transform = buf, clamp(count, 0, buf.capacity), r.transform
+	run.storage = false // 缓冲变体的数值在实例顶点里，不使用 storage 或 Pass 偏移。
 	// 顶点阶段换成缓冲变体；片元、参数与贴图与批量变体相同。
 	for i in 0..<selection.count {
 		group := material.bindings[selection.bindings[i]].schema.name
@@ -513,26 +524,34 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 	request := mat.Material_Draw{kind = .Sprite, sprite_texture = frame_texture,
 		options = {pass_id = pass_id, instance_values = values}}
 	if error := mat.material_select(m.effect.desc, m.bindings, request, &selection); error != .None do return error
-	slots := m.effect.desc.uniforms == .Olib ? mat.instance_count(m.bindings[selection.bindings[0]].schema) : 0
-	if slots > 0 {
-		// 这个精灵的 [Instance] 数值（材质值 + values 覆盖，取第一个 Pass）写进实例数值数组，mode 存起始偏移。
-		if len(r.instance_values) == 0 do append(&r.instance_values, [4]f32{})
-		offset := len(r.instance_values)
-		p := m.effect.desc.passes[selection.passes[0]]
-		_, instance := mat.material_pass_values(p, m.bindings[selection.bindings[0]], values)
-		append(&r.instance_values, ..instance.numbers[:slots])
-		mode = {u8(offset), u8(offset >> 8), u8(offset >> 16), u8(offset >> 24)}
-	}
+	if selection.count == 0 do return .None
 	if !render2d_run_matches(r, last, m, pass_id, frame_texture, selection, values) {
 		render2d_run_begin(r, m, pass_id, frame_texture, selection, values)
 		last = &r.runs[len(r.runs) - 1]
-		last.storage = slots > 0
+	}
+	if last.storage {
+		offset := render2d_record_instances(r, m, selection, values)
+		mode = {u8(offset), u8(offset >> 8), u8(offset >> 16), u8(offset >> 24)}
 	}
 	for i in 0..<4 {
 		append(&r.vertices, foster.BatcherVertex{Pos = render2d_transform(r, corners[i]), Tex = uvs[i], Col = colors[i], Mode = mode})
 	}
 	last.quad_count += 1
 	return .None
+}
+
+// 一个精灵连续存放各 Pass 的独立数值；顶点保存起点，提交时由顶点 b1 选择该 Pass 的偏移。
+@(private)
+render2d_record_instances :: proc(r: ^Render2D, m: ^mat.Material, selection: mat.Pass_Selection,
+	values: ^mat.Instance_Values) -> int {
+	if len(r.instance_values) == 0 do append(&r.instance_values, [4]f32{})
+	offset := len(r.instance_values)
+	for i in 0..<selection.count {
+		p := m.effect.desc.passes[selection.passes[i]]
+		_, instance := mat.material_pass_values(p, m.bindings[selection.bindings[i]], values)
+		append(&r.instance_values, ..instance.numbers[:instance.count])
+	}
+	return offset
 }
 
 // 子图四角（裁剪后的 DrawCoords 减去锚点）经 transform 变换，顺序与 TexCoords 一致。
@@ -559,7 +578,8 @@ render2d_param_slot :: proc(effect: mat.Effect_Desc) -> int {
 @(private)
 render2d_run_matches :: proc(r: ^Render2D, run: ^Render2D_Run, m: ^mat.Material, pass_id: mat.Pass_Id,
 	texture: ^foster.Texture, selection: mat.Pass_Selection, values: ^mat.Instance_Values) -> bool {
-	if run == nil || run.buffer != nil || run.material != m || run.pass_id != pass_id || run.texture != texture ||
+	if run == nil || run.buffer != nil || run.quad_count >= RENDER2D_BATCH_QUADS ||
+		run.material != m || run.pass_id != pass_id || run.texture != texture ||
 		run.sampler != r.sampler || run.blend != r.blend ||
 		run.scissor != (Render2D_Scissor{r.scissor, r.has_scissor}) || run.selection != selection {
 		return false
@@ -571,6 +591,16 @@ render2d_run_matches :: proc(r: ^Render2D, run: ^Render2D_Run, m: ^mat.Material,
 		uniform, _ := mat.material_pass_values(p, m.bindings[selection.bindings[i]], values)
 		current := r.snapshots[run.snapshot + i].Fragment.UniformBuffers[slot][:]
 		if len(uniform) != len(current) || mem.compare(uniform, current) != 0 do return false
+		binding := m.bindings[selection.bindings[i]]
+		index := 0
+		for field in binding.schema.fields {
+			if field.kind != .Texture do continue
+			if field.id != string(p.sprite_texture) &&
+				binding.samplers[index] != r.snapshots[run.snapshot + i].Fragment.Samplers[index] {
+				return false
+			}
+			index += 1
+		}
 	}
 	return true
 }
@@ -582,9 +612,12 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 		texture = texture, sampler = r.sampler, blend = r.blend, scissor = {r.scissor, r.has_scissor},
 		quad_start = len(r.vertices) / 4}
 	slot := render2d_param_slot(m.effect.desc)
+	offset: u32
 	for i in 0..<selection.count {
 		p := m.effect.desc.passes[selection.passes[i]]
 		binding := m.bindings[selection.bindings[i]]
+		run.pass_offsets[i] = offset
+		if m.effect.desc.uniforms == .Olib do offset += u32(mat.instance_count(binding.schema))
 		if r.snapshot_count == len(r.snapshots) {
 			append(&r.snapshots, foster.Material{})
 			foster.MaterialInitWithShaders(&r.snapshots[r.snapshot_count], nil, nil)
@@ -608,6 +641,7 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 			}
 		}
 	}
+	run.storage = offset > 0
 	append(&r.runs, run)
 }
 

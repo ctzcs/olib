@@ -1,7 +1,7 @@
 package material
 
 // 共享实现：供精灵、模型及 ShaderLab 集成，不是业务绘制入口。
-// 因跨包复用保留这些接口；普通业务使用 material_load + sprite_draw / model_draw。
+// 因跨包复用保留这些接口；普通业务使用 material_load + r2d.image / model_draw。
 // 分区：绑定与绘制输入 / Pass 状态 / 对象多 Pass 执行。
 import foster "../../../foster"
 
@@ -52,7 +52,7 @@ Draw_Error :: enum {
 	Missing_Binding,        // 某个 Pass 的参数组没有绑定
 	Invalid_Binding,        // 绑定的 Shader、数值或贴图不完整
 	Missing_Sprite_Texture, // Pass 需要当前帧贴图，但没有提供或字段不是 Texture
-	Instance_Buffer_Required, // instanced 效果必须带实例缓冲（模型 model_draw_buffer，精灵 sprite_draw_buffer）
+	Instance_Buffer_Required, // instanced 效果必须带实例缓冲（模型 model_draw_buffer，精灵 r2d.buffer）
 	Not_Instanced_Effect,   // 用实例缓冲绘制，但效果没有声明 instanced
 	Instance_Mismatch,      // 实例缓冲的字段数与效果的 [Instance] 字段数不一致
 	Unsupported_Mesh,       // 网格顶点格式不是模型材质路径支持的静态格式（例如蒙皮网格）

@@ -80,6 +80,8 @@ render2d_tool_prepare :: proc(user_data: rawptr, pass_index: int, command: ^fost
 	user := submission.user
 	if user.prepare != nil do user.prepare(user.user_data, pass_index, command, values)
 	r := submission.r
+	pass_offset := [4]u32{}
+	foster.MaterialStageSetUniformBuffer(&command.Material.Vertex, mem.slice_to_bytes(pass_offset[:]), 1)
 	if !r.tool_values_ready {
 		foster.StorageBufferInitTyped([4]f32, &r.tool_values, r.library.device, "render2d tool instance values")
 		r.tool_values_ready = true

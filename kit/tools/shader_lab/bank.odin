@@ -59,7 +59,7 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		source, program_text := program.source, program.text
 		// Sprite Pass 的批量变体从顶点 storage buffer 读 [Instance] 字段（见 mat.hlsl 的 Sprite_Batch）。
 		storage := mat.instance_count(schema) > 0 && bank_sprite_group(build.effects, schema.name) ? 1 : 0
-		_ = dev.init(&b.shaders[i], source, s.device.Driver, {uniform_buffers = 1, storage_buffers = storage}, {uniform_buffers = 2})
+		_ = dev.init(&b.shaders[i], source, s.device.Driver, {uniform_buffers = 1 + storage, storage_buffers = storage}, {uniform_buffers = 2})
 		b.shaders[i].source_text = strings.clone(program_text)
 		if prior := bank_index(s.bank, schema.name); prior >= 0 {
 			b.shaders[i].revision = s.shaders[prior].revision

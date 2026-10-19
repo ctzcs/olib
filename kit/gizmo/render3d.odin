@@ -29,12 +29,14 @@ renderer3d_init :: proc(r: ^Renderer3D, device: ^foster.GraphicsDevice) -> bool 
 	d := device.Driver
 	foster.ShaderInit(&r.vertex, device, {Stage = .Vertex, EntryPoint = "vertex_main",
 		UniformBufferCount = 1, Code = mat.shader_pick(d, {
-			#load("shaders/Compiled/Gizmo3D.vertex.spv"), #load("shaders/Compiled/Gizmo3D.vertex.dxil"),
-			#load("shaders/Compiled/Gizmo3D.vertex.msl")})}, "Gizmo3D vertex")
+		spv = #load("shaders/Compiled/Gizmo3D.vertex.spv"),
+		dxil = #load("shaders/Compiled/Gizmo3D.vertex.dxil"),
+		msl = #load("shaders/Compiled/Gizmo3D.vertex.msl")})}, "Gizmo3D vertex")
 	foster.ShaderInit(&r.fragment, device, {Stage = .Fragment, EntryPoint = "fragment_main",
 		UniformBufferCount = 1, Code = mat.shader_pick(d, {
-			#load("shaders/Compiled/Gizmo3D.fragment.spv"), #load("shaders/Compiled/Gizmo3D.fragment.dxil"),
-			#load("shaders/Compiled/Gizmo3D.fragment.msl")})}, "Gizmo3D fragment")
+		spv = #load("shaders/Compiled/Gizmo3D.fragment.spv"),
+		dxil = #load("shaders/Compiled/Gizmo3D.fragment.dxil"),
+		msl = #load("shaders/Compiled/Gizmo3D.fragment.msl")})}, "Gizmo3D fragment")
 	if r.vertex.Resource == nil || r.fragment.Resource == nil {
 		renderer3d_destroy(r)
 		return false

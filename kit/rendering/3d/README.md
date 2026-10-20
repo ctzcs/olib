@@ -102,7 +102,7 @@ err := r3d.submit(&renderer, view, "scene")
 ```
 
 ```hlsl
-cbuffer FrameBlock : register(b0, space3) { float4 Clock; float4 Pointer; float4 Tint; float4 CameraPosition; };
+#include "olib/model.hlsli"   // 引擎块；片元 b0 为 Clock、Pointer、Tint、CameraPosition
 struct SceneView { float4 sun_direction; float4 fog_color; float4 camera_right; float4 camera_up; };
 cbuffer VertexViewBlock : register(b1, space1) { SceneView VertexView; };   // 顶点读视图块
 cbuffer FragmentViewBlock : register(b2, space3) { SceneView FragmentView; }; // 片元读同一份

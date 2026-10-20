@@ -6,7 +6,10 @@
 预览与发布共用解析器。Sprite 总是生成 BatcherVertex 批量变体；
 声明 Instanced 时额外输出 `<Shader>_<Pass>.instanced.vertex.<格式>`，两者共用片元代码。
 运行时由 `mat.material_register_directory` 按这些文件名找到产物（自己拼 `Pass_Binaries` 时分别填入 vertex 与 instanced_vertex）；
-修改 2D 输入约定后须一起重新生成。指定目录内的旧 `.hlsl` 可以并存，输出重名会在编译前报错。
+修改 2D 输入约定后须一起重新生成。
+编译 `.oshader` 前，工具把 `kit/rendering/shader/lang/include/olib/` 复制到工作区的 `olib/`，供
+`#include "olib/<Draw>.hlsli"` 使用（shadercross 只接受一个 `-I`，仍指向 shader 目录）；手写 `.hlsl` 不提供这些文件。
+项目的 shader 目录里不要建 `olib/` 子目录。指定目录内的旧 `.hlsl` 可以并存，输出重名会在编译前报错。
 
 Shader 与使用它的功能放在一起。框架内置绘制属于 `foster`，库功能属于对应 `kit` 包，
 游戏材质和演示效果属于游戏/示例仓库。跨模块共享的代码按依赖方向提取到共同拥有者；

@@ -57,12 +57,30 @@ Shader "Water"
 - 顶层 `Instanced` 声明生成常驻缓冲变体；当前解析器遇到 `[Instance]` 也会自动启用它。
   底层 Effect 允许 2D 只用实例字段而不启用 instanced；3D 仍要求实例缓冲。
 
+### 引擎块与标准 include
+
+宿主每次绘制填写顶点 b0（space1）和片元 b0（space3）。不要手抄这两个块，按 Draw 类型 include olib 的标准声明：
+
+| include | 用于 | 顶点 b0 | 片元 b0 |
+| --- | --- | --- | --- |
+| `olib/model.hlsli` | `Draw Model`；3D 的 `Preview_Model` | `Wvp`、`World`、`VertexClock`、`VertexCameraPosition` | `Clock`、`Pointer`、`Tint`、`CameraPosition` |
+| `olib/sprite.hlsli` | `Draw Sprite` | `Projection`、`VertexClock` | `Clock`、`Pointer`、`Tint` |
+| `olib/fullscreen.hlsli` | `Draw Fullscreen`；2D 的 `Preview_Model`（Shader Lab 预览） | `View` | `Clock`、`Pointer`、`Tint` |
+
+文件在 `kit/rendering/shader/lang/include/olib/`，是普通 HLSL 的 cbuffer 声明，每个成员的含义写在注释里；
+生成器不注入它们，手写仍然合法。顶点侧与片元同名的值加 `Vertex` 前缀（同一份源码里两个阶段的 cbuffer 不能重名）。
+instanced 模型的 `World` 为单位矩阵，`Wvp` 即 ViewProjection。
+
+shadercross 只接受一个 `-I`（留给项目的 shader 目录），所以 tools/shaders 与 Shader Lab 编译 `.oshader` 前，
+把这些文件复制到临时编译目录的 `olib/`。`olib/` 因此是保留的 include 目录名，项目自己的 shader 目录里不要建 `olib/`。
+Shader Lab 只监听项目源目录，改了 olib 的 include 要重启 Shader Lab；tools/shaders 编译手写 `.hlsl` 时不提供这些文件。
+
 ### 2D 效果的 HLSL 约定
 
 所有 `Draw Sprite` 都用同一份输入接口，批量与常驻缓冲的差异由生成器处理：
 
 ```hlsl
-cbuffer ViewBlock : register(b0, space1) { float4x4 Projection; };
+#include "olib/sprite.hlsli"   // 引擎块：顶点 Projection、VertexClock；片元 Clock、Pointer、Tint
 struct Input { OlibSpriteInput Sprite; };
 struct Output { float4 Position : SV_Position; float2 Uv : TEXCOORD0; OlibInstance Instance; };
 Output vertex_main(Input v)
@@ -91,8 +109,7 @@ float4 fragment_main(Output v) : SV_Target0
 每个精灵的记录先是两条轴，再接各 Pass 的实例字段。生成器总是声明顶点 t0/space0 和 b1/space1 的 Pass 偏移，
 运行时一次上传所有记录。缓冲变体使用单位四边形与实例顶点，由 `r2d.buffer` 绘制，不使用 storage buffer；
 实例在变换栈之前的坐标里，生成器声明顶点 b1/space1 的变换栈，`olib_sprite` 在 GPU 上换算位置和轴。
-顶点 b0 为投影后接 Clock（`{ float4x4 Projection; float4 Clock; }`），两种变体相同；片元 b0 为 Clock/Pointer/Tint，
-b1 为统一参数；这些帧块仍由宿主提供。顶点与片元的 cbuffer 写在同一份源码里，顶点侧 Clock 需另起名字。
+顶点 b0 和片元 b0 由宿主填写，两种变体相同，声明在 `olib/sprite.hlsli`；片元 b1 为统一参数。
 不要手写或复用旧的精灵顶点布局。Odin 的字段标签 `instance:"true"` 对应 `[Instance]`。
 
 ### instanced 效果的 HLSL 约定
@@ -100,17 +117,16 @@ b1 为统一参数；这些帧块仍由宿主提供。顶点与片元的 cbuffer
 **模型 instanced** 的 HLSL（`Draw Model`）：
 
 ```hlsl
-// 顶点 b0 为 { ViewProjection, 单位矩阵, Clock, CameraPosition }；世界矩阵来自实例，用 olib_world 取得。
-// Clock 与 CameraPosition 与片元 b0 的同名值相同（Clock = time, delta_time, frame, 0；相机世界坐标 w = 1），
-// 用于在顶点里按时间计算运动或按视线偏移；不用可不声明。片元 b0 为 Clock、Pointer、Tint、CameraPosition。
-cbuffer ViewBlock : register(b0, space1) { float4x4 ViewProjection; float4x4 Unused; float4 VertexClock; float4 VertexCamera; };
+// 引擎块：顶点 Wvp（instanced 时即 ViewProjection）、World（单位矩阵）、VertexClock、VertexCameraPosition；
+// 片元 Clock、Pointer、Tint、CameraPosition。世界矩阵来自实例，用 olib_world 取得。
+#include "olib/model.hlsli"
 struct Input {
     OlibInstanceInput Instance;   // 必须是第一个成员，网格属性随后依次声明
     float3 Position : TEXCOORD0;
     float3 Normal : TEXCOORD1;
 };
 struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibInstance Instance; };
-// vertex_main:   o.Position = mul(mul(float4(v.Position, 1), olib_world(v.Instance)), ViewProjection);
+// vertex_main:   o.Position = mul(mul(float4(v.Position, 1), olib_world(v.Instance)), Wvp);
 //                o.Instance = olib_instance_from(v.Instance);
 // fragment_main: olib_instance = v.Instance;
 ```
@@ -122,7 +138,7 @@ struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibIn
 
 - `2D` 默认值是相对 Shader Lab `source_root` 的贴图路径，空字符串使用内置棋盘格。
 - 数值只支持 fragment 参数；保持现有 fragment b1/space3、每字段 16 字节及
-  texture/sampler space2 布局。引擎 b0 由宿主提供，不自动生成 `Time` 等全局变量。
+  texture/sampler space2 布局。引擎 b0 由宿主提供，生成器不注入；用 `#include "olib/<Draw>.hlsli"` 声明（见上文）。
   `Draw Model` 另有宿主提交的视图块（顶点 b1 / 片元 b2，游戏自定布局），见 [3d REFERENCE](../../3d/REFERENCE.md#模型材质-shader-布局)。
 - 每个 Pass 必须有一个非空的 `HLSLPROGRAM`。可选的 `HLSLINCLUDE` 插入所有 Pass。
   `ENDHLSL` 独占一行；注释或字符串中的同名文字不会截断代码。

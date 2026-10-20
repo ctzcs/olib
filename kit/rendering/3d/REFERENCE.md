@@ -68,7 +68,8 @@ Render3D 不自动选 LOD。手写渲染器仍可用 `Debug_Draw_3D`、`debug_dr
 | space2 | 材质纹理和采样器；采样方式取字段的 `[Filter]` / `[Wrap]` 声明 |
 
 CameraPosition 是 `r3d.camera_position(view.view_matrix)`：世界坐标 xyz、w = 1，视矩阵不可逆时为原点。
-Shader 只声明用到的前缀即可，例如片元只读 Clock 时 `cbuffer FrameBlock { float4 Clock; }` 照常工作。
+vertex b0 与 fragment b0 的声明在 `#include "olib/model.hlsli"`（见 [标准 include](../shader/lang/README.md#引擎块与标准-include)）。
+手写时也可只声明用到的前缀，例如片元只读 Clock 时 `cbuffer FrameBlock { float4 Clock; }` 照常工作。
 Model 效果的 Shader 按顶点 2 个、片元 3 个 uniform 槽创建；不声明视图块的旧 Shader 不受影响。Foster 布局的内置效果没有视图块。
 
 model 的 Tint 为白色；非 instanced models 使用 Model_Item.tint；instanced 模型的 tint 来自实例缓冲。

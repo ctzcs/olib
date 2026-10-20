@@ -11,6 +11,11 @@ import "core:strings"
 
 import mat "../../material"
 
+// 标准 include 的根目录：作者写 #include "olib/<Draw>.hlsli"（model / sprite / fullscreen），引擎 b0 块都声明在那里。
+// shadercross 只接受一个 -I，tools/shaders 与 Shader Lab 编译前把 <INCLUDE_DIRECTORY>/olib 复制到各自的临时目录。
+// 写成 "/include"：单元测试的隔离编译把 #directory 换成不带结尾分隔符的路径。
+INCLUDE_DIRECTORY :: #directory + "/include"
+
 Document :: struct {
 	schemas: []mat.Schema,
 	effect: mat.Effect_Desc,

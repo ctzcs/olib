@@ -25,6 +25,11 @@ View :: struct {
 	pointer: [2]f32,
 }
 
+// 材质路径的引擎块字节数：顶点 b0 为 Projection + Clock，片元 b0 为 Clock、Pointer、Tint。
+// 与 kit/rendering/shader/lang/include/olib/sprite.hlsli 一致（tests/kit/rendering/2d 检查）。
+SPRITE_VERTEX_BLOCK_SIZE :: 80
+SPRITE_FRAME_BLOCK_SIZE :: 48
+
 Render2D :: struct {
 	library: ^mat.Material_Library,
 	default_material: ^mat.Material, // 内置 Sprite_Default 的实例，归材质库所有
@@ -376,9 +381,9 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 	if w <= 0 || h <= 0 do return .Invalid_Target
 	render2d_upload(r)
 	// 顶点 b0：目标像素到裁剪空间的投影，后接 Clock（与片元 Clock 同值）。
-	vertex_uniform := [20]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1,
+	vertex_uniform := [SPRITE_VERTEX_BLOCK_SIZE/4]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1,
 		view.time, view.delta_time, f32(view.frame), 0}
-	frame := [12]f32{view.time, view.delta_time, f32(view.frame), 1, view.pointer[0], view.pointer[1],
+	frame := [SPRITE_FRAME_BLOCK_SIZE/4]f32{view.time, view.delta_time, f32(view.frame), 1, view.pointer[0], view.pointer[1],
 		f32(w), f32(h), 1, 1, 1, 1}
 	for &run in r.runs {
 		effect := run.material.effect.desc

@@ -58,9 +58,9 @@ material_draw :: proc(r: ^Render2D, effect: mat.Effect_Desc, bindings: []mat.Mat
 	foster.MeshSetVerticesTyped(foster.BatcherVertex, &r.tool_mesh, vertices[:])
 	view := draw.view
 	// 顶点 b0：投影后接 Clock，与 submit 一致。
-	projection := [20]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1,
+	projection := [SPRITE_VERTEX_BLOCK_SIZE/4]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1,
 		view.time, view.delta_time, f32(view.frame), 0}
-	frame := [12]f32{view.time, view.delta_time, f32(view.frame), 1, view.pointer[0], view.pointer[1],
+	frame := [SPRITE_FRAME_BLOCK_SIZE/4]f32{view.time, view.delta_time, f32(view.frame), 1, view.pointer[0], view.pointer[1],
 		f32(w), f32(h), 1, 1, 1, 1}
 	t := draw.transform
 	submission := Render2D_Tool_Submission{r, slots, {t.M11, t.M12, t.M21, t.M22}, draw.options}

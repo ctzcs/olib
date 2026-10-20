@@ -1,6 +1,7 @@
 #+test
 package material
 
+import "base:runtime"
 import "core:encoding/json"
 import "core:testing"
 
@@ -188,4 +189,95 @@ material_register_manifest_selects_backend_and_validates :: proc(t: ^testing.T) 
 
 	device.Driver = .None
 	testing.expect_value(t, material_register_manifest(&library, manifest, passes), "Unsupported shader backend")
+}
+
+// tools/shaders 写出的清单 JSON；借用 temp_allocator。
+@(private)
+compiled_manifest_json :: proc(effect: Effect_Desc, schemas: []Schema, version := MANIFEST_VERSION) -> []u8 {
+	data, _ := json.marshal(Compiled_Manifest{version, schemas, effect}, allocator = context.temp_allocator)
+	return data
+}
+
+// 内存里的 #load_directory 结果：Model 效果、instanced Sprite 效果、只供预览的 Fullscreen 效果和无关文件。
+@(test)
+material_register_directory_finds_compiled_files :: proc(t: ^testing.T) {
+	hero := Effect_Desc{name = "Hero", output = "color", passes = []Pass_Desc{
+		{id = "body", params = "Hero_body", draw = .Model, output = "color"},
+	}}
+	spark := Effect_Desc{name = "Spark", output = "color", instanced = true, passes = []Pass_Desc{
+		{id = "main", params = "Spark_main", draw = .Sprite, output = "color"},
+	}}
+	trail := Effect_Desc{name = "Trail", output = "color", passes = []Pass_Desc{
+		{id = "blur", params = "Trail_blur", draw = .Fullscreen, output = "color"},
+	}}
+	files := []runtime.Load_Directory_File{
+		{"Hero.shader.json", compiled_manifest_json(hero, {{name = "Hero_body", preview = "3d"}})},
+		{"Hero_body.vertex.dxil", {1}}, {"Hero_body.vertex.spv", {11}},
+		{"Hero_body.fragment.dxil", {2}}, {"Hero_body.fragment.spv", {12}},
+		{"Spark.shader.json", compiled_manifest_json(spark, {{name = "Spark_main", preview = "2d"}})},
+		{"Spark_main.vertex.dxil", {3}}, {"Spark_main.fragment.dxil", {4}},
+		{"Spark_main.instanced.vertex.dxil", {5}},
+		{"Trail.shader.json", compiled_manifest_json(trail, {{name = "Trail_blur"}})},
+		{"notes.txt", {0}},
+	}
+	device := foster.GraphicsDevice{Driver = .D3D12}
+	library := Material_Library{device = &device}
+	defer material_library_dispose(&library)
+	testing.expect_value(t, material_register_directory(&library, files), "")
+	// Trail 只供预览，跳过；D3D12 选 dxil，instanced 精灵带上缓冲变体顶点。
+	testing.expect_value(t, len(library.effects), 2)
+	if len(library.effects) == 2 {
+		body := library.effects[0].code[0]
+		testing.expect(t, library.effects[0].desc.name == "Hero" && body.vertex[0] == 1 && body.fragment[0] == 2)
+		main := library.effects[1].code[0]
+		testing.expect(t, library.effects[1].desc.name == "Spark" && main.vertex[0] == 3 && main.instanced_vertex[0] == 5)
+	}
+
+	// 换成 Vulkan 选 spv。
+	vulkan_device := foster.GraphicsDevice{Driver = .Vulkan}
+	vulkan := Material_Library{device = &vulkan_device}
+	defer material_library_dispose(&vulkan)
+	testing.expect_value(t, material_register_directory(&vulkan, files[:5]), "")
+	testing.expect(t, len(vulkan.effects) == 1 && vulkan.effects[0].code[0].vertex[0] == 11 &&
+		vulkan.effects[0].code[0].fragment[0] == 12)
+}
+
+@(test)
+material_register_directory_names_what_is_missing :: proc(t: ^testing.T) {
+	hero := Effect_Desc{name = "Hero", output = "color", passes = []Pass_Desc{
+		{id = "body", params = "Hero_body", draw = .Model, output = "color"},
+	}}
+	spark := Effect_Desc{name = "Spark", output = "color", instanced = true, passes = []Pass_Desc{
+		{id = "main", params = "Spark_main", draw = .Sprite, output = "color"},
+	}}
+	hero_manifest := compiled_manifest_json(hero, {{name = "Hero_body", preview = "3d"}})
+	device := foster.GraphicsDevice{Driver = .D3D12}
+	library := Material_Library{device = &device}
+	defer material_library_dispose(&library)
+
+	no_fragment := []runtime.Load_Directory_File{{"Hero.shader.json", hero_manifest}, {"Hero_body.vertex.dxil", {1}}}
+	testing.expect_value(t, material_register_directory(&library, no_fragment),
+		"Hero_body.fragment.dxil: missing compiled shader; re-run tools/shaders")
+	// 只有别的后端格式也算缺失。
+	other_backend := []runtime.Load_Directory_File{{"Hero.shader.json", hero_manifest},
+		{"Hero_body.vertex.spv", {1}}, {"Hero_body.fragment.spv", {2}}}
+	testing.expect_value(t, material_register_directory(&library, other_backend),
+		"Hero_body.vertex.dxil: missing compiled shader; re-run tools/shaders")
+	no_instanced := []runtime.Load_Directory_File{{"Spark.shader.json", compiled_manifest_json(spark, {{name = "Spark_main", preview = "2d"}})},
+		{"Spark_main.vertex.dxil", {3}}, {"Spark_main.fragment.dxil", {4}}}
+	testing.expect_value(t, material_register_directory(&library, no_instanced),
+		"Spark_main.instanced.vertex.dxil: missing compiled shader; re-run tools/shaders")
+	outdated := []runtime.Load_Directory_File{{"Hero.shader.json", compiled_manifest_json(hero,
+		{{name = "Hero_body", preview = "3d"}}, MANIFEST_VERSION - 1)}}
+	testing.expect_value(t, material_register_directory(&library, outdated),
+		"Hero.shader.json: Compiled shader manifest is outdated; re-run tools/shaders")
+	testing.expect_value(t, material_register_directory(&library, []runtime.Load_Directory_File{{"Hero_body.vertex.dxil", {1}}}),
+		"No compiled shader manifest (*.shader.json) in directory")
+	testing.expect_value(t, len(library.effects), 0)
+
+	// 设备与后端检查与 material_register_manifest 的文本一致。
+	empty: Material_Library
+	testing.expect_value(t, material_register_directory(&empty, no_fragment), "Missing graphics device")
+	device.Driver = .None
+	testing.expect_value(t, material_register_directory(&library, no_fragment), "Unsupported shader backend")
 }

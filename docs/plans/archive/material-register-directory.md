@@ -1,5 +1,8 @@
 # Plan：材质效果按目录登记，去掉手写 #load
 
+> **状态：已完成（2026-10-20）** · 提交 `c42a910`..`216e6bc`（olib_sample：`e6b42e7`）
+> 偏离：① 第 4 步按决策 9 跳过：stylized3d 的 `shaders.odin`、`main.odin` 仍有未提交改动，AmbientOcclusion、SunShadow 等文件未跟踪，等这些改动提交后再迁移。② 计划文件先单独提交（`c42a910`），归档的 `git mv` 需要它已被跟踪。③ material3d 没有选择驱动的参数，Vulkan 那次用环境变量 `SDL_GPU_DRIVER=vulkan` 指定，并用无效驱动名确认该变量确实生效。
+
 ## 背景
 
 `.oshader` 材质效果经 `tools/shaders` 编译后，`Compiled/` 里有清单 `<Effect>.shader.json` 和每个参数组的

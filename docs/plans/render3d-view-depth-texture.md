@@ -17,7 +17,7 @@
 
 太阳方向、竖直雾色、near/far 放在 `RenderState` 里，每次 Draw 前写进所有材质；billboard 用相机的 left/up 轴展开。
 
-对照 olib 现状（含下文“前置”所列进行中的改动）：
+对照 olib 现状（基线见下文“前置”）：
 
 | Celeste64 做法 | olib 对应 | 结论 |
 | --- | --- | --- |
@@ -27,10 +27,10 @@
 | 天空盒先画 | 单独 Pass id 先 submit，`ZTest Off` | 已有 |
 | 按 Actor 距离整体后到前 | 不透明分组前到后、透明后到前，逐 submit 剔除 | 已有且更好 |
 | 每个 Model 自己 Draw，无实例化 | 自动实例化、常驻缓冲 | 已有且更好 |
-| 相机位置 | 进行中：b0 带 CameraPosition | 进行中 |
+| 相机位置 | b0 带 CameraPosition（`e885d1c`） | 已有 |
 | 太阳方向、雾色写进所有材质；billboard 用相机轴 | 只能逐材质 `material_set_number`；记录快照材质值、多视图共用 | **缺：视图级数据** |
 | 剪影 `DepthCompare.Greater` | `Pass_Depth` 只有 Less / Less_Equal / Equal / Always | **缺：Greater 等其余四种** |
-| 描边读场景深度附件 | 进行中的 `material_set_texture` 可绑运行时贴图，但 foster 深度附件不带 SAMPLER 用途（`foster/graphics.odin` TargetInit） | **缺：深度附件不可采样** |
+| 描边读场景深度附件 | `material_set_texture` 可绑运行时贴图，但 foster 深度附件不带 SAMPLER 用途（`foster/graphics.odin` TargetInit） | **缺：深度附件不可采样** |
 | 主角蒙皮（32 关节，同一 Shader 用 JointsMult 开关） | 材质路径对蒙皮网格返回 `.Unsupported_Mesh` | **缺，本计划只列待定问题** |
 
 不借鉴的部分：
@@ -39,19 +39,21 @@
 - 每个 Model 虚函数式立即绘制、Draw 前改共享材质 uniform、`Clone` 材质做每对象颜色。olib 已用快照与 `Instance_Values` 解决。
 - 光照、雾、描边写死在 DefaultMaterial/RenderState。按 `rendering3d-mechanism-only` 的决定，外观归游戏或示例，库只给机制。
 
-## 前置：工作区现状
+## 前置：基线提交
 
-写本计划时（2026-10-20），会话“Rendering 3D/2D 流程审查”仍在运行，以下改动**尚未提交**，本计划以它为基础：
+本计划以 olib `cd52e6d`..`e885d1c` 为基础：
 
-- `material_set_texture`（借用；nil 恢复白图；reload 恢复文件贴图）、贴图字段 `[Filter]/[Wrap]`、`Material.revision`；
-- 顶点 b0 在 Clock 后接 CameraPosition（`MATERIAL_VERTEX_BLOCK_SIZE = 128 + 32`），片元 b0 为 Clock/Pointer/Tint/CameraPosition（`MATERIAL_FRAME_BLOCK_SIZE = 64`）；
-- `MANIFEST_VERSION = 2`；foster `L-017` 实例偏移，Render3D 每次 submit 一次上传全部实例；
-- 指定 pass_id 的 submit 默认不画调试线；
-- 3d README 新增“相机、灯光与运行时贴图”一节：灯光、雾作为材质参数用 `material_set_number` 设置，阴影图等用 `material_set_texture(..., foster.TargetAttachment(&shadow))` 绑定。
+- `cd52e6d` foster `L-017`：DrawCommand.InstanceOffset，Render3D 每次 submit 一次上传全部实例；
+- `e885d1c` 材质相机/采样/运行时贴图：
+  - `material_set_texture`（借用；nil 恢复白图；reload 恢复文件贴图）、贴图字段 `[Filter]/[Wrap]`、`Material.revision`；
+  - 顶点 b0 在 Clock 后接 CameraPosition（`MATERIAL_VERTEX_BLOCK_SIZE = 128 + 32`），片元 b0 为 Clock/Pointer/Tint/CameraPosition（`MATERIAL_FRAME_BLOCK_SIZE = 64`）；
+  - `MANIFEST_VERSION = 2`；指定 pass_id 的 submit 默认不画调试线；
+  - 3d README 的“相机、灯光与运行时贴图”一节：灯光、雾作为材质参数用 `material_set_number` 设置，阴影图等用 `material_set_texture(..., foster.TargetAttachment(&shadow))` 绑定。
 
-执行前确认这些已提交、`odin run tools/check` 通过，且该会话不再改本计划要动的文件
-（`render3d.odin`、`material_library.odin`、`draw.odin`、`shader/dev/dev.odin`、`shader_lab/bank.odin`、3d README）。
-若最终落地的槽位、大小或 LOCAL_CHANGES 编号与上面不同，按落地结果调整本计划里的数字，决策不变。
+本计划的 foster 改动使用下一个 LOCAL_CHANGES 编号 **L-018**。
+执行前确认 HEAD 包含这两个提交且 `odin run tools/check` 通过。若之后有人改了本计划要动的文件
+（`render3d.odin`、`material_library.odin`、`draw.odin`、`shader/dev/dev.odin`、`shader_lab/bank.odin`、3d README）或占用了 L-018，
+按当时的代码调整本计划里的数字，决策不变。
 
 ## 已定决策
 
@@ -99,13 +101,13 @@
 
 ### 3. 深度附件可采样（优先级 3）
 
-- 绑定接口用进行中的 `material_set_texture`，不改它的语义。
+- 绑定接口用 `e885d1c` 的 `material_set_texture`，不改它的语义。
 - foster：TargetInit 给**单采样**深度附件加 `.SAMPLER` 用途，前提是 `GraphicsDeviceIsTextureFormatSupported` 对该格式成立
   （它已经按 SAMPLER + DEPTH_STENCIL_TARGET 检查）。多采样深度不加（SDL 没有深度解析），保持现状。
 - 判定规则放进 foster 的一个新函数 `TextureIsSampleable(texture) -> bool`，由 TargetInit 与材质共用：
   依据现有的 `Format`、`SampleCount`、`ResolveResource` 与格式支持判断，不新增 Texture 字段。
   多采样颜色附件可采样：绑定时 `TextureSampleResource` 取其 L-005 解析纹理；多采样深度没有解析纹理，不可采样。
-  这两处 foster 改动登记为 LOCAL_CHANGES 中 L-017 之后的下一个编号，改动处写 `// [olib L-xxx]`。
+  这两处 foster 改动登记为 LOCAL_CHANGES 的 **L-018**，改动处写 `// [olib L-018]`。
 - `material_set_texture` 对 `TextureIsSampleable` 为假的贴图返回 false，避免 SDL 校验错误或崩溃。
   3d README 里的阴影图示例要注明：`foster.TargetAttachment(&shadow)` 默认取颜色附件；取深度附件（index 1）要求单采样。
 - 深度附件不能在仍作为当前深度目标时采样：后处理画到另一张 Target（同 Celeste64 的 postTarget），再合回。
@@ -116,7 +118,7 @@
 
 ### 1. 前置与基线
 
-- 按“前置”逐项确认；在 olib、olib_sample 各建分支 `render3d-view-depth-texture`，不合并 master、不推送。
+- 按“前置”确认基线提交与 L-018 未被占用；在 olib、olib_sample 各建分支 `render3d-view-depth-texture`，不合并 master、不推送。
 - 阅读 [编辑工具开发约定](../../prompts/editor-guidelines.md) 与 UI 像素约定；运行一次完整 `odin run tools/check` 作为基线。
 
 不单独提交。

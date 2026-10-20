@@ -18,8 +18,10 @@ import world "olib:kit/world"
 View :: struct {
 	target: foster.DrawableTarget,
 	view_projection: world.Matrix4,
-	view_matrix: world.Matrix4, // 必填（如 camera3d_view）：排序深度与调试线朝向使用它；零矩阵 submit 返回错误
-	draw_debug: Maybe(bool), // 未指定为 true；显式 false 可用于阴影阶段
+	// 必填（如 camera3d_view）：排序深度、调试线朝向与材质的 CameraPosition 使用它；零矩阵 submit 返回错误
+	view_matrix: world.Matrix4,
+	// 未指定时只在画全部 Pass（pass_id 为空）的提交里画；分阶段多次提交时在需要的那一次设为 true
+	draw_debug: Maybe(bool),
 	time, delta_time: f32,
 	frame: u64,
 }
@@ -35,9 +37,18 @@ Render3D :: struct {
 	snapshot_count: int,
 	queue: Render_Queue(int),
 	values: [dynamic][4]f32,
+	batches: [dynamic]Render3D_Batch,
 	upload: [dynamic]u8,
-	buffers: [mat.MAX_INSTANCE_FIELDS + 1]Model_Buffer,
+	buffers: [mat.MAX_INSTANCE_FIELDS + 1]Model_Buffer, // 自动实例化的临时缓冲，按 [Instance] 字段数各一个
 	debug: Debug_Draw_3D, // 线宽与深度开关；GPU 资源延迟到首次提交线段时创建
+}
+
+// 排序后队列中的一段连续 Draw。自动实例化时，第 k 个所选 Pass 的实例从临时缓冲的
+// first + k × (end - start) 开始；每次 submit 先一次上传全部批次，再按偏移逐批绘制。
+@(private)
+Render3D_Batch :: struct {
+	start, end: int,
+	first: int,
 }
 
 @(private)
@@ -52,9 +63,12 @@ Render3D_Record :: struct {
 	count: int,
 }
 
+// 记录时的效果与槽数一并保存：之后 material_reload 换了效果或参数组，已记录的快照仍按原布局绘制。
 @(private)
 Render3D_Source :: struct {
 	material: ^mat.Material,
+	effect: ^mat.Material_Effect,
+	slots: int,
 	selection: mat.Pass_Selection,
 	snapshot, next: int,
 	// 本次 submit 的选择，不改记录的完整 selection。
@@ -83,6 +97,7 @@ dispose :: proc(r: ^Render3D) {
 	delete(r.source_heads)
 	queue_dispose(&r.queue)
 	delete(r.values)
+	delete(r.batches)
 	delete(r.upload)
 	for &buffer in r.buffers do model_buffer_dispose(&buffer)
 	debug_draw_dispose(&r.debug)
@@ -96,6 +111,7 @@ clear :: proc(r: ^Render3D) {
 	r.snapshot_count = 0
 	queue_clear(&r.queue)
 	builtin.clear(&r.values)
+	builtin.clear(&r.batches)
 	debug_draw_clear(&r.debug)
 }
 
@@ -209,7 +225,7 @@ render3d_source :: proc(r: ^Render3D, m: ^mat.Material, selection: mat.Pass_Sele
 	head := r.source_heads[hash] - 1
 	for index := head; index >= 0; index = r.sources[index].next {
 		source := &r.sources[index]
-		if source.material != m || source.selection != selection do continue
+		if source.material != m || source.effect != m.effect || source.selection != selection do continue
 		matches := true
 		for i in 0..<selection.count {
 			binding := m.bindings[selection.bindings[i]]
@@ -228,8 +244,8 @@ render3d_source :: proc(r: ^Render3D, m: ^mat.Material, selection: mat.Pass_Sele
 		if matches do return index
 	}
 	index := len(r.sources)
-	append(&r.sources, Render3D_Source{material = m, selection = selection,
-		snapshot = r.snapshot_count, next = head})
+	append(&r.sources, Render3D_Source{material = m, effect = m.effect, slots = mat.instance_slot_count(m),
+		selection = selection, snapshot = r.snapshot_count, next = head})
 	r.source_heads[hash] = index + 1
 	for i in 0..<selection.count {
 		if r.snapshot_count == len(r.snapshots) {
@@ -280,7 +296,7 @@ render3d_prepare :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id) -> mat.
 	for &source in r.sources {
 		source.count = 0
 		source.transparent = false
-		effect := source.material.effect.desc
+		effect := source.effect.desc
 		for p in effect.passes do if p.id == pass_id do found = true
 		for i in 0..<source.selection.count {
 			p := effect.passes[source.selection.passes[i]]
@@ -319,11 +335,13 @@ render3d_prepare :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id) -> mat.
 submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
 	r.draw_calls = 0
 	r.instances = 0
-	draw_debug := view.draw_debug == nil || view.draw_debug.(bool)
+	// 分阶段提交（指定 pass_id）默认不画调试线，避免多次提交重复叠加或画进阴影图。
+	draw_debug := pass_id == ""
+	if value, ok := view.draw_debug.?; ok do draw_debug = value
 	if len(r.records) == 0 && (!draw_debug || len(r.debug.vertices) == 0) do return .None
 	if r.library == nil || r.library.device == nil do return .Missing_Device
 	if view.target.WidthInPixels <= 0 || view.target.HeightInPixels <= 0 do return .Invalid_Target
-	// 零矩阵不是有效视矩阵；不悄悄当成单位矩阵，否则透明排序与调试线朝向会无声地出错。
+	// 零矩阵不是有效视矩阵；不悄悄当成单位矩阵，否则透明排序、调试线朝向与 CameraPosition 会无声地出错。
 	if view.view_matrix == (world.Matrix4{}) do return .Missing_View_Matrix
 	if error := render3d_prepare(r, view, pass_id); error != .None do return error
 	// 完整预检后再发 Draw；错误保留所有记录。
@@ -336,8 +354,8 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 			buf := record.buffer
 			if buf.buffer.Base.Resource == nil || buf.capacity < record.count do return .Instance_Buffer_Required
 			if buf.buffer.Base.GraphicsDevice != r.library.device do return .Device_Mismatch
-			if buf.slots != mat.instance_slot_count(source.material) do return .Instance_Mismatch
-		} else if source.material.effect.desc.instanced && render3d_instance_buffer(r, source.material) == nil {
+			if buf.slots != source.slots do return .Instance_Mismatch
+		} else if source.effect.desc.instanced && !render3d_instance_buffer(r, source.slots) {
 			return .Instance_Buffer_Required // 临时实例缓冲创建失败
 		}
 		for i in source.selected[:source.count] {
@@ -351,20 +369,30 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 	if draw_debug && len(r.debug.vertices) > 0 && !debug_draw_prepare(&r.debug, r.library.device) {
 		return .Invalid_Binding
 	}
-	for start := 0; start < len(r.queue.items); {
-		end := render3d_batch_end(r, start)
-		record := &r.records[r.queue.items[start].payload]
-		source := &r.sources[record.source]
-		for i in source.selected[:source.count] {
-			buf := record.buffer
-			count := record.count
-			if buf == nil && source.material.effect.desc.instanced {
-				buf = render3d_upload(r, start, end, i)
-				count = end - start
-			}
-			render3d_draw(r, record, source, i, view, buf, count)
+	// 发 Draw 之前一次上传全部自动实例化数据（每种槽数一个缓冲），绘制期间不再因上传打断渲染通道。
+	counts := render3d_plan(r)
+	bases := render3d_pack(r, counts)
+	for count, slots in counts {
+		if count == 0 do continue
+		buf := &r.buffers[slots] // 预检阶段已创建
+		if buf.capacity < count {
+			buf.capacity = max(count, buf.capacity * 2)
+			foster.VertexBufferReserve(&buf.buffer, buf.capacity)
 		}
-		start = end
+		foster.VertexBufferUpload(&buf.buffer, &r.upload[bases[slots]], count)
+	}
+	camera := camera_position(view.view_matrix)
+	for batch in r.batches {
+		record := &r.records[r.queue.items[batch.start].payload]
+		source := &r.sources[record.source]
+		n := batch.end - batch.start
+		for pass, k in source.selected[:source.count] {
+			buf, count, first := record.buffer, record.count, 0
+			if buf == nil && source.effect.desc.instanced {
+				buf, count, first = &r.buffers[source.slots], n, batch.first + k*n
+			}
+			render3d_draw(r, record, source, pass, view, camera, buf, count, first)
+		}
 	}
 	if draw_debug && len(r.debug.vertices) > 0 do debug_draw_submit(&r.debug, view)
 	return .None
@@ -375,7 +403,7 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 render3d_batch_end :: proc(r: ^Render3D, start: int) -> int {
 	a := r.records[r.queue.items[start].payload]
 	source := &r.sources[a.source]
-	if a.buffer != nil || !source.material.effect.desc.instanced ||
+	if a.buffer != nil || !source.effect.desc.instanced ||
 		(source.transparent && source.count > 1) {
 		return start + 1
 	}
@@ -388,61 +416,82 @@ render3d_batch_end :: proc(r: ^Render3D, start: int) -> int {
 	return end
 }
 
-// 自动实例化用的临时缓冲，按 [Instance] 字段数各一个，首次需要时创建；失败返回 nil。
-// submit 在预检阶段调用，保证发 Draw 之前缓冲已就绪。
+// 把排序后的队列切成批次；自动实例化批次按槽数排位，返回各槽数需要的实例总数（每个所选 Pass 一份）。
+// 只读记录与队列，不碰 GPU。
 @(private)
-render3d_instance_buffer :: proc(r: ^Render3D, m: ^mat.Material) -> ^Model_Buffer {
-	slots := mat.instance_slot_count(m)
-	if slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return nil
-	buf := &r.buffers[slots]
-	if buf.capacity == 0 && model_buffer_init(buf, m, 64, "render3d instances") != "" do return nil
-	return buf
+render3d_plan :: proc(r: ^Render3D) -> (counts: [mat.MAX_INSTANCE_FIELDS + 1]int) {
+	builtin.clear(&r.batches)
+	for start := 0; start < len(r.queue.items); {
+		end := render3d_batch_end(r, start)
+		batch := Render3D_Batch{start = start, end = end}
+		record := &r.records[r.queue.items[start].payload]
+		source := &r.sources[record.source]
+		if record.buffer == nil && source.effect.desc.instanced {
+			batch.first = counts[source.slots]
+			counts[source.slots] += (end - start) * source.count
+		}
+		append(&r.batches, batch)
+		start = end
+	}
+	return
 }
 
+// 按槽数分段写入 r.upload：每段对应一个临时缓冲，段内按 plan 的 first 排列，返回各段字节起点。
 @(private)
-render3d_upload :: proc(r: ^Render3D, start, end, pass: int) -> ^Model_Buffer {
-	first := r.records[r.queue.items[start].payload]
-	m := r.sources[first.source].material
-	slots := mat.instance_slot_count(m)
-	buf := &r.buffers[slots] // 预检阶段已创建
-	count := end - start
-	if buf.capacity < count {
-		buf.capacity = max(count, buf.capacity * 2)
-		foster.VertexBufferReserve(&buf.buffer, buf.capacity)
+render3d_pack :: proc(r: ^Render3D, counts: [mat.MAX_INSTANCE_FIELDS + 1]int) -> (bases: [mat.MAX_INSTANCE_FIELDS + 1]int) {
+	total := 0
+	for count, slots in counts {
+		bases[slots] = total
+		total += count * model_stride(slots)
 	}
-	stride := model_stride(slots)
-	resize(&r.upload, count * stride)
-	for entry, i in r.queue.items[start:end] {
-		record := &r.records[entry.payload]
-		mem.copy(&r.upload[i * stride], &record.item, size_of(Model_Item))
-		if slots > 0 {
-			mem.copy(&r.upload[i * stride + MODEL_BASE_BYTES],
-				&r.values[record.values + pass * slots], slots * 16)
+	resize(&r.upload, total)
+	for batch in r.batches {
+		record := &r.records[r.queue.items[batch.start].payload]
+		source := &r.sources[record.source]
+		if record.buffer != nil || !source.effect.desc.instanced do continue
+		slots := source.slots
+		stride := model_stride(slots)
+		n := batch.end - batch.start
+		for pass, k in source.selected[:source.count] {
+			for entry, j in r.queue.items[batch.start:batch.end] {
+				item := &r.records[entry.payload]
+				at := bases[slots] + (batch.first + k*n + j) * stride
+				mem.copy(&r.upload[at], &item.item, size_of(Model_Item))
+				if slots > 0 {
+					mem.copy(&r.upload[at + MODEL_BASE_BYTES], &r.values[item.values + pass * slots], slots * 16)
+				}
+			}
 		}
 	}
-	foster.VertexBufferUpload(&buf.buffer, raw_data(r.upload), count)
-	return buf
+	return
 }
 
+// 自动实例化用的临时缓冲，按 [Instance] 字段数各一个，首次需要时创建。
+// submit 在预检阶段调用，保证发 Draw 之前缓冲已就绪。
+@(private)
+render3d_instance_buffer :: proc(r: ^Render3D, slots: int) -> bool {
+	if slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return false
+	buf := &r.buffers[slots]
+	if buf.capacity == 0 do model_buffer_create(buf, r.library.device, slots, 64, "render3d instances")
+	return buf.capacity > 0
+}
+
+// first 是实例缓冲中的起始实例（自动实例化的批次偏移；常驻缓冲为 0）。
 @(private)
 render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_Source,
-	i: int, view: View, buf: ^Model_Buffer, count: int) {
+	i: int, view: View, camera: [4]f32, buf: ^Model_Buffer, count, first: int) {
 	snapshot := &r.snapshots[source.snapshot + i]
-	matrices: [VERTEX_MATRIX_BLOCK_SIZE]u8
+	matrices: [MATERIAL_VERTEX_BLOCK_SIZE]u8
+	frame: [MATERIAL_FRAME_BLOCK_SIZE]u8
 	if buf != nil {
-		pack_vertex_matrix_block(matrices[:], view.view_projection, world.MATRIX4_IDENTITY)
+		pack_material_blocks(matrices[:], frame[:], view.view_projection, world.MATRIX4_IDENTITY,
+			view, camera, {}, {1, 1, 1, 1})
 	} else {
-		pack_vertex_matrix_block(matrices[:], world.matrix4_multiply(record.item.world,
-			view.view_projection), record.item.world)
+		pack_material_blocks(matrices[:], frame[:], world.matrix4_multiply(record.item.world, view.view_projection),
+			record.item.world, view, camera, {}, record.item.tint)
 	}
 	foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, matrices[:])
-	if source.material.effect.desc.uniforms == .Olib {
-		frame: [48]u8
-		mat.std140_write_vec4(frame[:], 0, {view.time, view.delta_time, f32(view.frame), 0})
-		mat.std140_write_vec4(frame[:], 16, {0, 0, f32(view.target.WidthInPixels), f32(view.target.HeightInPixels)})
-		mat.std140_write_vec4(frame[:], 32, buf == nil ? record.item.tint : [4]f32{1, 1, 1, 1})
-		foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, frame[:])
-	}
+	if source.effect.desc.uniforms == .Olib do foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, frame[:])
 	command: foster.DrawCommand
 	foster.DrawCommandFromMesh(&command, view.target, record.mesh, snapshot)
 	defer foster.DrawCommandDispose(&command)
@@ -454,6 +503,7 @@ render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_
 		command.VertexBuffers[0].Buffer = &shifted
 		append(&command.VertexBuffers, foster.VertexBufferBinding{Buffer = &buf.buffer, InstanceInputRate = true})
 		command.InstanceCount = count
+		command.InstanceOffset = first
 	}
 	defer if buf != nil do foster.VertexFormatDispose(&shifted.Format)
 	command.CullMode = .Back
@@ -461,7 +511,7 @@ render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_
 	command.DepthTestEnabled = true
 	command.DepthWriteEnabled = true
 	command.DepthCompare = .Less
-	p := source.material.effect.desc.passes[source.selection.passes[i]]
+	p := source.effect.desc.passes[source.selection.passes[i]]
 	mat.pass_state_apply(&command, p.state)
 	foster.GraphicsDeviceDraw(r.library.device, &command)
 	r.draw_calls += 1

@@ -72,6 +72,8 @@ Render2D_Scissor :: struct {
 @(private)
 Render2D_Run :: struct {
 	material: ^mat.Material,
+	revision: u64, // 快照时的材质 revision；之后数值或贴图有变就开新段
+
 	pass_id: mat.Pass_Id,
 	selection: mat.Pass_Selection,
 	snapshot: int, // 第一个 Pass 的快照下标，后面连续 selection.count 个
@@ -80,12 +82,12 @@ Render2D_Run :: struct {
 	blend: foster.BlendMode,
 	scissor: Render2D_Scissor,
 	quad_start, quad_count: int,
-	storage: bool, // 顶点从 instance_values 读 [Instance] 字段
+	storage: bool, // 顶点从 instance_values 读两条轴和 [Instance] 字段（.oshader 效果总是）
 	pass_offsets: [mat.MAX_PASSES]u32, // 每个精灵的数值记录内，各 Pass 的 float4 偏移
 	// r2d.buffer 记录的常驻缓冲：不与其他记录合并，用缓冲变体顶点着色器实例化绘制。
 	buffer: ^Sprite_Buffer,
 	instance_count: int,
-	transform: [16]f32, // 记录时的变换栈，提交时乘进投影
+	transform: [16]f32, // 记录时的变换栈，提交时其 2D 仿射部分写入顶点 b1
 }
 
 // ------------------------------------------------------------------------------
@@ -222,7 +224,8 @@ image :: proc(r: ^Render2D, frame: foster.Subtexture, transform: foster.Matrix3x
 	pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
 	if frame.Texture == nil || frame.Texture.Resource == nil do return .Missing_Sprite_Texture
 	corners := render2d_frame_corners(frame, origin, transform)
-	return render2d_record(r, material, frame.Texture, corners, frame.TexCoords, {color, color, color, color}, values, pass_id)
+	axes := [4]f32{transform.M11, transform.M12, transform.M21, transform.M22}
+	return render2d_record(r, material, frame.Texture, corners, frame.TexCoords, {color, color, color, color}, values, pass_id, axes)
 }
 
 // 整张贴图当一帧。
@@ -238,17 +241,17 @@ quad_texture :: proc(r: ^Render2D, texture: ^foster.Texture, a, b, c, d: foster.
 	uv0, uv1, uv2, uv3: foster.Vec2, color := foster.White, material: ^mat.Material = nil,
 	values: ^mat.Instance_Values = nil, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
 	if texture == nil || texture.Resource == nil do return .Missing_Sprite_Texture
-	return render2d_record(r, material, texture, {a, b, c, d}, {uv0, uv1, uv2, uv3}, {color, color, color, color}, values, pass_id)
+	return render2d_record(r, material, texture, {a, b, c, d}, {uv0, uv1, uv2, uv3}, {color, color, color, color}, values, pass_id, RENDER2D_AXES_IDENTITY)
 }
 
 quad :: proc(r: ^Render2D, a, b, c, d: foster.Vec2, color: foster.Color, material: ^mat.Material = nil) -> mat.Draw_Error {
-	return render2d_record(r, material, nil, {a, b, c, d}, {}, {color, color, color, color}, nil, "")
+	return render2d_record(r, material, nil, {a, b, c, d}, {}, {color, color, color, color}, nil, "", RENDER2D_AXES_IDENTITY)
 }
 
 // 四个顶点各自的颜色，GPU 插值成渐变；顶点顺序同 quad。
 quad_gradient :: proc(r: ^Render2D, a, b, c, d: foster.Vec2, c0, c1, c2, c3: foster.Color,
 	material: ^mat.Material = nil) -> mat.Draw_Error {
-	return render2d_record(r, material, nil, {a, b, c, d}, {}, {c0, c1, c2, c3}, nil, "")
+	return render2d_record(r, material, nil, {a, b, c, d}, {}, {c0, c1, c2, c3}, nil, "", RENDER2D_AXES_IDENTITY)
 }
 
 // 矩形渐变：c0..c3 依次为左上、右上、右下、左下。
@@ -372,20 +375,26 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 	w, h := view.target.WidthInPixels, view.target.HeightInPixels
 	if w <= 0 || h <= 0 do return .Invalid_Target
 	render2d_upload(r)
-	projection := [16]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1}
+	// 顶点 b0：目标像素到裁剪空间的投影，后接 Clock（与片元 Clock 同值）。
+	vertex_uniform := [20]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1,
+		view.time, view.delta_time, f32(view.frame), 0}
 	frame := [12]f32{view.time, view.delta_time, f32(view.frame), 1, view.pointer[0], view.pointer[1],
 		f32(w), f32(h), 1, 1, 1, 1}
 	for &run in r.runs {
 		effect := run.material.effect.desc
-		vertex_uniform := projection
-		// 常驻缓冲的实例在像素坐标里，记录时的变换栈（相机）在 GPU 上乘进投影。
-		if run.buffer != nil do vertex_uniform = render2d_projection_with(projection, run.transform)
 		for i in 0..<run.selection.count {
 			snapshot := &r.snapshots[run.snapshot + i]
-			storage := run.storage && mat.instance_count(run.material.bindings[run.selection.bindings[i]].schema) > 0
+			storage := run.storage
 			if storage {
 				pass_offset := [4]u32{run.pass_offsets[i], 0, 0, 0}
 				foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(pass_offset[:]), 1)
+			}
+			if run.buffer != nil {
+				// 常驻缓冲的实例在变换栈之前的坐标里：olib_sprite 用 b1 的 2D 仿射部分换算到目标像素，
+				// 与批量变体在 CPU 上套用的部分相同，position 与轴在两种变体里同一空间。
+				t := run.transform
+				stack := [8]f32{t[0], t[1], t[4], t[5], t[12], t[13], 0, 0}
+				foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(stack[:]), 1)
 			}
 			foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(vertex_uniform[:]), 0)
 			if effect.uniforms == .Olib {
@@ -499,11 +508,15 @@ render2d_reset :: proc(r: ^Render2D) {
 	render2d_reset_state(r)
 }
 
-// 记录一个四边形。texture 为 nil 表示纯色图元。corners 是变换栈之前的坐标。
+// 精灵局部 1 像素在变换栈之前的两条轴 (x.x, x.y, y.x, y.y)；没有局部空间的图元用单位轴。
+@(private)
+RENDER2D_AXES_IDENTITY :: [4]f32{1, 0, 0, 1}
+
+// 记录一个四边形。texture 为 nil 表示纯色图元。corners 与 axes 是变换栈之前的坐标与局部轴。
 @(private)
 render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.Texture,
 	corners: [4]foster.Vec2, uvs: [4]foster.Vec2, colors: [4]foster.Color,
-	values: ^mat.Instance_Values, pass_id: mat.Pass_Id) -> mat.Draw_Error {
+	values: ^mat.Instance_Values, pass_id: mat.Pass_Id, axes: [4]f32) -> mat.Draw_Error {
 	if r.library == nil || r.library.device == nil do return .Missing_Device
 	m := material != nil ? material : r.default_material
 	if m == nil || m.owner == nil || m.effect == nil do return .Missing_Material
@@ -525,12 +538,16 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 		options = {pass_id = pass_id, instance_values = values}}
 	if error := mat.material_select(m.effect.desc, m.bindings, request, &selection); error != .None do return error
 	if selection.count == 0 do return .None
-	if !render2d_run_matches(r, last, m, pass_id, frame_texture, selection, values) {
+	if !render2d_run_matches(r, last, m, pass_id, frame_texture, selection) {
 		render2d_run_begin(r, m, pass_id, frame_texture, selection, values)
 		last = &r.runs[len(r.runs) - 1]
 	}
 	if last.storage {
-		offset := render2d_record_instances(r, m, selection, values)
+		// 轴也经过变换栈，与顶点位置在同一空间。
+		t := r.transform
+		stacked := [4]f32{axes[0]*t[0] + axes[1]*t[4], axes[0]*t[1] + axes[1]*t[5],
+			axes[2]*t[0] + axes[3]*t[4], axes[2]*t[1] + axes[3]*t[5]}
+		offset := render2d_record_instances(r, m, selection, values, stacked)
 		mode = {u8(offset), u8(offset >> 8), u8(offset >> 16), u8(offset >> 24)}
 	}
 	for i in 0..<4 {
@@ -540,15 +557,17 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 	return .None
 }
 
-// 一个精灵连续存放各 Pass 的独立数值；顶点保存起点，提交时由顶点 b1 选择该 Pass 的偏移。
+// 一个精灵的记录：首项是两条轴，随后连续存放各 Pass 的独立数值；顶点保存起点，
+// 提交时由顶点 b1 选择该 Pass 的偏移。
 @(private)
 render2d_record_instances :: proc(r: ^Render2D, m: ^mat.Material, selection: mat.Pass_Selection,
-	values: ^mat.Instance_Values) -> int {
+	values: ^mat.Instance_Values, axes: [4]f32) -> int {
 	if len(r.instance_values) == 0 do append(&r.instance_values, [4]f32{})
 	offset := len(r.instance_values)
+	append(&r.instance_values, axes)
 	for i in 0..<selection.count {
 		p := m.effect.desc.passes[selection.passes[i]]
-		_, instance := mat.material_pass_values(p, m.bindings[selection.bindings[i]], values)
+		instance := mat.material_pass_instance(p, m.bindings[selection.bindings[i]], values)
 		append(&r.instance_values, ..instance.numbers[:instance.count])
 	}
 	return offset
@@ -577,38 +596,19 @@ render2d_param_slot :: proc(effect: mat.Effect_Desc) -> int {
 
 @(private)
 render2d_run_matches :: proc(r: ^Render2D, run: ^Render2D_Run, m: ^mat.Material, pass_id: mat.Pass_Id,
-	texture: ^foster.Texture, selection: mat.Pass_Selection, values: ^mat.Instance_Values) -> bool {
-	if run == nil || run.buffer != nil || run.quad_count >= RENDER2D_BATCH_QUADS ||
-		run.material != m || run.pass_id != pass_id || run.texture != texture ||
-		run.sampler != r.sampler || run.blend != r.blend ||
-		run.scissor != (Render2D_Scissor{r.scissor, r.has_scissor}) || run.selection != selection {
-		return false
-	}
-	// 两次绘制之间可能 material_set_number 改过参数：参数 uniform 字节不同就断批。
-	slot := render2d_param_slot(m.effect.desc)
-	for i in 0..<selection.count {
-		p := m.effect.desc.passes[selection.passes[i]]
-		uniform, _ := mat.material_pass_values(p, m.bindings[selection.bindings[i]], values)
-		current := r.snapshots[run.snapshot + i].Fragment.UniformBuffers[slot][:]
-		if len(uniform) != len(current) || mem.compare(uniform, current) != 0 do return false
-		binding := m.bindings[selection.bindings[i]]
-		index := 0
-		for field in binding.schema.fields {
-			if field.kind != .Texture do continue
-			if field.id != string(p.sprite_texture) &&
-				binding.samplers[index] != r.snapshots[run.snapshot + i].Fragment.Samplers[index] {
-				return false
-			}
-			index += 1
-		}
-	}
-	return true
+	texture: ^foster.Texture, selection: mat.Pass_Selection) -> bool {
+	// 两次绘制之间 material_set_number / material_set_texture / reload 会递增 revision：参数或贴图快照过期就断批。
+	// [Instance] 数值不进参数 uniform，不影响合批。
+	return run != nil && run.buffer == nil && run.quad_count < RENDER2D_BATCH_QUADS &&
+		run.material == m && run.revision == m.revision && run.pass_id == pass_id && run.texture == texture &&
+		run.sampler == r.sampler && run.blend == r.blend &&
+		run.scissor == (Render2D_Scissor{r.scissor, r.has_scissor}) && run.selection == selection
 }
 
 @(private)
 render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id, texture: ^foster.Texture,
 	selection: mat.Pass_Selection, values: ^mat.Instance_Values) {
-	run := Render2D_Run{material = m, pass_id = pass_id, selection = selection, snapshot = r.snapshot_count,
+	run := Render2D_Run{material = m, revision = m.revision, pass_id = pass_id, selection = selection, snapshot = r.snapshot_count,
 		texture = texture, sampler = r.sampler, blend = r.blend, scissor = {r.scissor, r.has_scissor},
 		quad_start = len(r.vertices) / 4}
 	slot := render2d_param_slot(m.effect.desc)
@@ -641,7 +641,7 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 			}
 		}
 	}
-	run.storage = offset > 0
+	run.storage = m.effect.desc.uniforms == .Olib
 	append(&r.runs, run)
 }
 
@@ -683,15 +683,4 @@ render2d_corner_mesh :: proc(r: ^Render2D) -> bool {
 	foster.MeshSetIndicesTyped(u32, &r.corner_mesh, indices[:])
 	r.corner_ready = true
 	return true
-}
-
-// 投影（列主序，mul(P, v)）接上变换栈（行向量约定 v * T）：T 的存储正好是 Tᵀ 的列主序存储，结果为 P · Tᵀ。
-@(private)
-render2d_projection_with :: proc(projection, transform: [16]f32) -> (out: [16]f32) {
-	for col in 0..<4 {
-		for row in 0..<4 {
-			for k in 0..<4 do out[col*4 + row] += projection[k*4 + row] * transform[col*4 + k]
-		}
-	}
-	return
 }

@@ -116,9 +116,14 @@ material_register_manifest_selects_backend_and_validates :: proc(t: ^testing.T) 
 	effect := Effect_Desc{name = "E", output = "color", passes = []Pass_Desc{
 		{id = "body", params = "Body", draw = .Model, output = "color"},
 	}}
-	manifest, err := json.marshal(struct {version: int, schemas: []Schema, effect: Effect_Desc}{1, schemas, effect})
+	Manifest :: struct {version: int, schemas: []Schema, effect: Effect_Desc}
+	manifest, err := json.marshal(Manifest{MANIFEST_VERSION, schemas, effect})
 	defer delete(manifest)
 	testing.expect_value(t, err, nil)
+	// 旧约定生成的清单不能登记，否则旧字节码按新布局读数据会无声画错。
+	outdated, outdated_err := json.marshal(Manifest{MANIFEST_VERSION - 1, schemas, effect})
+	defer delete(outdated)
+	testing.expect_value(t, outdated_err, nil)
 	passes := []Pass_Binaries{{
 		vertex = {spv = {1}, dxil = {2}, msl = {3}},
 		fragment = {spv = {4}, dxil = {5}, msl = {6}},
@@ -131,7 +136,9 @@ material_register_manifest_selects_backend_and_validates :: proc(t: ^testing.T) 
 	library.device = &device
 	defer material_library_dispose(&library)
 	testing.expect_value(t, material_register_manifest(&library, []u8{'x'}, passes), "Invalid compiled shader manifest")
-	testing.expect_value(t, material_register_manifest(&library, manifest, nil), "Shader code count differs from schema count")
+	testing.expect_value(t, material_register_manifest(&library, outdated, passes),
+		"Compiled shader manifest is outdated; re-run tools/shaders")
+	testing.expect_value(t, material_register_manifest(&library, manifest, nil),"Shader code count differs from schema count")
 	testing.expect_value(t, material_register_manifest(&library, manifest, passes), "")
 	testing.expect_value(t, len(library.effects), 1)
 	// D3D12 选 dxil：顶点 2、片元 5。

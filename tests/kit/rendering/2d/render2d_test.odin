@@ -71,7 +71,7 @@ render2d_record_reports_errors :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(r.vertices), 0)
 }
 
-// 段的拆分条件：材质、Pass、帧贴图、采样器、混合、裁剪或参数 uniform 任何一项不同都开新段。
+// 段的拆分条件：材质、Pass、帧贴图、采样器、混合、裁剪或材质 revision 任何一项不同都开新段。
 @(test)
 render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	r: Render2D
@@ -90,7 +90,7 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	gpu: foster.Material
 	foster.MaterialInit(&gpu)
 	defer foster.MaterialDispose(&gpu)
-	values := []mat.Value{{}, {number = {0.5, 0, 0, 0}}, {}}
+	values := []mat.Value{{}, {number = {0.5, 0, 0, 0}}, {}} // 参数 strength 为 0.5
 	white, atlas: foster.Texture
 	samplers := []foster.BoundSampler{{Texture = &white}, {Texture = &white}}
 	material := mat.Material{owner = &library, effect = &effect,
@@ -99,28 +99,25 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 
 	render2d_run_begin(&r, &material, "", &atlas, selection, nil)
 	run := &r.runs[0]
-	testing.expect(t, render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
-	samplers[1].Texture = &atlas
-	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
-	samplers[1].Texture = &white
+	testing.expect(t, render2d_run_matches(&r, run, &material, "", &atlas, selection))
 	run.quad_count = RENDER2D_BATCH_QUADS
-	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection))
 	run.quad_count = 0
 	testing.expect(t, r.snapshots[0].Fragment.Samplers[0].Texture == &atlas) // 帧贴图替换到 sprite_texture 槽
 	testing.expect_value(t, len(r.snapshots[0].Fragment.UniformBuffers[1]), 16) // .oshader 效果的参数在片元槽 1
 
-	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &white, selection, nil))
-	testing.expect(t, !render2d_run_matches(&r, run, &material, "outline", &atlas, selection, nil))
-	values[1].number = {0.7, 0, 0, 0} // material_set_number 改了参数
-	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
-	values[1].number = {0.5, 0, 0, 0}
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &white, selection))
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "outline", &atlas, selection))
 	push_blend(&r, foster.BlendModeNonPremultiplied)
-	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection))
 	pop_blend(&r)
 	push_scissor(&r, {0, 0, 4, 4})
-	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection))
 	pop_scissor(&r)
-	testing.expect(t, render2d_run_matches(&r, run, &material, "", &atlas, selection, nil))
+	testing.expect(t, render2d_run_matches(&r, run, &material, "", &atlas, selection))
+	// material_set_number / material_set_texture / reload 递增 revision：快照过期，开新段。
+	material.revision += 1
+	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection))
 
 	// 有记录但目标无效：返回错误并清空记录，快照留待复用。
 	testing.expect_value(t, submit(&r, {}), mat.Draw_Error.Invalid_Target)
@@ -141,8 +138,11 @@ render2d_instance_values_preserve_each_pass :: proc(t: ^testing.T) {
 	}}
 	selection := mat.Pass_Selection{count = 2}
 	selection.passes[1], selection.bindings[1] = 1, 1
-	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil), 1)
-	testing.expect_value(t, r.instance_values[1][0], 0.2)
-	testing.expect_value(t, r.instance_values[2][0], 0.8)
-	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil), 3)
+	// 记录首项是两条轴，之后是各 Pass 的数值。
+	axes := [4]f32{2, 0, 0, 3}
+	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil, axes), 1)
+	testing.expect_value(t, r.instance_values[1], axes)
+	testing.expect_value(t, r.instance_values[2][0], 0.2)
+	testing.expect_value(t, r.instance_values[3][0], 0.8)
+	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil, axes), 4)
 }

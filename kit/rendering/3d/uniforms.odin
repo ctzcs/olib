@@ -29,6 +29,36 @@ pack_vertex_matrix_block :: proc(buf: []u8, wvp, world_matrix: world.Matrix4) ->
 	return true
 }
 
+// 材质路径的顶点 b0：矩阵块之后接 Clock（time, delta_time, frame, 0）与 CameraPosition（世界坐标 xyz, 1），
+// 与片元帧块同值，顶点着色器可按时间计算位置、按视线方向偏移。不声明它们的 Shader 不受影响。
+MATERIAL_VERTEX_BLOCK_SIZE :: VERTEX_MATRIX_BLOCK_SIZE + 32
+
+// 材质路径的片元 b0：Clock、Pointer（xy 归一化指针，zw 目标像素尺寸）、Tint、CameraPosition，各 16 字节。
+MATERIAL_FRAME_BLOCK_SIZE :: 64
+
+// 视矩阵的逆变换把原点送回世界坐标，即相机位置（w = 1）；不可逆时返回原点。
+camera_position :: proc(view_matrix: world.Matrix4) -> [4]f32 {
+	inverse, ok := world.matrix4_inverse(view_matrix)
+	if !ok do return {0, 0, 0, 1}
+	position, valid := world.matrix4_transform_point(inverse, {})
+	if !valid do return {0, 0, 0, 1}
+	return {position[0], position[1], position[2], 1}
+}
+
+// 写材质路径的顶点 b0 与片元 b0；wvp/world_matrix 由调用方按是否实例化决定，camera 每次提交算一次。
+@(private)
+pack_material_blocks :: proc(vertex, frame: []u8, wvp, world_matrix: world.Matrix4, view: View,
+	camera: [4]f32, pointer: [2]f32, tint: [4]f32) {
+	clock := [4]f32{view.time, view.delta_time, f32(view.frame), 0}
+	pack_vertex_matrix_block(vertex, wvp, world_matrix)
+	mat.std140_write_vec4(vertex, VERTEX_MATRIX_BLOCK_SIZE, clock)
+	mat.std140_write_vec4(vertex, VERTEX_MATRIX_BLOCK_SIZE + 16, camera)
+	mat.std140_write_vec4(frame, 0, clock)
+	mat.std140_write_vec4(frame, 16, {pointer[0], pointer[1], f32(view.target.WidthInPixels), f32(view.target.HeightInPixels)})
+	mat.std140_write_vec4(frame, 32, tint)
+	mat.std140_write_vec4(frame, 48, camera)
+}
+
 // ------------------------------------------------------------------------------
 // 骨骼 palette —— 两块各 64 关节（各 4KB）
 // ------------------------------------------------------------------------------

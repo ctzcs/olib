@@ -63,6 +63,7 @@ describe_field :: proc(f: ^Field, field: reflect.Struct_Field, base: rawptr, pre
 		if f.kind == .Texture do return fmt.tprintf("%s: Texture cannot be instance", f.name)
 		f.instance = true
 	}
+	if reason := field_sampler_read(f, field.tag); reason != "" do return reason
 	for c in 0..<components(f.kind) {
 		value := f.initial[c]
 		if math.is_nan(value) || math.is_inf(value) || value < f.minimum || value > f.maximum {
@@ -118,5 +119,30 @@ field_range_read :: proc(f: ^Field, tag: reflect.Struct_Tag) -> string {
 		}
 	}
 	if f.maximum <= f.minimum || f.step <= 0 do return fmt.tprintf("%s: invalid range/step", f.name)
+	return ""
+}
+
+// 读取贴图字段的 filter:"linear|nearest" 与 wrap:"clamp|repeat|mirror" 标签，缺省线性、钳制。
+@(private)
+field_sampler_read :: proc(f: ^Field, tag: reflect.Struct_Tag) -> string {
+	filter, has_filter := reflect.struct_tag_lookup(tag, "filter")
+	wrap, has_wrap := reflect.struct_tag_lookup(tag, "wrap")
+	if !has_filter && !has_wrap do return ""
+	if f.kind != .Texture do return fmt.tprintf("%s: filter/wrap apply only to textures", f.name)
+	if has_filter {
+		switch filter {
+		case "linear": f.filter = .Linear
+		case "nearest": f.filter = .Nearest
+		case: return fmt.tprintf("%s: filter must be linear or nearest", f.name)
+		}
+	}
+	if has_wrap {
+		switch wrap {
+		case "clamp": f.wrap = .Clamp
+		case "repeat": f.wrap = .Repeat
+		case "mirror": f.wrap = .Mirror
+		case: return fmt.tprintf("%s: wrap must be clamp, repeat or mirror", f.name)
+		}
+	}
 	return ""
 }

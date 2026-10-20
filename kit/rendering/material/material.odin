@@ -15,7 +15,8 @@ import foster "../../../foster"
 // ------------------------------------------------------------------------------
 
 // 返回的指针借用至 material_library_dispose；reload 保持地址不变，模型不需要重新接线。
-// 不直接修改这些字段；数值使用 material_set_number，资源变更通过 material_reload。
+// 不直接修改这些字段；数值使用 material_set_number，运行时贴图使用 material_set_texture，
+// 资源变更通过 material_reload。
 Material :: struct {
 	owner: ^Material_Library,
 	effect: ^Material_Effect,
@@ -23,6 +24,8 @@ Material :: struct {
 	source: string,
 	bindings: []Material_Binding,
 	samplers: [][MAX_TEXTURES]foster.BoundSampler,
+	// 数值、贴图或重载每次成功修改都递增；绘制器据此判断已记录的参数与贴图快照能否继续合批。
+	revision: u64,
 }
 
 @(private)
@@ -112,7 +115,7 @@ material_group_samplers :: proc(library: ^Material_Library, source: string, grou
 			texture, reason = material_texture(library, resolved)
 			if reason != "" do return 0, reason
 		}
-		samplers[count] = {texture, foster.TextureSamplerMake(.Linear, .Clamp)}
+		samplers[count] = {texture, field_sampler(field)}
 		count += 1
 	}
 	return count, ""
@@ -127,6 +130,7 @@ material_replace :: proc(library: ^Material_Library, material: ^Material, file: 
 	defer material_instance_clear(&next)
 	if reason != "" do return reason
 	if reason = material_bind(library, &next, source); reason != "" do return reason
+	next.revision = material.revision + 1
 	material_instance_clear(material)
 	material^, next = next, {}
 	return ""
@@ -196,7 +200,30 @@ material_set_number :: proc(material: ^Material, group, field: string, value: [4
 			if value[c] < f.minimum || value[c] > f.maximum do return false
 		}
 		parameters.values[i].number = value
+		material.revision += 1
 		return true
+	}
+	return false
+}
+
+// 把运行时贴图（阴影图、反射等 Target 附件）绑定到 Texture 字段，采样方式取字段声明；nil 恢复白色默认贴图。
+// 贴图借用：Render2D 至 submit、Render3D 至 clear 前保持有效。不修改材质文件里的路径，material_reload 会恢复文件里的贴图。
+material_set_texture :: proc(material: ^Material, group, field: string, texture: ^foster.Texture) -> bool {
+	if material == nil || material.owner == nil do return false
+	if texture != nil && (texture.Resource == nil || texture.GraphicsDevice != material.owner.device) do return false
+	for &parameters, g in material.instance.groups {
+		if parameters.schema.name != group do continue
+		slot := 0
+		for f in parameters.schema.fields {
+			if f.kind != .Texture do continue
+			if f.id == field {
+				material.samplers[g][slot] = {texture != nil ? texture : &material.owner.white, field_sampler(f)}
+				material.revision += 1
+				return true
+			}
+			slot += 1
+		}
+		return false
 	}
 	return false
 }

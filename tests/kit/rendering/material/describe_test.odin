@@ -40,6 +40,17 @@ reflect_controls_and_validate_defaults :: proc(t: ^testing.T) {
 	Wrong_Control :: struct { image: Texture_Path `ui:"slider"` }
 	_, control_error := describe("Bad", "typed.hlsl", "2d", Wrong_Control{})
 	testing.expect(t, control_error != "")
+	// 贴图字段的采样标签：缺省线性、钳制；只用于贴图，值必须是已知名字。
+	Sampled :: struct { tiles: Texture_Path `filter:"nearest" wrap:"repeat"`, plain: Texture_Path }
+	sampled, sampled_error := describe("Sampled", "typed.hlsl", "3d", Sampled{})
+	testing.expect(t, sampled_error == "" && sampled.fields[0].filter == .Nearest && sampled.fields[0].wrap == .Repeat)
+	testing.expect(t, sampled.fields[1].filter == .Linear && sampled.fields[1].wrap == .Clamp)
+	Bad_Wrap :: struct { tiles: Texture_Path `wrap:"tile"` }
+	_, wrap_error := describe("Bad", "typed.hlsl", "3d", Bad_Wrap{})
+	testing.expect(t, wrap_error != "")
+	Not_Texture :: struct { speed: f32 `ui:"slider" filter:"nearest"` }
+	_, filter_error := describe("Bad", "typed.hlsl", "3d", Not_Texture{})
+	testing.expect(t, filter_error != "")
 }
 
 @(test)

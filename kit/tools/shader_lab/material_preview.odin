@@ -39,8 +39,11 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 	bindings := make([]mat.Material_Binding, s.shader_count, context.temp_allocator)
 	for &p, i in s.parameters[:s.shader_count] {
 		samplers := make([]foster.BoundSampler, mat.texture_count(p.live), context.temp_allocator)
-		for &sampler, j in samplers {
-			sampler = {p.textures[j].Resource != nil ? &p.textures[j] : &s.texture, foster.TextureSamplerMake(.Linear, .Clamp)}
+		j := 0
+		for field in p.live.fields {
+			if field.kind != .Texture do continue
+			samplers[j] = {p.textures[j].Resource != nil ? &p.textures[j] : &s.texture, mat.field_sampler(field)}
+			j += 1
 		}
 		bindings[i] = {p.live, p.values, &s.materials[i], samplers}
 	}
@@ -82,7 +85,7 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 	draw_error := r3d.model_material_draw(s.device, e.desc, bindings, {
 		mesh = &s.meshes[s.mode == 3 ? 2 : 1], world_matrix = world.MATRIX4_IDENTITY,
 		view = {target = foster.DrawableTargetFromTarget(target), view_projection = world.camera3d_view_projection(&s.camera),
-			time = e.time, delta_time = e.last_delta, frame = e.frame},
+			view_matrix = world.camera3d_view(&s.camera), time = e.time, delta_time = e.last_delta, frame = e.frame},
 		pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height},
 		pass_limit = s.preview_pass+1,
 		options = {enabled = e.enabled[:len(e.desc.passes)],

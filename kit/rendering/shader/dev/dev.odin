@@ -186,7 +186,7 @@ apply :: proc(s: ^Session, device: ^foster.GraphicsDevice, probes: []foster.Draw
 		actual := s.job.result.resources[i]
 		if (!s.parameter_layout && actual != expected) || (s.parameter_layout &&
 			(actual.samplers > expected.samplers || actual.uniform_buffers > expected.uniform_buffers ||
-			actual.storage_buffers != expected.storage_buffers || actual.storage_textures != expected.storage_textures)) {
+			actual.storage_buffers > expected.storage_buffers || actual.storage_textures != expected.storage_textures)) {
 			set_error(s, "Shader resource bindings changed; update the host contract and restart")
 			build_dispose(&s.job.result)
 			return false
@@ -196,6 +196,7 @@ apply :: proc(s: ^Session, device: ^foster.GraphicsDevice, probes: []foster.Draw
 	for &info, i in infos {
 		r := s.job.result.resources[i]
 		// 反射报告使用数量；b0 被优化掉但 b1 仍被使用时，布局仍须保留两个槽。
+		// storage buffer 同理：精灵没读轴和字段时被优化掉，宿主仍按约定绑定。
 		// 同理，未使用的贴图不能使后续生成的 t/s 槽发生位移。
 		if s.parameter_layout do r = s.expected[i]
 		info = {

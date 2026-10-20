@@ -107,7 +107,7 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 		version: int,
 		schemas: []mat.Schema,
 		effect: mat.Effect_Desc,
-	}{1, doc.schemas, doc.effect}
+	}{mat.MANIFEST_VERSION, doc.schemas, doc.effect}
 	data, json_err := json.marshal(manifest)
 	if json_err != nil {
 		fmt.eprintln(json_err)

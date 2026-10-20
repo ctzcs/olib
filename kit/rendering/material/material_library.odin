@@ -139,15 +139,16 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 	sprite := effect_is_sprite(effect.desc)
 	if sprite && effect.desc.instanced do effect.instanced_vertex = make([]foster.Shader, len(effect.code))
 	for code, i in effect.code {
-		// 精灵批量变体有 [Instance] 字段时从顶点 storage buffer 读取（见 hlsl 的 Sprite_Batch）。
-		storage := sprite && instance_count(effect.schemas[i]) > 0 ? 1 : 0
+		// 精灵批量变体从顶点 storage buffer 读两条轴和 [Instance] 字段（见 hlsl 的 Sprite_Batch）。
+		storage := sprite && effect.desc.uniforms == .Olib ? 1 : 0
 		foster.ShaderInit(&effect.vertex[i], library.device, {
 			Stage = .Vertex, Code = code.vertex, UniformBufferCount = 1 + storage, StorageBufferCount = storage,
 			EntryPoint = "vertex_main",
 		}, effect.schemas[i].name)
 		if effect.instanced_vertex != nil {
+			// 缓冲变体：b0 投影与 Clock，b1 变换栈（见 hlsl 的 Sprite）。
 			foster.ShaderInit(&effect.instanced_vertex[i], library.device, {
-				Stage = .Vertex, Code = code.instanced_vertex, UniformBufferCount = 1,
+				Stage = .Vertex, Code = code.instanced_vertex, UniformBufferCount = 2,
 				EntryPoint = "vertex_main",
 			}, effect.schemas[i].name)
 			if effect.instanced_vertex[i].Resource == nil {

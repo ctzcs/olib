@@ -22,6 +22,7 @@ Material_Draw2D :: struct {
 Render2D_Tool_Submission :: struct {
 	r: ^Render2D,
 	slots: int,
+	axes: [4]f32, // 精灵局部的两条轴，写在记录首项
 	user: mat.Draw_Options, // 调用方原本的回调，包装回调转发给它
 }
 
@@ -45,21 +46,26 @@ material_draw :: proc(r: ^Render2D, effect: mat.Effect_Desc, bindings: []mat.Mat
 	if effect.uniforms == .Olib {
 		for binding in bindings do slots = max(slots, mat.instance_count(binding.schema))
 	}
-	// 有 [Instance] 字段时数值在 storage buffer 的偏移 1 处（每个 Pass 绘制前写入），否则 mode 选 Normal。
-	mode := slots > 0 ? foster.Color{1, 0, 0, 0} : render2d_mode_color(.Normal)
+	// .oshader 效果的记录在 storage buffer 的偏移 1 处：两条轴，再接 [Instance] 字段（每个 Pass 绘制前写入）。
+	// 内置效果没有 storage，mode 选 Normal。
+	olib := effect.uniforms == .Olib
+	mode := olib ? foster.Color{1, 0, 0, 0} : render2d_mode_color(.Normal)
 	vertices: [4]foster.BatcherVertex
 	corners := render2d_frame_corners(draw.frame, draw.origin, draw.transform)
 	for &vertex, i in vertices {
 		vertex = {Pos = corners[i], Tex = draw.frame.TexCoords[i], Col = draw.color, Mode = mode}
 	}
 	foster.MeshSetVerticesTyped(foster.BatcherVertex, &r.tool_mesh, vertices[:])
-	projection := [16]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1}
 	view := draw.view
+	// 顶点 b0：投影后接 Clock，与 submit 一致。
+	projection := [20]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1,
+		view.time, view.delta_time, f32(view.frame), 0}
 	frame := [12]f32{view.time, view.delta_time, f32(view.frame), 1, view.pointer[0], view.pointer[1],
 		f32(w), f32(h), 1, 1, 1, 1}
-	submission := Render2D_Tool_Submission{r, slots, draw.options}
+	t := draw.transform
+	submission := Render2D_Tool_Submission{r, slots, {t.M11, t.M12, t.M21, t.M22}, draw.options}
 	options := draw.options
-	if slots > 0 {
+	if olib {
 		options.user_data = &submission
 		options.prepare = render2d_tool_prepare
 		options.submit = draw.options.submit != nil ? render2d_tool_submit : nil
@@ -71,7 +77,7 @@ material_draw :: proc(r: ^Render2D, effect: mat.Effect_Desc, bindings: []mat.Mat
 	})
 }
 
-// 每个 Pass 的 [Instance] 数值不同：先转交调用方的回调（它可能整条替换命令），再把数值写进
+// 每个 Pass 的 [Instance] 数值不同：先转交调用方的回调（它可能整条替换命令），再把轴和数值写进
 // storage buffer 偏移 1 处并绑定到最终的命令上。
 @(private)
 render2d_tool_prepare :: proc(user_data: rawptr, pass_index: int, command: ^foster.DrawCommand,
@@ -86,9 +92,10 @@ render2d_tool_prepare :: proc(user_data: rawptr, pass_index: int, command: ^fost
 		foster.StorageBufferInitTyped([4]f32, &r.tool_values, r.library.device, "render2d tool instance values")
 		r.tool_values_ready = true
 	}
-	data: [1 + mat.MAX_INSTANCE_FIELDS][4]f32
-	if values != nil do copy(data[1:], values.numbers[:submission.slots])
-	foster.StorageBufferUploadTyped([4]f32, &r.tool_values, data[:1 + submission.slots])
+	data: [2 + mat.MAX_INSTANCE_FIELDS][4]f32
+	data[1] = submission.axes
+	if values != nil do copy(data[2:], values.numbers[:submission.slots])
+	foster.StorageBufferUploadTyped([4]f32, &r.tool_values, data[:2 + submission.slots])
 	append(&command.VertexStorageBuffers, &r.tool_values)
 }
 

@@ -56,7 +56,11 @@ shader_pick :: proc(driver: foster.GraphicsDriver, binaries: Shader_Binaries) ->
 // 清单登记
 // ------------------------------------------------------------------------------
 
-// 清单由 tools/shaders 生成（version=1：schemas + effect），passes 与 schemas 一一对应。
+// 清单版本即生成代码与宿主的绑定约定版本，约定变化时递增，旧产物登记时报错而不是画错。
+// 2：精灵记录首项为两条轴；精灵缓冲变体顶点 b1 为变换栈；顶点 b0 在投影/矩阵后接 Clock。
+MANIFEST_VERSION :: 2
+
+// 清单由 tools/shaders 生成（schemas + effect），passes 与 schemas 一一对应。
 // 内部完成选择后端、解析、material_register 与临时数据释放；库深复制效果，字节码借用至
 // material_library_dispose。返回空串表示成功，诊断文本借用至本帧结束。
 material_register_manifest :: proc(library: ^Material_Library, manifest: []u8,
@@ -65,13 +69,14 @@ material_register_manifest :: proc(library: ^Material_Library, manifest: []u8,
 	driver := library.device.Driver
 	if !shader_driver_supported(driver) do return "Unsupported shader backend"
 	parsed: struct {version: int, schemas: []Schema, effect: Effect_Desc}
-	if json.unmarshal(manifest, &parsed) != nil || parsed.version != 1 {
-		return "Invalid compiled shader manifest"
-	}
 	defer {
 		for &schema in parsed.schemas do schema_dispose(&schema)
 		delete(parsed.schemas)
 		effect_dispose(&parsed.effect)
+	}
+	if json.unmarshal(manifest, &parsed) != nil do return "Invalid compiled shader manifest"
+	if parsed.version != MANIFEST_VERSION {
+		return "Compiled shader manifest is outdated; re-run tools/shaders"
 	}
 	code := make([]Material_Shader_Code, len(passes), context.temp_allocator)
 	for pass, i in passes {

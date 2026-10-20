@@ -65,6 +65,7 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 	// 借用实例只用于无 GPU 的参数/失败测试，清理由 a 的所有者完成。
 	material := Material{owner = &library, effect = selected, instance = a}
 	testing.expect(t, material_set_number(&material, "Body", "amount", {0.2, 0, 0, 0}))
+	testing.expect_value(t, material.revision, 1) // 成功修改才递增，绘制器据此让快照过期
 	testing.expect_value(t, b.groups[0].values[0].number[0], 0.7)
 	testing.expect(t, !material_set_number(&material, "Body", "amount", {2, 0, 0, 0}))
 	testing.expect(t, !material_set_number(&material, "Body", "missing", {}))
@@ -72,6 +73,7 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 	testing.expect_value(t, material.instance.groups[0].values[0].number[0], 0.2)
 	testing.expect(t, material_reload(&library, &material, "materials/left.json") != "") // 无 device，不发布半份 GPU 资源。
 	testing.expect_value(t, material.instance.groups[0].values[0].number[0], 0.2)
+	testing.expect_value(t, material.revision, 1)
 	failed, load_error := material_load(&library, "materials/left.json")
 	testing.expect(t, failed == nil && load_error != "" && len(library.instances) == 0)
 	name := selected.desc.name
@@ -79,6 +81,35 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 	missing, _, unknown_error := material_read(&library, "materials/left.json")
 	selected.desc.name = name
 	testing.expect(t, unknown_error != "" && missing.groups == nil)
+}
+
+// 运行时贴图（阴影图等）绑到 Texture 字段：采样器取字段声明，非贴图字段、外设备贴图拒绝，nil 恢复白图。
+@(test)
+material_set_texture_binds_runtime_texture_with_field_sampler :: proc(t: ^testing.T) {
+	device, other: foster.GraphicsDevice
+	library := Material_Library{device = &device}
+	schema := Schema{name = "Body", fields = {
+		{id = "albedo", kind = .Texture},
+		{id = "amount", kind = .Scalar, maximum = 1},
+		{id = "shadow", kind = .Texture, filter = .Nearest, wrap = .Repeat}}}
+	samplers := make([][MAX_TEXTURES]foster.BoundSampler, 1)
+	defer delete(samplers)
+	material := Material{owner = &library, instance = {groups = []Instance_Group{{schema = schema}}}, samplers = samplers}
+	shadow := foster.Texture{GraphicsDevice = &device}
+	shadow.Resource = cast(type_of(shadow.Resource))uintptr(1) // 仅验证绑定；不调用 GPU
+	testing.expect(t, material_set_texture(&material, "Body", "shadow", &shadow))
+	testing.expect(t, samplers[0][1].Texture == &shadow)
+	testing.expect(t, samplers[0][1].Sampler == foster.TextureSamplerMake(.Nearest, .Repeat))
+	testing.expect_value(t, material.revision, 1)
+	testing.expect(t, !material_set_texture(&material, "Body", "amount", &shadow))
+	testing.expect(t, !material_set_texture(&material, "Other", "shadow", &shadow))
+	alien := foster.Texture{GraphicsDevice = &other, Resource = shadow.Resource}
+	testing.expect(t, !material_set_texture(&material, "Body", "albedo", &alien))
+	testing.expect_value(t, material.revision, 1)
+	testing.expect(t, material_set_texture(&material, "Body", "albedo", nil))
+	testing.expect(t, samplers[0][0].Texture == &library.white)
+	testing.expect(t, samplers[0][0].Sampler == foster.TextureSamplerMake(.Linear, .Clamp)) // 字段零值即默认
+	testing.expect(t, field_sampler({wrap = .Mirror}) == foster.TextureSamplerMake(.Linear, .MirroredRepeat))
 }
 
 @(test)

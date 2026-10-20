@@ -29,16 +29,15 @@ model_material_draw :: proc(device: ^foster.GraphicsDevice, effect: mat.Effect_D
 	// 材质路径的 Shader 按静态顶点格式编译；蒙皮等其他格式明确报错，而不是画出错乱的几何。
 	if draw.mesh != nil && draw.mesh.VertexData.Format.Stride != dasset.DASSET_VERTEX_STRIDE_STATIC do return .Unsupported_Mesh
 	view := draw.view
-	matrices: [VERTEX_MATRIX_BLOCK_SIZE]u8
+	matrices: [MATERIAL_VERTEX_BLOCK_SIZE]u8
+	frame: [MATERIAL_FRAME_BLOCK_SIZE]u8
+	camera := camera_position(view.view_matrix)
 	if draw.instances != nil {
-		pack_vertex_matrix_block(matrices[:], view.view_projection, world.MATRIX4_IDENTITY)
+		pack_material_blocks(matrices[:], frame[:], view.view_projection, world.MATRIX4_IDENTITY, view, camera, draw.pointer, {1, 1, 1, 1})
 	} else {
-		pack_vertex_matrix_block(matrices[:], world.matrix4_multiply(draw.world_matrix, view.view_projection), draw.world_matrix)
+		pack_material_blocks(matrices[:], frame[:], world.matrix4_multiply(draw.world_matrix, view.view_projection),
+			draw.world_matrix, view, camera, draw.pointer, {1, 1, 1, 1})
 	}
-	frame: [48]u8
-	mat.std140_write_vec4(frame[:], 0, {view.time, view.delta_time, f32(view.frame), 0})
-	mat.std140_write_vec4(frame[:], 16, {draw.pointer[0], draw.pointer[1], f32(view.target.WidthInPixels), f32(view.target.HeightInPixels)})
-	mat.std140_write_vec4(frame[:], 32, {1, 1, 1, 1})
 	request := mat.Material_Draw{
 		mesh = draw.mesh, target = view.target, kind = .Model,
 		vertex_uniform = matrices[:], frame_uniform = frame[:],

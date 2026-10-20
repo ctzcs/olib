@@ -9,7 +9,7 @@ Label "Water demo"
 Properties {
     [Id("velocity")] [Step(0.1)] _Speed ("Speed", Range(0, 5)) = 1
     _Tint ("Tint", Color) = (0.2, 0.5, 0.8, 1)
-    _Source ("Source", 2D) = ""
+    [Filter(Nearest)] [Wrap(Repeat)] _Source ("Source", 2D) = ""
 }
 HLSLINCLUDE
 float4 shared_color() { return _Tint; }
@@ -46,6 +46,9 @@ properties_passes_and_original_hlsl_locations :: proc(t: ^testing.T) {
 	testing.expect(t, doc.schemas[0].name == "Water_scene")
 	testing.expect(t, doc.schemas[0].fields[0].id == "velocity")
 	testing.expect(t, doc.schemas[0].fields[0].step == 0.1)
+	// 贴图的采样方式随 Schema 发布；未声明的贴图保持线性、钳制。
+	testing.expect(t, doc.schemas[0].fields[2].filter == .Nearest && doc.schemas[0].fields[2].wrap == .Repeat)
+	testing.expect(t, doc.schemas[0].fields[1].filter == .Linear && doc.schemas[0].fields[1].wrap == .Clamp)
 	testing.expect(t, doc.effect.output == "color")
 	testing.expect(t, doc.effect.passes[0].target.scale == 0.5)
 	testing.expect(t, doc.effect.passes[1].inputs[0].target == "scene")
@@ -72,6 +75,10 @@ invalid_declarations_fail_without_partial_document :: proc(t: ^testing.T) {
 		{"Pass \"compose\"", "Pass \"scene\""},
 		{"Pass \"compose\"", "Pass \"../bad\""},
 		{"Label \"Water demo\"", "Label \"Water demo\" Label \"Other\""},
+		{"[Wrap(Repeat)]", "[Wrap(Tile)]"},
+		{"[Filter(Nearest)]", "[Filter(Point)]"},
+		{"[Wrap(Repeat)]", "[Wrap(Repeat)] [Wrap(Clamp)]"},
+		{"[Step(0.1)]", "[Step(0.1)] [Filter(Nearest)]"}, // 采样方式只用于 2D 属性
 	}
 	for change in changes {
 		bad, _ := strings.replace_all(SOURCE, change[0], change[1])
@@ -152,7 +159,10 @@ ENDHLSL
 	testing.expect(t, strings.contains(batch, "s.instance.data1 = OlibInstanceValues[offset + 1];"))
 	testing.expect(t, !strings.contains(batch, "OlibInstanceInput"))
 	testing.expect(t, strings.contains(buffer, "struct OlibSpriteInput {\n    OlibInstanceInput Instance;"))
-	testing.expect(t, strings.contains(buffer, "olib_sprite_vertex(i.Instance, i.Corner, s.position, s.uv);"))
+	testing.expect(t, strings.contains(buffer, "olib_sprite_vertex(i.Instance, i.Corner, p, s.uv);"))
+	// 缓冲变体在 GPU 上套用变换栈（b1），position 与批量变体同在目标像素空间。
+	testing.expect(t, strings.contains(buffer, "register(b1, space1) { float4 _olib_view_axes; float4 _olib_view_origin; };"))
+	testing.expect(t, strings.contains(buffer, "s.position = p.x * _olib_view_axes.xy + p.y * _olib_view_axes.zw + _olib_view_origin.xy;"))
 	testing.expect(t, !strings.contains(buffer, "StructuredBuffer"))
 	for program in ([2]string{batch, buffer}) {
 		testing.expect(t, strings.contains(program, "OlibSprite olib_sprite(OlibSpriteInput i)"))
@@ -172,9 +182,13 @@ ENDHLSL
 	defer dispose(&tinted)
 	testing.expectf(t, tinted.error == "" && tinted.effect.instanced, "%s", tinted.error)
 	testing.expect(t, strings.contains(tinted.programs[0], "OlibInstance"))
-	// 没有实例字段：批量变体不声明 storage buffer，tint 直接取顶点色。
-	testing.expect(t, !strings.contains(tinted.programs[0], "StructuredBuffer"))
+	// 没有实例字段：批量变体仍从 storage buffer 读两条轴，不读字段；tint 直接取顶点色。
+	testing.expect(t, strings.contains(tinted.programs[0], "s.axis_x = axes.xy;"))
+	testing.expect(t, !strings.contains(tinted.programs[0], "s.instance.data0"))
 	testing.expect(t, strings.contains(tinted.programs[0], "s.instance.tint = i.Color;"))
+	// 缓冲变体的两条轴来自实例记录的线性部分，再套用变换栈，与批量变体在 CPU 上的换算相同。
+	testing.expect(t, strings.contains(tinted.instanced_programs[0],
+		"s.axis_x = i.Instance.sprite0.x * _olib_view_axes.xy + i.Instance.sprite0.y * _olib_view_axes.zw;"))
 	// 非 Sprite 的效果没有缓冲变体。
 	water := parse(SOURCE, "water.oshader")
 	defer dispose(&water)

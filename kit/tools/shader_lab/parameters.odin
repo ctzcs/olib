@@ -76,7 +76,7 @@ parameters_bind :: proc(s: ^Session, index: int) {
 	for f in p.live.fields {
 		if f.kind != .Texture do continue
 		texture := p.textures[slot].Resource != nil ? &p.textures[slot] : &s.texture
-		stage.Samplers[slot] = {texture, foster.TextureSamplerMake(.Linear, .Clamp)}
+		stage.Samplers[slot] = {texture, mat.field_sampler(f)}
 		slot += 1
 	}
 }

@@ -16,7 +16,7 @@ GPU 资源使用 Foster，解析、编解码与布局函数不需要创建窗口
 | `instance.odin`、`resource.odin` | 实例 / 单参数组的 JSON 编解码（纯字节，不碰文件与 GPU） |
 | `material_library.odin` | `Material_Library`：登记 Effect、惰性创建 Shader、贴图缓存 |
 | `shader_code.odin` | `Shader_Binaries / Pass_Binaries`、`shader_pick`、`material_register_manifest`：按驱动选字节码并一次登记 |
-| `material.odin` | `Material`：`material_load / reload / set_number` |
+| `material.odin` | `Material`：`material_load / reload / set_number / set_texture` |
 | `draw.odin` | `Material_Binding / Draw_Options / Draw_Error / material_draw`：选取 Pass、上传参数、提交 DrawCommand |
 
 包含关系（名字里的 Material 容易混，按这张图读）：
@@ -133,8 +133,16 @@ ShaderLab 的本机路径适配属于工具内部实现，底层同样使用 Sto
 库、device、storage 的地址及存储根在使用期间须保持稳定。
 
 `material_set_number(material, group, field, value)` 检查类型和范围后修改单个实例。
+`material_set_texture(material, group, field, texture)` 把运行时贴图（阴影图、反射等 Target 附件）绑到 Texture 字段，
+采样方式取字段声明，nil 恢复白色默认贴图；贴图须属于同一设备，借用期间保持有效，不改材质文件里的路径。
 `material_reload(&materials, material)` 完整候选成功后替换，失败保留旧值，材质指针不变。
-它只重载材质文件，同路径贴图仍使用缓存，不自动热重载 Shader/贴图。
+它只重载材质文件，同路径贴图仍使用缓存，不自动热重载 Shader/贴图；运行时绑定的贴图恢复为文件里的贴图。
+以上修改成功时 `material.revision` 递增，Render2D 据此判断已记录的参数快照是否还能合批；
+不要绕过这些接口直接改 bindings 或数值。
+
+Texture 字段的采样器由 `field_sampler(field)` 按字段的 filter（Linear / Nearest）与 wrap（Clamp / Repeat / Mirror）创建，
+零值即线性、钳制。.oshader 写 `[Filter(Nearest)] [Wrap(Repeat)] _Albedo ("Albedo", 2D) = ""`，
+Odin 参数结构体写 `filter:"nearest" wrap:"repeat"` 标签。Shader Lab 预览与游戏使用同一规则。
 停止绘制后用 `material_library_dispose` 统一释放全部材质、Shader 和贴图；不浅复制资源对象。
 加载和重载在主线程、合法 GPU 生命周期内、提交绘制之外进行。缓存按库统一释放，
 目前不逐项卸载，建议按场景或资源会话划分库。

@@ -35,7 +35,7 @@ mat.material_library_dispose(&materials)
 | 要做什么 | 函数 / 类型 | 文件 |
 | --- | --- | --- |
 | 创建材质库、登记效果 | `Material_Library`、`material_create`、`material_register_manifest`、`material_register`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
-| 加载材质、改参数 | `material_load`、`material_reload`、`material_set_number` | [material/material.odin](material/material.odin) |
+| 加载材质、改参数、绑运行时贴图 | `material_load`、`material_reload`、`material_set_number`、`material_set_texture` | [material/material.odin](material/material.odin) |
 | 每个实例的值（可合批） | `Instance_Slot`、`instance_slot`、`instance_slot_count`、`Instance_Values`、`instance_values_set`、`instance_array_set`（缓冲用） | [material/instance_values.odin](material/instance_values.odin) |
 | 绘制失败原因 | `Draw_Error`、`draw_error_text` | [material/draw.odin](material/draw.odin) |
 | 2D 画精灵 | `Render2D`、`init/dispose`、`image/texture`、`push_matrix/pop_matrix`、`submit`、`View` | [2d/render2d.odin](2d/render2d.odin) |

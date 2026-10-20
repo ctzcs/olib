@@ -50,6 +50,8 @@ Shader "Water"
   除 Float 默认范围 -10000..10000 外，数值控件默认范围 0..1；向量和颜色可写
   `Vector2(-5,5)`、`Color(0,4)` 指定范围。默认值必须落在范围内。
 - `[Step(0.01)]` 设置步长；`[Id("稳定标识")]` 让字段改名后保留值。未指定 Id 时取去掉第一个下划线后的属性名，大小写敏感。
+- 2D 属性可写 `[Filter(Linear|Nearest)]` 与 `[Wrap(Clamp|Repeat|Mirror)]` 指定采样器，默认 Linear、Clamp；
+  例如平铺地面 `[Wrap(Repeat)] _Ground ("Ground", 2D) = ""`。写在非贴图属性上报错。
 - `[Instance]` 标记每对象数值字段（最多 16 个）；2D 走顶点 storage buffer，不占参数 uniform，
   不同取值仍可合批。tint 总在顶点颜色里，不需要额外标记。
 - 顶层 `Instanced` 声明生成常驻缓冲变体；当前解析器遇到 `[Instance]` 也会自动启用它。
@@ -80,10 +82,17 @@ float4 fragment_main(Output v) : SV_Target0
 ```
 
 `InstanceTint` 是绘制调用的顶点色；片元 b0 中的 Tint 固定白色。
-批量变体使用 BatcherVertex；有实例字段时，mode 字节存 storage buffer 下标，
-生成器声明顶点 t0/space0 和 b1/space1 的 Pass 偏移，运行时一次上传各 Pass 的独立数值。
-缓冲变体使用单位四边形与实例顶点，由 `r2d.buffer` 绘制，不使用 storage buffer。
-顶点 b0 为投影；片元 b0 为 Clock/Pointer/Tint，b1 为统一参数；这些帧块仍由宿主提供。
+两种变体的 `s.position` 都是目标像素坐标，已套用变换栈（相机）的 2D 仿射部分；同一份顶点代码在两种变体里结果一致。
+`s.axis_x / s.axis_y` 是精灵局部 1 像素在目标像素空间里的两条轴（局部→目标的 2×2 线性部分，含变换栈）。
+按精灵大小计算的偏移用它：`sqrt(abs(axis_x.x*axis_y.y - axis_x.y*axis_y.x))` 是缩放，
+屏幕上固定方向的阴影可写 `s.position + float2(1, 1) * 16 * scale`，相机旋转时方向不变；
+没有局部空间的图元（rect、quad 等）为单位轴再套用变换栈。
+批量变体使用 BatcherVertex，位置与轴在记录时由 CPU 套用变换栈；mode 字节存 storage buffer 下标，
+每个精灵的记录先是两条轴，再接各 Pass 的实例字段。生成器总是声明顶点 t0/space0 和 b1/space1 的 Pass 偏移，
+运行时一次上传所有记录。缓冲变体使用单位四边形与实例顶点，由 `r2d.buffer` 绘制，不使用 storage buffer；
+实例在变换栈之前的坐标里，生成器声明顶点 b1/space1 的变换栈，`olib_sprite` 在 GPU 上换算位置和轴。
+顶点 b0 为投影后接 Clock（`{ float4x4 Projection; float4 Clock; }`），两种变体相同；片元 b0 为 Clock/Pointer/Tint，
+b1 为统一参数；这些帧块仍由宿主提供。顶点与片元的 cbuffer 写在同一份源码里，顶点侧 Clock 需另起名字。
 不要手写或复用旧的精灵顶点布局。Odin 的字段标签 `instance:"true"` 对应 `[Instance]`。
 
 ### instanced 效果的 HLSL 约定
@@ -91,8 +100,10 @@ float4 fragment_main(Output v) : SV_Target0
 **模型 instanced** 的 HLSL（`Draw Model`）：
 
 ```hlsl
-// 顶点 b0 为 { ViewProjection, 单位矩阵 }；世界矩阵来自实例，用 olib_world 取得。
-cbuffer ViewBlock : register(b0, space1) { float4x4 ViewProjection; float4x4 Unused; };
+// 顶点 b0 为 { ViewProjection, 单位矩阵, Clock, CameraPosition }；世界矩阵来自实例，用 olib_world 取得。
+// Clock 与 CameraPosition 与片元 b0 的同名值相同（Clock = time, delta_time, frame, 0；相机世界坐标 w = 1），
+// 用于在顶点里按时间计算运动或按视线偏移；不用可不声明。片元 b0 为 Clock、Pointer、Tint、CameraPosition。
+cbuffer ViewBlock : register(b0, space1) { float4x4 ViewProjection; float4x4 Unused; float4 VertexClock; float4 VertexCamera; };
 struct Input {
     OlibInstanceInput Instance;   // 必须是第一个成员，网格属性随后依次声明
     float3 Position : TEXCOORD0;
@@ -160,7 +171,9 @@ odin run ../olib/tools/shaders -- -dir:src/shader_lab/shaders
 工具编译指定目录顶层的 `.hlsl` 和 `.oshader`，子目录需分别运行。
 每个 Pass 输出 `Compiled/<Shader>_<Pass>.<vertex|fragment>.<spv|dxil|msl>`，
 Sprite 批量变体总是生成；声明 Instanced 时还输出 `<Shader>_<Pass>.instanced.vertex.<spv|dxil|msl>`，
-片元代码共用。同时输出 `Compiled/<Shader>.shader.json`，包含 `version:1`、`schemas`、`effect`。
+片元代码共用。同时输出 `Compiled/<Shader>.shader.json`，包含 `version`、`schemas`、`effect`。
+`version` 是生成代码与宿主的绑定约定版本（`mat.MANIFEST_VERSION`，当前为 2）；约定变化后旧产物登记时返回
+"Compiled shader manifest is outdated; re-run tools/shaders"，重新运行上面的命令即可。
 描述中的 `schema.shader` 是不带后缀的程序资源键，不含开发机路径。
 游戏可将其解码为现有 `material.Schema` / `Effect_Desc`，配合预编译代码登记到
 Material_Library；它与保存参数值的材质实例 JSON 是两种不同数据，不可互换。

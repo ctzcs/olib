@@ -51,7 +51,8 @@ err = r2d.image(&renderer, frame, transform, material = material, values = &cool
 
 - tint 在顶点颜色中，不同颜色仍可合批；color 是 `foster.Color`（RGBA 字节），默认白色。
 - `[Instance]` 数值随精灵记录，未覆盖的值来自各 Pass 的材质参数，不会因取值不同拆批。
-- 相邻记录只有材质指针、参数 uniform、贴图、Pass 选择、采样、混合和裁剪一致时才合批。
+- 相邻记录只有材质指针、材质 revision、帧贴图、Pass 选择、采样、混合和裁剪一致时才合批；
+  两次记录之间 `material_set_number / material_set_texture / material_reload` 会递增 revision 并断批，不逐个精灵比较参数。
   不跨材质排序，单批最多 4096 个四边形。
 - 连续兼容记录按 Pass 分组：先全部 pass1，再全部 pass2。`pass_id = "body"` 只画指定 Pass。
   状态变化会结束这一段；透明遮挡顺序由调用方安排。

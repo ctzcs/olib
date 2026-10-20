@@ -8,6 +8,8 @@ import "core:math"
 import "core:mem"
 import "core:strings"
 
+import foster "../../../foster"
+
 // GPU 绑定上限与布局：每个数字参数占一个 float4 槽。
 MAX_TEXTURES :: 16
 MAX_UNIFORM_BYTES :: 16384
@@ -26,6 +28,18 @@ Kind :: enum {
 	Texture,
 }
 
+// 贴图字段的采样方式；零值即默认的线性过滤与边缘钳制。
+Texture_Filter :: enum u8 {
+	Linear,
+	Nearest,
+}
+
+Texture_Wrap :: enum u8 {
+	Clamp,
+	Repeat,
+	Mirror,
+}
+
 Field :: struct {
 	id, name, label: string,
 	kind: Kind,
@@ -35,6 +49,9 @@ Field :: struct {
 	// 仅数值字段。true 时不占 uniform 槽，值随每个绘制对象的顶点传入，
 	// 因此不同取值的对象仍可合批。Shader 里照常用 _name 读取。
 	instance: bool,
+	// 仅 Texture 字段：采样器的过滤与两个方向的寻址方式。
+	filter: Texture_Filter,
+	wrap: Texture_Wrap,
 }
 
 Schema :: struct {
@@ -161,6 +178,18 @@ texture_count :: proc(schema: Schema) -> int {
 	return count
 }
 
+// Texture 字段声明的采样器；材质库、material_set_texture 与 Shader Lab 预览共用。
+field_sampler :: proc(f: Field) -> foster.TextureSampler {
+	filter: foster.TextureFilter = f.filter == .Nearest ? .Nearest : .Linear
+	wrap: foster.TextureWrap
+	switch f.wrap {
+	case .Clamp: wrap = .Clamp
+	case .Repeat: wrap = .Repeat
+	case .Mirror: wrap = .MirroredRepeat
+	}
+	return foster.TextureSamplerMake(filter, wrap)
+}
+
 pack :: proc(schema: Schema, values: []Value, buffer: []u8) -> bool {
 	if len(values) != len(schema.fields) || len(buffer) != uniform_size(schema) do return false
 	mem.zero_slice(buffer)
@@ -284,11 +313,15 @@ hlsl_instance_varyings :: proc(b: ^strings.Builder, slots: int) {
 }
 
 // 2D 精灵效果的统一顶点接口：作者写 `struct Input { OlibSpriteInput Sprite; };`，
-// 顶点里 `OlibSprite s = olib_sprite(v.Sprite);` 得到目标像素位置、UV 与传给片元的 OlibInstance。
-// 两种变体只有这一段不同，片元代码完全相同：
-// - Sprite_Batch：顶点就是 foster BatcherVertex（位置、UV、颜色、mode），颜色即 tint；有 [Instance] 字段时
-//   mode 的 4 个字节是该精灵数值在 OlibInstanceValues（顶点 storage buffer，t0 space0）里的 float4 偏移。
+// 顶点里 `OlibSprite s = olib_sprite(v.Sprite);` 得到目标像素位置、UV、传给片元的 OlibInstance，
+// 以及 axis_x / axis_y：精灵局部 1 像素在目标像素空间里的两条轴（局部→目标的 2×2 线性部分，含变换栈），
+// 可据此按精灵大小计算偏移，例如 sqrt(abs(determinant)) 是精灵的缩放。
+// 两种变体只有这一段不同，position 与轴都在目标像素空间，片元代码完全相同：
+// - Sprite_Batch：顶点就是 foster BatcherVertex（位置、UV、颜色、mode），颜色即 tint；
+//   mode 的 4 个字节是该精灵记录在 OlibInstanceValues（顶点 storage buffer，t0 space0）里的 float4 偏移：
+//   记录首项是两条轴，之后是各 Pass 的 [Instance] 字段。位置与轴已在 CPU 上套用变换栈。
 // - Sprite：实例记录 + 单位四边形角点（OlibInstanceInput 在前，角点在后），供常驻 Sprite_Buffer 实例化绘制。
+//   实例在变换栈之前的坐标里，olib_sprite 用 b1/space1 的变换栈 2D 仿射部分换算到目标像素。
 @(private)
 hlsl_sprite_block :: proc(b: ^strings.Builder, mode: Instancing, slots: int) {
 	if mode == .Sprite {
@@ -296,26 +329,31 @@ hlsl_sprite_block :: proc(b: ^strings.Builder, mode: Instancing, slots: int) {
 	} else {
 		hlsl_instance_varyings(b, slots)
 	}
-	strings.write_string(b, "struct OlibSprite {\n    float2 position;\n    float2 uv;\n    OlibInstance instance;\n};\n")
+	strings.write_string(b, "struct OlibSprite {\n    float2 position;\n    float2 uv;\n    float2 axis_x;\n    float2 axis_y;\n    OlibInstance instance;\n};\n")
 	if mode == .Sprite {
 		strings.write_string(b, "struct OlibSpriteInput {\n    OlibInstanceInput Instance;\n    float2 Corner : TEXCOORD0;\n};\n")
-		strings.write_string(b, "OlibSprite olib_sprite(OlibSpriteInput i) {\n    OlibSprite s;\n")
-		strings.write_string(b, "    olib_sprite_vertex(i.Instance, i.Corner, s.position, s.uv);\n")
+		// 变换栈的 2D 仿射部分（行向量约定）：axes = (m11,m12,m21,m22)，origin.xy = (m31,m32)。
+		strings.write_string(b, "cbuffer OlibSpriteView : register(b1, space1) { float4 _olib_view_axes; float4 _olib_view_origin; };\n")
+		strings.write_string(b, "OlibSprite olib_sprite(OlibSpriteInput i) {\n    OlibSprite s;\n    float2 p;\n")
+		strings.write_string(b, "    olib_sprite_vertex(i.Instance, i.Corner, p, s.uv);\n")
+		strings.write_string(b, "    s.position = p.x * _olib_view_axes.xy + p.y * _olib_view_axes.zw + _olib_view_origin.xy;\n")
+		strings.write_string(b, "    s.axis_x = i.Instance.sprite0.x * _olib_view_axes.xy + i.Instance.sprite0.y * _olib_view_axes.zw;\n")
+		strings.write_string(b, "    s.axis_y = i.Instance.sprite0.z * _olib_view_axes.xy + i.Instance.sprite0.w * _olib_view_axes.zw;\n")
 		strings.write_string(b, "    s.instance = olib_instance_from(i.Instance);\n    return s;\n}\n")
 		return
 	}
 	strings.write_string(b, "struct OlibSpriteInput {\n    float2 Position : TEXCOORD0;\n    float2 Uv : TEXCOORD1;\n")
 	strings.write_string(b, "    float4 Color : TEXCOORD2;\n    float4 Mode : TEXCOORD3;\n};\n")
-	if slots > 0 {
-		strings.write_string(b, "StructuredBuffer<float4> OlibInstanceValues : register(t0, space0);\n")
-		strings.write_string(b, "cbuffer OlibSpritePass : register(b1, space1) { uint _olib_pass_offset; };\n")
-	}
+	strings.write_string(b, "StructuredBuffer<float4> OlibInstanceValues : register(t0, space0);\n")
+	strings.write_string(b, "cbuffer OlibSpritePass : register(b1, space1) { uint _olib_pass_offset; };\n")
 	strings.write_string(b, "OlibSprite olib_sprite(OlibSpriteInput i) {\n    OlibSprite s;\n")
 	strings.write_string(b, "    s.position = i.Position;\n    s.uv = i.Uv;\n    s.instance.tint = i.Color;\n")
+	strings.write_string(b, "    uint4 bytes = (uint4)round(i.Mode * 255.0);\n")
+	strings.write_string(b, "    uint offset = bytes.x | (bytes.y << 8) | (bytes.z << 16) | (bytes.w << 24);\n")
+	strings.write_string(b, "    float4 axes = OlibInstanceValues[offset];\n")
+	strings.write_string(b, "    s.axis_x = axes.xy;\n    s.axis_y = axes.zw;\n")
 	if slots > 0 {
-		strings.write_string(b, "    uint4 bytes = (uint4)round(i.Mode * 255.0);\n")
-		strings.write_string(b, "    uint offset = bytes.x | (bytes.y << 8) | (bytes.z << 16) | (bytes.w << 24);\n")
-		strings.write_string(b, "    offset += _olib_pass_offset;\n")
+		strings.write_string(b, "    offset += 1 + _olib_pass_offset;\n")
 		for slot in 0..<slots {
 			fmt.sbprintf(b, "    s.instance.data%d = OlibInstanceValues[offset + %d];\n", slot, slot)
 		}

@@ -463,3 +463,132 @@ render3d_reports_errors_before_gpu :: proc(t: ^testing.T) {
 	testing.expect_value(t, model(&r, &skinned, &material, world.MATRIX4_IDENTITY), mat.Draw_Error.Unsupported_Mesh)
 	testing.expect_value(t, buffer(&r, &skinned, &material, nil, 1), mat.Draw_Error.Unsupported_Mesh)
 }
+
+// 每次 submit 先排好全部自动实例化数据：同网格同快照合批，同一批的各 Pass 连续存放，按槽数分段，
+// 绘制时只按偏移取段，不再逐批上传。
+@(test)
+render3d_plan_packs_every_batch_once :: proc(t: ^testing.T) {
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	r := Render3D{library = &library}
+	defer dispose(&r)
+	vertex: foster.Shader
+	vertex.Resource = cast(type_of(vertex.Resource))uintptr(1) // 仅验证布局；不调用 GPU
+	fragment := vertex
+	fragment.Stage = .Fragment
+	gpu: foster.Material
+	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
+	defer foster.MaterialDispose(&gpu)
+	schema := mat.Schema{name = "Body", fields = []mat.Field{{id = "hue", kind = .Scalar, instance = true, maximum = 1}}}
+	effect := mat.Material_Effect{schemas = []mat.Schema{schema}, desc = {instanced = true, passes = []mat.Pass_Desc{
+		{id = "body", params = "Body", draw = .Model},
+		{id = "shadow", params = "Body", draw = .Model, values = []mat.Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}}}}}
+	m := mat.Material{owner = &library, effect = &effect,
+		bindings = []mat.Material_Binding{{schema, []mat.Value{{number = {0.2, 0, 0, 0}}}, &gpu, nil}}}
+	plain_effect := mat.Material_Effect{desc = {passes = []mat.Pass_Desc{{id = "body", params = "Plain", draw = .Model}}}}
+	plain := mat.Material{owner = &library, effect = &plain_effect,
+		bindings = []mat.Material_Binding{{schema = {name = "Plain"}, material = &gpu}}}
+	mesh := foster.Mesh{GraphicsDevice = &device}
+	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
+	other_mesh := mesh
+	items := []Model_Item{{world.matrix4_translation(0, 0, -1), {1, 1, 1, 1}},
+		{world.matrix4_translation(0, 0, -2), {1, 1, 1, 1}}}
+	testing.expect_value(t, models(&r, &mesh, &m, items, values = [][4]f32{{0.4, 0, 0, 0}, {0.6, 0, 0, 0}}), mat.Draw_Error.None)
+	testing.expect_value(t, model(&r, &other_mesh, &m, world.matrix4_translation(0, 0, -3)), mat.Draw_Error.None)
+	testing.expect_value(t, model(&r, &mesh, &plain, world.matrix4_translation(0, 0, -0.5)), mat.Draw_Error.None)
+	view := View{view_projection = world.MATRIX4_IDENTITY, view_matrix = world.MATRIX4_IDENTITY}
+	testing.expect_value(t, render3d_prepare(&r, view, ""), mat.Draw_Error.None)
+	// 普通材质组离得最近排在前面；实例组内前到后，换网格断批。
+	counts := render3d_plan(&r)
+	testing.expect_value(t, len(r.batches), 3)
+	testing.expect_value(t, r.batches[1], Render3D_Batch{start = 1, end = 3, first = 0})
+	testing.expect_value(t, r.batches[2], Render3D_Batch{start = 3, end = 4, first = 4})
+	testing.expect_value(t, counts[1], 6) // (2 + 1) 个实例 × 2 个 Pass
+	testing.expect_value(t, counts[0], 0)
+	bases := render3d_pack(&r, counts)
+	stride := model_stride(1)
+	testing.expect_value(t, bases[1], 0)
+	testing.expect_value(t, len(r.upload), 6 * stride)
+	// 每个位置的 hue：body 用各自的值或材质默认值，shadow 用 Pass 固定值。
+	hues := [6]f32{0.4, 0.6, 0.9, 0.9, 0.2, 0.9}
+	for hue, i in hues do testing.expect_value(t, read_vec4(r.upload[:], i*stride + MODEL_BASE_BYTES)[0], hue)
+	testing.expect_value(t, read_vec4(r.upload[:], 1*stride + 32)[3], f32(-2)) // 世界矩阵第 3 列的平移 z
+	testing.expect_value(t, read_vec4(r.upload[:], 4*stride + 32)[3], f32(-3))
+}
+
+// 调试线默认只随画全部 Pass 的提交：分阶段的 shadow/body/outline 不重复叠加，需要时显式开启。
+@(test)
+render3d_debug_lines_follow_pass_selection :: proc(t: ^testing.T) {
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	r: Render3D
+	testing.expect_value(t, init(&r, &library), "")
+	defer dispose(&r)
+	line(&r, {0, 0, 0}, {1, 0, 0}, {1, 1, 1, 1})
+	view := View{view_projection = world.MATRIX4_IDENTITY, view_matrix = world.MATRIX4_IDENTITY} // 目标无效
+	testing.expect_value(t, submit(&r, view, "shadow"), mat.Draw_Error.None) // 不画线，无事可做
+	testing.expect_value(t, submit(&r, view), mat.Draw_Error.Invalid_Target) // 要画线，才检查目标
+	view.draw_debug = true
+	testing.expect_value(t, submit(&r, view, "shadow"), mat.Draw_Error.Invalid_Target)
+	view.draw_debug = false
+	testing.expect_value(t, submit(&r, view), mat.Draw_Error.None)
+}
+
+// 记录保存当时的效果与槽数：之后 reload 换了效果（Pass 更少），已记录的快照仍按原布局准备，不越界。
+@(test)
+render3d_records_survive_material_reload :: proc(t: ^testing.T) {
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	r := Render3D{library = &library}
+	defer dispose(&r)
+	vertex: foster.Shader
+	vertex.Resource = cast(type_of(vertex.Resource))uintptr(1)
+	fragment := vertex
+	fragment.Stage = .Fragment
+	gpu: foster.Material
+	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
+	defer foster.MaterialDispose(&gpu)
+	two := mat.Material_Effect{desc = {passes = []mat.Pass_Desc{
+		{id = "body", params = "A", draw = .Model}, {id = "outline", params = "B", draw = .Model}}}}
+	one := mat.Material_Effect{desc = {passes = []mat.Pass_Desc{{id = "body", params = "C", draw = .Model}}}}
+	m := mat.Material{owner = &library, effect = &two, bindings = []mat.Material_Binding{
+		{schema = {name = "A"}, material = &gpu}, {schema = {name = "B"}, material = &gpu}}}
+	mesh := foster.Mesh{GraphicsDevice = &device}
+	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	// 模拟 material_reload：同一指针换成单 Pass 效果和新的参数组。
+	m.effect = &one
+	m.bindings = []mat.Material_Binding{{schema = {name = "C"}, material = &gpu}}
+	m.revision += 1
+	view := View{view_projection = world.MATRIX4_IDENTITY, view_matrix = world.MATRIX4_IDENTITY}
+	testing.expect_value(t, render3d_prepare(&r, view, "outline"), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.queue.items), 1)
+	testing.expect_value(t, r.sources[0].count, 1)
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 2) // 新效果的记录不复用旧快照
+}
+
+// CameraPosition 由视矩阵求逆得到，顶点 b0 与片元 b0 写同一个值。
+@(test)
+camera_position_and_material_blocks :: proc(t: ^testing.T) {
+	camera: world.Camera3D
+	world.camera3d_init(&camera, 64, 64)
+	world.camera3d_set_position(&camera, {1, 2, 3})
+	world.camera3d_set_target(&camera, {0, 0, 0})
+	position := camera_position(world.camera3d_view(&camera))
+	for expected, i in ([4]f32{1, 2, 3, 1}) {
+		testing.expectf(t, math.abs(position[i] - expected) < 1e-4, "camera[%d] = %f", i, position[i])
+	}
+	testing.expect_value(t, camera_position({}), [4]f32{0, 0, 0, 1}) // 不可逆时退回原点
+	vertex: [MATERIAL_VERTEX_BLOCK_SIZE]u8
+	frame: [MATERIAL_FRAME_BLOCK_SIZE]u8
+	view := View{time = 2, delta_time = 0.5, frame = 7}
+	view.target.WidthInPixels, view.target.HeightInPixels = 320, 240
+	pack_material_blocks(vertex[:], frame[:], world.MATRIX4_IDENTITY, world.MATRIX4_IDENTITY, view,
+		{1, 2, 3, 1}, {0.25, 0.75}, {1, 0.5, 0, 1})
+	testing.expect_value(t, read_vec4(vertex[:], VERTEX_MATRIX_BLOCK_SIZE), [4]f32{2, 0.5, 7, 0})
+	testing.expect_value(t, read_vec4(vertex[:], VERTEX_MATRIX_BLOCK_SIZE + 16), [4]f32{1, 2, 3, 1})
+	testing.expect_value(t, read_vec4(frame[:], 16), [4]f32{0.25, 0.75, 320, 240})
+	testing.expect_value(t, read_vec4(frame[:], 32), [4]f32{1, 0.5, 0, 1})
+	testing.expect_value(t, read_vec4(frame[:], 48), [4]f32{1, 2, 3, 1})
+}

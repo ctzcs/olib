@@ -30,8 +30,10 @@ r3d.model_buffer_dispose(&instances)
   upload 的 nil values 表示全零；model/models 的 nil values 表示材质默认值，两者不同。
 - 常驻实例字段和 tint 完全来自缓冲，不套用材质默认实例值或 Pass 的实例字段覆盖；
   各 Pass 的非实例 uniform、纹理与状态仍独立生效。需要每 Pass 不同实例值时用 models 或自行提供不同缓冲。
-- 自动实例化的临时缓冲按批次和 Pass 紧凑上传并复用容量。Foster 没有实例缓冲起始偏移绑定，
-  因此当前逐批上传/绘制，不是整帧仅一次上传。
+- 自动实例化的临时缓冲按 [Instance] 字段数各一个、复用容量。每次 submit 在发 Draw 之前把全部批次、
+  全部所选 Pass 的实例数据一次上传（同一批的各 Pass 连续存放），绘制时用 `DrawCommand.InstanceOffset`
+  （Foster L-017，即 SDL first_instance）取各自那一段，上传只在提交开头打断一次渲染通道。
+  生成的 Shader 不使用 SV_InstanceID，自己写的 instanced Shader 也不要依赖它。
 
 ## 手写队列、LOD 与独立调试线
 
@@ -58,10 +60,13 @@ Render3D 不自动选 LOD。手写渲染器仍可用 `Debug_Draw_3D`、`debug_dr
 | 绑定 | 内容 |
 | --- | --- |
 | 静态顶点 | TEXCOORD0..3：位置、法线、UV、切线，48B |
-| vertex b0 | WVP + World；instanced 时为 VP + 单位矩阵 |
-| fragment b0 | Clock、Pointer（xy 为 0，zw 为目标像素尺寸）、Tint |
+| vertex b0 | WVP + World + Clock + CameraPosition（`MATERIAL_VERTEX_BLOCK_SIZE`，160B）；instanced 时 WVP 位置为 VP、World 为单位矩阵 |
+| fragment b0 | Clock、Pointer（xy 为 0，zw 为目标像素尺寸）、Tint、CameraPosition（`MATERIAL_FRAME_BLOCK_SIZE`，64B） |
 | fragment b1 | 材质非实例参数 |
-| space2 | 材质纹理和采样器 |
+| space2 | 材质纹理和采样器；采样方式取字段的 `[Filter]` / `[Wrap]` 声明 |
+
+CameraPosition 是 `r3d.camera_position(view.view_matrix)`：世界坐标 xyz、w = 1，视矩阵不可逆时为原点。
+Shader 只声明用到的前缀即可，例如片元只读 Clock 时 `cbuffer FrameBlock { float4 Clock; }` 照常工作。
 
 model 的 Tint 为白色；非 instanced models 使用 Model_Item.tint；instanced 模型的 tint 来自实例缓冲。
 实例输入属性在前，网格属性位置后移 `5 + slots`，详见 [instanced HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。

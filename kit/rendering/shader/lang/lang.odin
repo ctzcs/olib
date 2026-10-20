@@ -225,7 +225,7 @@ properties :: proc(p: ^Parser) -> []mat.Field {
 	fields: [dynamic]mat.Field
 	textures, instances := 0, 0
 	for p.error == "" && p.token.text != "}" {
-		id, step, instance := property_attributes(p)
+		attributes, sampled := property_attributes(p)
 		name := p.token.text
 		if p.token.quoted || !strings.has_prefix(name, "_") ||
 			!identifier(name[1:]) || strings.has_prefix(name, "_olib_") {
@@ -233,8 +233,12 @@ properties :: proc(p: ^Parser) -> []mat.Field {
 			break
 		}
 		next(p)
-		field := property_declaration(p, name[1:], id, step)
-		field.instance = instance
+		field := property_declaration(p, name[1:], attributes.id, attributes.step)
+		field.instance = attributes.instance
+		field.filter, field.wrap = attributes.filter, attributes.wrap
+		if sampled && field.kind != .Texture {
+			fail(p, "Filter and Wrap apply only to 2D properties")
+		}
 		if field.kind == .Texture do textures += 1
 		if field.instance do instances += 1
 		property_check(p, field, fields[:], textures, instances)
@@ -244,10 +248,11 @@ properties :: proc(p: ^Parser) -> []mat.Field {
 	return fields[:]
 }
 
-// 属性前的 [Id("...")] [Step(n)] [Instance] 特性，每种至多一次；Instance 没有参数。
+// 属性前的 [Id("...")] [Step(n)] [Instance] [Filter(Linear|Nearest)] [Wrap(Clamp|Repeat|Mirror)] 特性，
+// 每种至多一次；Instance 没有参数。结果放在 Field 的 id/step/instance/filter/wrap，sampled 表示写了 Filter 或 Wrap。
 @(private)
-property_attributes :: proc(p: ^Parser) -> (id: string, step: f32, instance: bool) {
-	step = 0.01
+property_attributes :: proc(p: ^Parser) -> (result: mat.Field, sampled: bool) {
+	result.step = 0.01
 	attributes := make(map[string]bool)
 	for p.token.text == "[" && p.error == "" {
 		next(p)
@@ -258,18 +263,35 @@ property_attributes :: proc(p: ^Parser) -> (id: string, step: f32, instance: boo
 		}
 		attributes[key] = true
 		if key == "Instance" {
-			instance = true
+			result.instance = true
 			expect(p, "]")
 			continue
 		}
 		expect(p, "(")
 		switch key {
 		case "Id":
-			id = string_value(p)
+			result.id = string_value(p)
 		case "Step":
-			step = number(p)
+			result.step = number(p)
+		case "Filter":
+			sampled = true
+			switch p.token.text {
+			case "Linear": result.filter = .Linear
+			case "Nearest": result.filter = .Nearest
+			case: fail(p, "Filter must be Linear or Nearest")
+			}
+			next(p)
+		case "Wrap":
+			sampled = true
+			switch p.token.text {
+			case "Clamp": result.wrap = .Clamp
+			case "Repeat": result.wrap = .Repeat
+			case "Mirror": result.wrap = .Mirror
+			case: fail(p, "Wrap must be Clamp, Repeat or Mirror")
+			}
+			next(p)
 		case:
-			fail(p, "Expected Id, Step or Instance attribute")
+			fail(p, "Expected Id, Step, Instance, Filter or Wrap attribute")
 		}
 		expect(p, ")")
 		expect(p, "]")

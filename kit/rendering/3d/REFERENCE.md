@@ -63,10 +63,13 @@ Render3D 不自动选 LOD。手写渲染器仍可用 `Debug_Draw_3D`、`debug_dr
 | vertex b0 | WVP + World + Clock + CameraPosition（`MATERIAL_VERTEX_BLOCK_SIZE`，160B）；instanced 时 WVP 位置为 VP、World 为单位矩阵 |
 | fragment b0 | Clock、Pointer（xy 为 0，zw 为目标像素尺寸）、Tint、CameraPosition（`MATERIAL_FRAME_BLOCK_SIZE`，64B） |
 | fragment b1 | 材质非实例参数 |
+| vertex b1 / fragment b2 | 视图块：`View.globals` 补零到 `mat.VIEW_GLOBALS_SIZE`（1024B），两阶段同一份字节；Shader Lab 预览为全零 |
+| vertex b2 / b3 | 预留给将来的蒙皮 palette（SDL GPU 每阶段 4 个 uniform 槽，顶点阶段至此用满） |
 | space2 | 材质纹理和采样器；采样方式取字段的 `[Filter]` / `[Wrap]` 声明 |
 
 CameraPosition 是 `r3d.camera_position(view.view_matrix)`：世界坐标 xyz、w = 1，视矩阵不可逆时为原点。
 Shader 只声明用到的前缀即可，例如片元只读 Clock 时 `cbuffer FrameBlock { float4 Clock; }` 照常工作。
+Model 效果的 Shader 按顶点 2 个、片元 3 个 uniform 槽创建；不声明视图块的旧 Shader 不受影响。Foster 布局的内置效果没有视图块。
 
 model 的 Tint 为白色；非 instanced models 使用 Model_Item.tint；instanced 模型的 tint 来自实例缓冲。
 实例输入属性在前，网格属性位置后移 `5 + slots`，详见 [instanced HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。

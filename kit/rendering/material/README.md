@@ -135,6 +135,8 @@ ShaderLab 的本机路径适配属于工具内部实现，底层同样使用 Sto
 `material_set_number(material, group, field, value)` 检查类型和范围后修改单个实例。
 `material_set_texture(material, group, field, texture)` 把运行时贴图（阴影图、反射等 Target 附件）绑到 Texture 字段，
 采样方式取字段声明，nil 恢复白色默认贴图；贴图须属于同一设备，借用期间保持有效，不改材质文件里的路径。
+不能采样的贴图返回 false（`foster.TextureIsSampleable`）：多采样深度附件（SDL 没有深度解析）和设备不支持采样的深度格式；
+单采样深度附件可以绑定，例如后处理读场景深度。
 `material_reload(&materials, material)` 完整候选成功后替换，失败保留旧值，材质指针不变。
 它只重载材质文件，同路径贴图仍使用缓存，不自动热重载 Shader/贴图；运行时绑定的贴图恢复为文件里的贴图。
 以上修改成功时 `material.revision` 递增，Render2D 据此判断已记录的参数快照是否还能合批；

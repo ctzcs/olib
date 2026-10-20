@@ -43,6 +43,7 @@ mat.material_library_dispose(&materials)
 | 2D 帧动画 | `Animation_Set`、`animation_set_init/dispose`、`animation_set_add_frame/add_animation`、`animation_set_get_animation/get_frame_at` | [2d/animation_set.odin](2d/animation_set.odin) |
 | 2D 图集 | `Sprite_Atlas`、`atlas_from_rects`、`atlas_upload`、`atlas_subtexture`、`atlas_get/has/names/crop` | [2d/atlas.odin](2d/atlas.odin)（来源格式见 `atlas_grid / atlas_kenney / atlas_aseprite / atlas_builtin_icons`） |
 | 3D 画模型 / 自动实例化 | `Render3D`、`View`、`init/dispose/clear`、`model/models`、`submit`、`Model_Item` | [3d/render3d.odin](3d/render3d.odin) |
+| 3D 视图级数据（太阳、雾、相机轴） | `View.globals`、`mat.VIEW_GLOBALS_SIZE` | [3d/README](3d/README.md#相机视图块与运行时贴图)、[material/draw.odin](material/draw.odin) |
 | 3D 常驻实例缓冲 | `Model_Buffer`、`model_buffer_init/upload/dispose`、`buffer` | [3d/model_buffer.odin](3d/model_buffer.odin)、[3d/REFERENCE.md](3d/REFERENCE.md) |
 | 3D 随模型提交调试线 | `line/aabb/sphere/frustum/axis/grid/skeleton` | [3d/render3d_debug.odin](3d/render3d_debug.odin) |
 | 3D 网格上传 | `mesh_upload`、`mesh_dispose`、`mesh_static_format`、`mesh_skin_format` | [3d/mesh.odin](3d/mesh.odin) |

@@ -34,7 +34,8 @@ Zed / ZedG 高亮见 [扩展说明](../../../../tools/zed-shader/README.md)。
   提供后台发现与监听。Watch 必须保持地址稳定。
 - parameters_take 返回拥有的数据；使用 parameter_build_dispose 释放。
 - 使用程序的 source 初始化 Session，将程序快照复制到 source_text，并调用
-  configure_parameters(session, texture_count) 保留生成布局的完整资源槽。
+  configure_parameters(session, texture_count) 保留生成布局的完整资源槽。片元至少保留 b0 帧块、b1 参数两个 uniform 槽；
+  init 约定了更多槽时保留，例如 Shader Lab 给 Model 参数组约定顶点 2、片元 3 个槽（视图块）。
 - 参数、纹理、目标与程序作为一个候选包提交。不要单独提交其中某个程序，避免布局不匹配。
   Shader Lab 已实现整包验证、旧值迁移、失败回退和过期候选丢弃。
 

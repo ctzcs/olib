@@ -68,22 +68,48 @@ draw_debug 未指定时只在空 pass_id（画全部 Pass）的提交里画调�
 已声明但禁用的 Pass 不绘制。空 pass_id 按效果声明顺序画所有启用的 Pass。
 含透明 Pass 的多 Pass 对象保留逐对象的 Pass 顺序；要全场景分阶段就显式多次 submit。
 
-## 相机、灯光与运行时贴图
+**剪影**（角色被墙挡住的部分画成纯色）用 `ZTest Greater`、`ZWrite Off` 的 Pass，按 场景 → 剪影 → 角色本体 分三次提交：
+剪影要在遮挡物写完深度之后、本体写深度之前画，否则会叠到角色自己被挡住的部位上。
+pass_id 只按名字筛选，所以场景材质与角色要用不同的 Pass id（如 `scene` / `silhouette` / `body`），或把角色放进另一个 Render3D。
+ZTest 支持 `Less / Less_Equal / Equal / Always / Greater / Greater_Equal / Not_Equal / Never`，`Off` 关闭测试。
+完整示例见 olib_sample 的 `stylized3d`。
 
-材质 Shader 从宿主帧块拿到每个视图自己的数据，从材质参数和贴图拿到场景共用的数据：
+## 相机、视图块与运行时贴图
+
+材质 Shader 从宿主帧块和视图块拿到每个视图的数据，从材质参数和贴图拿到逐材质的数据：
 
 - **相机位置**：顶点 b0 与片元 b0 都带 `CameraPosition`（世界坐标 xyz，w = 1），由 View 的 view_matrix 求逆得到。
   同一份记录提交给多个视图时各自正确，菲涅尔、边缘光、高光用它算视线方向。布局见 [REFERENCE](REFERENCE.md#模型材质-shader-布局)。
-- **灯光、雾等共用数值**：作为材质参数，记录前用 `mat.material_set_number` 设置；记录会复制当时的值。
+- **视图块**：`View.globals` 是游戏按 std140 打包的字节（太阳方向、雾色、billboard 的相机轴等），库不定义其中字段。
+  Model Pass 从顶点 b1 / 片元 b2 读取同一份数据；每次 Draw 提交 `mat.VIEW_GLOBALS_SIZE`（1024）字节，不足补零，
+  超长时 submit 返回 `.View_Globals_Too_Large`，Shader 声明的块不能超过这个大小。只在 submit 期间借用。
+- **数据放哪**：逐视图的值（相机轴、某个视图关雾）只能放视图块，因为同一份记录会提交给多个视图，记录时已快照材质值；
+  所有材质共用的值（太阳、雾）放视图块写一次即可，不必逐个材质设置；逐材质的值用材质参数，记录前 `mat.material_set_number`。
 - **运行时贴图**：阴影图、反射等 Target 附件用 `mat.material_set_texture(material, "Body", "shadow", foster.TargetAttachment(&shadow))`
   绑进材质的 Texture 字段，nil 恢复白色默认贴图。贴图借用到 clear；`material_reload` 会恢复材质文件里的贴图。
+  `TargetAttachment` 默认取颜色附件；深度附件（index 1）只有单采样才能采样，多采样深度会被拒绝（返回 false）。
+- **读场景深度**：后处理采样场景深度附件时要画到另一张 Target，深度附件不能在仍是当前深度目标时采样。
+  采样得到的是 [0,1] 的硬件深度，换回距离：`near * far / (far - d * (far - near))`（kit/world 透视矩阵），near/far 由游戏传入。
 - **采样方式**：在 .oshader 的 2D 属性前写 `[Filter(Nearest)]`、`[Wrap(Repeat)]`（默认 Linear、Clamp），
   平铺地面、像素风贴图按字段声明，材质库与 material_set_texture 都按它创建采样器。
 
+```odin
+// 布局与 Shader 里的 SceneView 一致；全用 float4 时 std140 不需要补齐。
+Scene_View :: struct { sun_direction, fog_color, camera_right, camera_up: [4]f32 }
+globals := Scene_View{...} // 每个视图一份
+view.globals = mem.ptr_to_bytes(&globals)
+err := r3d.submit(&renderer, view, "scene")
+```
+
 ```hlsl
 cbuffer FrameBlock : register(b0, space3) { float4 Clock; float4 Pointer; float4 Tint; float4 CameraPosition; };
+struct SceneView { float4 sun_direction; float4 fog_color; float4 camera_right; float4 camera_up; };
+cbuffer VertexViewBlock : register(b1, space1) { SceneView VertexView; };   // 顶点读视图块
+cbuffer FragmentViewBlock : register(b2, space3) { SceneView FragmentView; }; // 片元读同一份
 // 片元里：float3 view_dir = normalize(CameraPosition.xyz - v.WorldPosition);
 ```
+
+Shader Lab 预览提交全零的视图块；Shader 可以按某个标记分量为零时换成默认值，同一份源码不改就能预览。
 
 ## 剔除、排序与生命周期
 

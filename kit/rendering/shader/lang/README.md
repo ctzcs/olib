@@ -123,6 +123,7 @@ struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibIn
 - `2D` 默认值是相对 Shader Lab `source_root` 的贴图路径，空字符串使用内置棋盘格。
 - 数值只支持 fragment 参数；保持现有 fragment b1/space3、每字段 16 字节及
   texture/sampler space2 布局。引擎 b0 由宿主提供，不自动生成 `Time` 等全局变量。
+  `Draw Model` 另有宿主提交的视图块（顶点 b1 / 片元 b2，游戏自定布局），见 [3d REFERENCE](../../3d/REFERENCE.md#模型材质-shader-布局)。
 - 每个 Pass 必须有一个非空的 `HLSLPROGRAM`。可选的 `HLSLINCLUDE` 插入所有 Pass。
   `ENDHLSL` 独占一行；注释或字符串中的同名文字不会截断代码。
   普通 `#include` 仍遵循 shader/dev 的源码目录范围约定。

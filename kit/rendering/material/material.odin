@@ -208,9 +208,10 @@ material_set_number :: proc(material: ^Material, group, field: string, value: [4
 
 // 把运行时贴图（阴影图、反射等 Target 附件）绑定到 Texture 字段，采样方式取字段声明；nil 恢复白色默认贴图。
 // 贴图借用：Render2D 至 submit、Render3D 至 clear 前保持有效。不修改材质文件里的路径，material_reload 会恢复文件里的贴图。
+// 不能采样的贴图（多采样深度附件等，见 foster.TextureIsSampleable）返回 false。
 material_set_texture :: proc(material: ^Material, group, field: string, texture: ^foster.Texture) -> bool {
 	if material == nil || material.owner == nil do return false
-	if texture != nil && (texture.Resource == nil || texture.GraphicsDevice != material.owner.device) do return false
+	if texture != nil && (texture.GraphicsDevice != material.owner.device || !foster.TextureIsSampleable(texture)) do return false
 	for &parameters, g in material.instance.groups {
 		if parameters.schema.name != group do continue
 		slot := 0

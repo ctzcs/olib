@@ -105,6 +105,10 @@ material_set_texture_binds_runtime_texture_with_field_sampler :: proc(t: ^testin
 	testing.expect(t, !material_set_texture(&material, "Other", "shadow", &shadow))
 	alien := foster.Texture{GraphicsDevice = &other, Resource = shadow.Resource}
 	testing.expect(t, !material_set_texture(&material, "Body", "albedo", &alien))
+	// 多采样深度附件没有解析纹理，不能采样；拒绝而不是交给 SDL 报错。
+	msaa_depth := foster.Texture{GraphicsDevice = &device, Resource = shadow.Resource, Format = .Depth32,
+		SampleCount = .Four, IsTargetAttachment = true}
+	testing.expect(t, !material_set_texture(&material, "Body", "shadow", &msaa_depth))
 	testing.expect_value(t, material.revision, 1)
 	testing.expect(t, material_set_texture(&material, "Body", "albedo", nil))
 	testing.expect(t, samplers[0][0].Texture == &library.white)

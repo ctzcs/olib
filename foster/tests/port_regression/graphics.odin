@@ -6,6 +6,7 @@ import foster "olib:foster"
 
 verify_graphics :: proc(device: ^foster.GraphicsDevice, flush: proc(_: ^foster.GraphicsDevice)) {
 	verify_msaa_graphics(device, flush)
+	verify_depth_sampling(device, flush)
 	verify_font_graphics(device, flush)
 	batcher: foster.Batcher
 	foster.BatcherInit(&batcher, device)
@@ -151,6 +152,53 @@ verify_graphics :: proc(device: ^foster.GraphicsDevice, flush: proc(_: ^foster.G
 	fmt.println(
 		"PASS: stencil mask, color write mask, depth write/compare, Batcher state splitting and disposal",
 	)
+}
+
+// [olib L-018] 单采样深度附件可当贴图采样：深度清成 0.25，再用 Batcher 把它画到另一张颜色目标，
+// 读回的红通道约为 64。多采样深度没有解析纹理，判定为不可采样。
+verify_depth_sampling :: proc(device: ^foster.GraphicsDevice, flush: proc(_: ^foster.GraphicsDevice)) {
+	if !foster.GraphicsDeviceIsTextureFormatSupported(device, .Depth32) {
+		fmt.println("SKIP: Depth32 sampling is not supported by this device")
+		return
+	}
+	scene: foster.Target
+	attachments := [2]foster.TargetAttachmentSpec{{Format = .Color}, {Format = .Depth32}}
+	foster.TargetInit(&scene, device, 8, 8, attachments[:], "depth sampling")
+	defer foster.TargetDispose(&scene)
+	depth := foster.TargetAttachment(&scene, 1)
+	assert(foster.TextureIsSampleable(depth) && foster.TextureIsSampleable(foster.TargetAttachment(&scene, 0)))
+	colors := [1]foster.Color{foster.Black}
+	scene_surface := foster.DrawableTargetFromTarget(&scene)
+	foster.GraphicsDeviceClear(device, scene_surface, colors[:], f32(0.25), 0, foster.ClearMask.Color | .Depth)
+	output: foster.Target
+	foster.TargetInit(&output, device, 8, 8)
+	defer foster.TargetDispose(&output)
+	surface := foster.DrawableTargetFromTarget(&output)
+	foster.GraphicsDeviceClear(device, surface, foster.Black)
+	batcher: foster.Batcher
+	foster.BatcherInit(&batcher, device)
+	defer foster.BatcherDispose(&batcher)
+	foster.BatcherImage(&batcher, depth, foster.White)
+	foster.BatcherRender(&batcher, surface)
+	flush(device)
+	pixels := foster.TextureDownloadData(foster.TargetAttachment(&output, 0))
+	defer delete(pixels)
+	assert(len(pixels) == 256)
+	for i in 0 ..< 64 {
+		assert(abs(int(pixels[i * 4]) - 64) <= 2)
+	}
+	if foster.GraphicsDeviceIsTextureMultiSampleSupported(device, .Depth32, .Four) {
+		msaa: foster.Target
+		msaa_attachments := [2]foster.TargetAttachmentSpec{
+			{Format = .Color, SampleCount = .Four},
+			{Format = .Depth32, SampleCount = .Four},
+		}
+		foster.TargetInit(&msaa, device, 8, 8, msaa_attachments[:], "MSAA depth sampling")
+		defer foster.TargetDispose(&msaa)
+		assert(foster.TextureIsSampleable(foster.TargetAttachment(&msaa, 0)))
+		assert(!foster.TextureIsSampleable(foster.TargetAttachment(&msaa, 1)))
+	}
+	fmt.println("PASS: single-sample depth attachment sampled as a texture; MSAA depth is not sampleable")
 }
 
 // [olib L-005] 真正创建多采样附件，并跨通道绘制后验证解析纹理；不只测能力查询。

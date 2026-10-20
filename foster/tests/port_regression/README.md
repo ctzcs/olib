@@ -20,7 +20,9 @@ contains a stored binary file, a Deflate text file, an empty file and directorie
 
 Shared GPU checks verify offscreen orientation, partial updates of GPU-rendered
 pixels, GPU clones, nearest scaled copies, stencil clipping, color write masks,
-depth writing/comparison and repeated Batcher disposal.
+depth writing/comparison and repeated Batcher disposal. A single-sample depth
+attachment is cleared, drawn as a texture into another target and read back
+(L-018); 4x MSAA depth must report that it cannot be sampled.
 When supported, native checks also create 4x MSAA color/depth attachments, preserve
 color across passes, read the resolved texture and verify partial diagonal-edge
 coverage. Native EndFrame checks verify the final pass is closed and submitted.

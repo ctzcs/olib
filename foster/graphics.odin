@@ -605,6 +605,10 @@ target_init_with_attachments :: proc(
 			}
 		} else {
 			usage = SDL.GPUTextureUsageFlags{.DEPTH_STENCIL_TARGET}
+			// [olib L-018] 单采样且格式支持时可作为贴图采样（如后处理读场景深度）；规则见 TextureIsSampleable。
+			if depth_attachment_sampleable(graphics_device, attachment.Format, attachment.SampleCount) {
+				usage += {.SAMPLER}
+			}
 		}
 
 		attachment_name := name

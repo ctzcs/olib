@@ -5,6 +5,7 @@ package foster_framework
 // 文件内导航
 //   Framework / App
 //   Storage / Atomic Write
+//   Graphics / Texture Sampling
 
 // ==============================================================================
 // Framework / App — 用户数据
@@ -41,4 +42,29 @@ WriteAllBytesAtomic :: proc(container: ^StorageContainer, path: string, data: []
 // [olib L-015] UTF-8 文本沿用相同的单文件替换语义。
 WriteAllTextAtomic :: proc(container: ^StorageContainer, path, data: string) -> bool {
 	return WriteAllBytesAtomic(container, path, transmute([]byte)data)
+}
+
+// ==============================================================================
+// Graphics / Texture Sampling — 贴图能否绑定到材质采样器
+// ==============================================================================
+
+// [olib L-018] 贴图能否绑定到采样器。普通贴图总带 SAMPLER 用途；多采样颜色附件采样其解析纹理；
+// 深度附件须单采样且格式支持采样，与 Target 创建时是否加 SAMPLER 用途是同一条规则。
+TextureIsSampleable :: proc(tex: ^Texture) -> bool {
+	if tex == nil || tex.Resource == nil || tex.Disposed {
+		return false
+	}
+	if !tex.IsTargetAttachment {
+		return true
+	}
+	if TextureFormatIsColorFormat(tex.Format) {
+		return tex.SampleCount == .One || tex.ResolveResource != nil
+	}
+	return depth_attachment_sampleable(tex.GraphicsDevice, tex.Format, tex.SampleCount)
+}
+
+// [olib L-018] SDL 没有深度解析纹理，多采样深度不能采样；单采样时按设备是否支持该格式的采样判定。
+@(private)
+depth_attachment_sampleable :: proc(device: ^GraphicsDevice, format: TextureFormat, sample_count: SampleCount) -> bool {
+	return sample_count == .One && GraphicsDeviceIsTextureFormatSupported(device, format)
 }

@@ -1,5 +1,11 @@
 # Plan：Render3D 视图块、深度比较补全与深度贴图
 
+> **状态：已完成（2026-10-20）** · olib 提交 `3044865`..`4cd9315`；olib_sample `6f61274`
+> 偏离：① `VIEW_GLOBALS_SIZE`、槽位常量与补零函数放在 material 包（draw.odin），没放 3d/uniforms.odin：Render3D 与 Shader Lab 用的 `material_draw` 共用同一份规则。② 第 4 步拆成两个提交：foster 本地修改须以 `foster(local): L-018` 单独提交，`TextureIsSampleable` 按 LOCAL_CHANGES 规则放进 olib_ext.odin，并在 port_regression 加了真 GPU 回归；material 的拒绝逻辑另起一个提交。③ Shader Lab 的 `bank_sprite_group` 改为按 Pass 种类判断的 `bank_group_draws`。④ stylized3d 的 Shader 标签用英文：Shader Lab 的 MSDF 图集缺这些中文字形，不为示例重新生成共享图集。⑤ 示例 Shader 在视图块全零（Shader Lab 预览）时换成默认值。
+> 验收：完整 `odin run tools/check` 89 项通过（新增 sample stylized3d）。port_regression 在 D3D12 / Vulkan 实测单采样深度附件当贴图采样通过、多采样深度判为不可采样。stylized3d 的 D3D12 与 Vulkan 截图一致（olib_sample/library/screenshots 的 stylized3d.png、stylized3d_flat.png），开关描边相差约 5200 像素；material3d、forward3d 两个后端的画面与改动前逐像素一致。Shader Lab 在两个后端加载六个程序均无绑定错误，改动源码后的热重载也无错误。Metal 只确认 `.msl` 生成，未实测。
+> 性能：stylized3d 每帧 23 个模型 Draw（主视图 sky/scene/silhouette/body/transparent + 小地图 scene/body/transparent），1280×720、预热 10 帧后 119 帧平均 submit CPU 约 0.11 ms（D3D12 / Vulkan）；GPU 时间未测。
+> 两个仓库都在 `render3d-view-depth-texture` 分支，未合并、未推送。olib_sample 工作区里他人未提交的 material2d/material3d 改动未动。蒙皮仍是待定项。
+
 ## 背景
 
 以 [Celeste64](https://github.com/ExOK/Celeste64)（提交 `6edfe1e`，同样基于 Foster）作验收用例，检查“一个真实的 3D 小游戏”

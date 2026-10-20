@@ -43,3 +43,4 @@
 | L-014 | 2026-10-18 | 修复 | web.odin / web_relocate_app | 无（Odin Web App 堆迁移） | 搬移 App 时重绑默认材质的 Shader 指针及 Shader 的 GraphicsDevice，避免 main 返回后引用旧栈地址，修复 Web MSDF 文字不显示 | 保留 |
 | L-015 | 2026-10-19 | 新增 | olib_ext.odin / WriteAllBytesAtomic、WriteAllTextAtomic；platform_native.odin、platform_web.odin / storage_os_write_file_atomic | 无 | Storage 统一提供单文件原子替换，桌面同步同目录临时文件后重命名，Web 复用虚拟文件单键替换；ShaderLab 和游戏共用，拒绝只读/ZIP 写入，保留旧版直接写入 API | 保留 |
 | L-016 | 2026-10-19 | 修复 | images.odin / ImageWritePng 与 imports | Image.cs / WritePng | 原生 PNG 路径转换复用包内 to_cstring，移除 Web 分支未使用的 strings 导入，使 Web -vet 通过，保持原有分配与写入行为 | 保留 |
+| L-017 | 2026-10-20 | 新增 | graphics.odin / DrawCommand.InstanceOffset、DrawCommandInit、GraphicsDeviceDraw 的 SDL 绘制调用 | DrawCommand.cs（无实例偏移） | 实例属性从第 InstanceOffset 个实例读取（SDL first_instance），Render3D 每次提交只上传一次全部批次的实例数据，再按偏移逐批绘制，避免每批上传打断渲染通道；默认 0 行为不变，Web 忽略 | 保留 |

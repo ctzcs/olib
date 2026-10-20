@@ -1109,6 +1109,8 @@ DrawCommand :: struct {
 	VertexOffset:           int,
 	VertexCount:            int,
 	InstanceCount:          int,
+	// [olib L-017] 实例属性的起始实例（SDL first_instance）；Web 不支持实例偏移，忽略此值
+	InstanceOffset:         int,
 	BlendMode:              BlendMode,
 	CullMode:               CullMode,
 	DepthCompare:           DepthCompare,
@@ -1139,6 +1141,7 @@ DrawCommandInit :: proc(command: ^DrawCommand) {
 	command.VertexOffset = 0
 	command.VertexCount = 0
 	command.InstanceCount = 1
+	command.InstanceOffset = 0 // [olib L-017] 默认从第 0 个实例读取
 	command.BlendMode = BlendModePremultiply
 	command.CullMode = .None
 	command.DepthCompare = .Less
@@ -2592,7 +2595,7 @@ GraphicsDeviceDraw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawComma
 				u32(Max(command.InstanceCount, 1)),
 				0,
 				i32(command.VertexOffset),
-				0,
+				u32(Max(command.InstanceOffset, 0)), // [olib L-017] first_instance
 			)
 		}
 	} else if command.VertexCount > 0 {
@@ -2608,7 +2611,7 @@ GraphicsDeviceDraw :: proc(graphics_device: ^GraphicsDevice, command: ^DrawComma
 				u32(command.VertexCount),
 				u32(Max(command.InstanceCount, 1)),
 				u32(command.VertexOffset),
-				0,
+				u32(Max(command.InstanceOffset, 0)), // [olib L-017] first_instance
 			)
 		}
 	}

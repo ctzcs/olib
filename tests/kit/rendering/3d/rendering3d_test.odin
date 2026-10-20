@@ -335,6 +335,12 @@ render3d_views_preserve_records :: proc(t: ^testing.T) {
 	missing.view_matrix = {}
 	testing.expect_value(t, submit(&r, missing), mat.Draw_Error.Missing_View_Matrix)
 	testing.expect_value(t, len(r.records), 2)
+	// 视图块超长同样在发 Draw 之前报错，记录保留。
+	oversized := missing
+	oversized.view_matrix = world.MATRIX4_IDENTITY
+	oversized.globals = make([]u8, mat.VIEW_GLOBALS_SIZE + 16, context.temp_allocator)
+	testing.expect_value(t, submit(&r, oversized), mat.Draw_Error.View_Globals_Too_Large)
+	testing.expect_value(t, len(r.records), 2)
 	clear(&r)
 	testing.expect_value(t, len(r.records), 0)
 	testing.expect_value(t, submit(&r, view, "body"), mat.Draw_Error.None)

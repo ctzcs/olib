@@ -232,12 +232,13 @@ set_error :: proc(s: ^Session, message: string) {
 	s.status = .Error
 }
 
-// 保留生成参数布局的全部槽，包括被编译器优化掉的字段。
+// 保留生成参数布局的全部槽，包括被编译器优化掉的字段。片元至少两个 uniform 槽（b0 帧块、b1 参数），
+// init 约定了更多槽（如 Model 的 b2 视图块）时保留。
 configure_parameters :: proc(s: ^Session, textures: int) {
 	s.parameter_layout = true
 	s.contract_revision += 1
 	s.status = .Waiting
-	s.expected[1] = {samplers = textures, uniform_buffers = 2}
+	s.expected[1] = {samplers = textures, uniform_buffers = max(s.expected[1].uniform_buffers, 2)}
 	s.has_attempted = false
 }
 

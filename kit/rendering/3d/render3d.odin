@@ -24,6 +24,9 @@ View :: struct {
 	draw_debug: Maybe(bool),
 	time, delta_time: f32,
 	frame: u64,
+	// 游戏按 std140 打包的视图级数据（太阳方向、雾色等），只在 submit 期间借用；
+	// Model Pass 从顶点 b1 / 片元 b2 读取，超过 mat.VIEW_GLOBALS_SIZE 时 submit 返回错误。
+	globals: []u8,
 }
 
 Render3D :: struct {
@@ -343,6 +346,8 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 	if view.target.WidthInPixels <= 0 || view.target.HeightInPixels <= 0 do return .Invalid_Target
 	// 零矩阵不是有效视矩阵；不悄悄当成单位矩阵，否则透明排序、调试线朝向与 CameraPosition 会无声地出错。
 	if view.view_matrix == (world.Matrix4{}) do return .Missing_View_Matrix
+	globals: [mat.VIEW_GLOBALS_SIZE]u8
+	if !mat.view_globals_pack(&globals, view.globals) do return .View_Globals_Too_Large
 	if error := render3d_prepare(r, view, pass_id); error != .None do return error
 	// 完整预检后再发 Draw；错误保留所有记录。
 	for item in r.queue.items {
@@ -391,7 +396,7 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 			if buf == nil && source.effect.desc.instanced {
 				buf, count, first = &r.buffers[source.slots], n, batch.first + k*n
 			}
-			render3d_draw(r, record, source, pass, view, camera, buf, count, first)
+			render3d_draw(r, record, source, pass, view, camera, globals[:], buf, count, first)
 		}
 	}
 	if draw_debug && len(r.debug.vertices) > 0 do debug_draw_submit(&r.debug, view)
@@ -477,9 +482,10 @@ render3d_instance_buffer :: proc(r: ^Render3D, slots: int) -> bool {
 }
 
 // first 是实例缓冲中的起始实例（自动实例化的批次偏移；常驻缓冲为 0）。
+// globals 是已补零到 VIEW_GLOBALS_SIZE 的视图块，每次 submit 打包一次。
 @(private)
 render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_Source,
-	i: int, view: View, camera: [4]f32, buf: ^Model_Buffer, count, first: int) {
+	i: int, view: View, camera: [4]f32, globals: []u8, buf: ^Model_Buffer, count, first: int) {
 	snapshot := &r.snapshots[source.snapshot + i]
 	matrices: [MATERIAL_VERTEX_BLOCK_SIZE]u8
 	frame: [MATERIAL_FRAME_BLOCK_SIZE]u8
@@ -491,7 +497,11 @@ render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_
 			record.item.world, view, camera, {}, record.item.tint)
 	}
 	foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, matrices[:])
-	if source.effect.desc.uniforms == .Olib do foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, frame[:])
+	if source.effect.desc.uniforms == .Olib {
+		foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, frame[:])
+		foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, globals, mat.MODEL_VIEW_VERTEX_SLOT)
+		foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, globals, mat.MODEL_VIEW_FRAGMENT_SLOT)
+	}
 	command: foster.DrawCommand
 	foster.DrawCommandFromMesh(&command, view.target, record.mesh, snapshot)
 	defer foster.DrawCommandDispose(&command)

@@ -88,6 +88,32 @@ material_draw_treats_all_disabled_passes_as_success :: proc(t: ^testing.T) {
 	testing.expect_value(t, material_draw(&device, effect, nil, draw), Draw_Error.None)
 }
 
+// 视图块整块补零，超长在选择 Pass 之前拒绝；Model 比 Sprite 多出顶点 b1 / 片元 b2 两个槽。
+@(test)
+view_globals_padding_and_slot_counts :: proc(t: ^testing.T) {
+	block: [VIEW_GLOBALS_SIZE]u8
+	block[VIEW_GLOBALS_SIZE - 1] = 9
+	testing.expect(t, view_globals_pack(&block, []u8{1, 2, 3}))
+	testing.expect(t, block[2] == 3 && block[3] == 0 && block[VIEW_GLOBALS_SIZE - 1] == 0)
+	too_long := make([]u8, VIEW_GLOBALS_SIZE + 16, context.temp_allocator)
+	testing.expect(t, !view_globals_pack(&block, too_long))
+	testing.expect_value(t, block[0], u8(1)) // 失败不改 block
+
+	device: foster.GraphicsDevice
+	mesh: foster.Mesh
+	draw := Material_Draw{mesh = &mesh, kind = .Model, view_globals = too_long}
+	testing.expect_value(t, material_draw(&device, model_effect(), nil, draw), Draw_Error.View_Globals_Too_Large)
+
+	vertex, fragment := material_uniform_counts(model_effect())
+	testing.expect(t, vertex == 2 && fragment == 3)
+	sprite := Effect_Desc{passes = []Pass_Desc{{draw = .Sprite}}}
+	vertex, fragment = material_uniform_counts(sprite)
+	testing.expect(t, vertex == 2 && fragment == 2)
+	sprite.uniforms = .Foster
+	vertex, fragment = material_uniform_counts(sprite)
+	testing.expect(t, vertex == 1 && fragment == 1)
+}
+
 @(test)
 draw_error_text_covers_every_error :: proc(t: ^testing.T) {
 	testing.expect_value(t, draw_error_text(.None), "")

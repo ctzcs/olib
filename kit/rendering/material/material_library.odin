@@ -129,6 +129,17 @@ material_web_check :: proc(effect: Effect_Desc, schemas: []Schema) -> string {
 	return ""
 }
 
+// 宿主为每阶段提交的 uniform 槽数（精灵缓冲变体另有自己的顶点 Shader，不在此列）。
+// Olib：顶点 b0 帧块，精灵 b1 Pass 偏移；片元 b0 帧块、b1 参数。Model 另有顶点 b1 / 片元 b2 视图块。
+// Foster 布局只有顶点 b0 与片元 b0 参数。Shader 可以少声明，不能多于这里的槽数。
+@(private)
+material_uniform_counts :: proc(desc: Effect_Desc) -> (vertex, fragment: int) {
+	if desc.uniforms == .Foster do return 1, 1
+	if effect_is_model(desc) do return 2, 3
+	if effect_is_sprite(desc) do return 2, 2
+	return 1, 2
+}
+
 @(private)
 material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Effect) -> bool {
 	if effect.ready do return true
@@ -138,11 +149,12 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 	effect.gpu = make([]foster.Material, len(effect.code))
 	sprite := effect_is_sprite(effect.desc)
 	if sprite && effect.desc.instanced do effect.instanced_vertex = make([]foster.Shader, len(effect.code))
+	vertex_uniforms, fragment_uniforms := material_uniform_counts(effect.desc)
 	for code, i in effect.code {
 		// 精灵批量变体从顶点 storage buffer 读两条轴和 [Instance] 字段（见 hlsl 的 Sprite_Batch）。
 		storage := sprite && effect.desc.uniforms == .Olib ? 1 : 0
 		foster.ShaderInit(&effect.vertex[i], library.device, {
-			Stage = .Vertex, Code = code.vertex, UniformBufferCount = 1 + storage, StorageBufferCount = storage,
+			Stage = .Vertex, Code = code.vertex, UniformBufferCount = vertex_uniforms, StorageBufferCount = storage,
 			EntryPoint = "vertex_main",
 		}, effect.schemas[i].name)
 		if effect.instanced_vertex != nil {
@@ -157,7 +169,7 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 			}
 		}
 		foster.ShaderInit(&effect.fragment[i], library.device, {
-			Stage = .Fragment, Code = code.fragment, UniformBufferCount = effect.desc.uniforms == .Foster ? 1 : 2,
+			Stage = .Fragment, Code = code.fragment, UniformBufferCount = fragment_uniforms,
 			SamplerCount = texture_count(effect.schemas[i]), EntryPoint = "fragment_main",
 		}, effect.schemas[i].name)
 		if effect.vertex[i].Resource == nil || effect.fragment[i].Resource == nil {

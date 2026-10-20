@@ -40,7 +40,7 @@ model_material_draw :: proc(device: ^foster.GraphicsDevice, effect: mat.Effect_D
 	}
 	request := mat.Material_Draw{
 		mesh = draw.mesh, target = view.target, kind = .Model,
-		vertex_uniform = matrices[:], frame_uniform = frame[:],
+		vertex_uniform = matrices[:], frame_uniform = frame[:], view_globals = view.globals,
 		pass_limit = draw.pass_limit, options = draw.options,
 	}
 	if draw.instances != nil {

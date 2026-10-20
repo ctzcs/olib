@@ -71,8 +71,11 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		program := build.programs[i]
 		source, program_text := program.source, program.text
 		// Sprite Pass 的批量变体从顶点 storage buffer 读两条轴和 [Instance] 字段（见 mat.hlsl 的 Sprite_Batch）。
-		storage := bank_sprite_group(build.effects, schema.name) ? 1 : 0
-		_ = dev.init(&b.shaders[i], source, s.device.Driver, {uniform_buffers = 1 + storage, storage_buffers = storage}, {uniform_buffers = 2})
+		// Model Pass 另有顶点 b1 / 片元 b2 视图块（见 mat.VIEW_GLOBALS_SIZE），与材质库的槽数一致。
+		storage := bank_group_draws(build.effects, schema.name, .Sprite) ? 1 : 0
+		view := bank_group_draws(build.effects, schema.name, .Model) ? 1 : 0
+		_ = dev.init(&b.shaders[i], source, s.device.Driver,
+			{uniform_buffers = 1 + storage + view, storage_buffers = storage}, {uniform_buffers = 2 + view})
 		b.shaders[i].source_text = strings.clone(program_text)
 		if prior := bank_index(s.bank, schema.name); prior >= 0 {
 			b.shaders[i].revision = s.shaders[prior].revision
@@ -268,12 +271,12 @@ bank_commit :: proc(s: ^Session) {
 	bank_error(s, "")
 }
 
-// 参数组是否被某个 Sprite Pass 使用。
+// 参数组是否被某种 Pass（Sprite / Model）使用。
 @(private)
-bank_sprite_group :: proc(effects: []mat.Effect_Desc, group: string) -> bool {
+bank_group_draws :: proc(effects: []mat.Effect_Desc, group: string, draw: mat.Pass_Draw) -> bool {
 	for effect in effects {
 		for pass in effect.passes {
-			if pass.draw == .Sprite && string(pass.params) == group do return true
+			if pass.draw == draw && string(pass.params) == group do return true
 		}
 	}
 	return false

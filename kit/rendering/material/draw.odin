@@ -57,6 +57,7 @@ Draw_Error :: enum {
 	Instance_Mismatch,      // 实例缓冲的字段数与效果的 [Instance] 字段数不一致
 	Unsupported_Mesh,       // 网格顶点格式不是模型材质路径支持的静态格式（例如蒙皮网格）
 	Missing_View_Matrix,    // 3D 视图没有设置视矩阵（view_matrix 为零矩阵）
+	View_Globals_Too_Large, // 视图块超过 VIEW_GLOBALS_SIZE 字节
 }
 
 draw_error_text :: proc(error: Draw_Error) -> string {
@@ -80,8 +81,24 @@ draw_error_text :: proc(error: Draw_Error) -> string {
 	case .Instance_Mismatch: return "Instance buffer field count differs from the effect's Instance fields"
 	case .Unsupported_Mesh: return "Model materials only support the static vertex format"
 	case .Missing_View_Matrix: return "3D view needs a view matrix (for example camera3d_view)"
+	case .View_Globals_Too_Large: return "View globals exceed VIEW_GLOBALS_SIZE bytes"
 	}
 	return ""
+}
+
+// Model Pass（Olib 布局）的视图块：游戏按 std140 打包的视图级数据，库不定义其中字段。
+// 顶点 b1/space1 与片元 b2/space3 是同一份字节；每次 Draw 整块提交 VIEW_GLOBALS_SIZE 字节，
+// 不足部分补零，Shader 声明的块不能超过这个大小。顶点 b2/b3 预留给蒙皮 palette。
+VIEW_GLOBALS_SIZE :: 1024
+MODEL_VIEW_VERTEX_SLOT :: 1
+MODEL_VIEW_FRAGMENT_SLOT :: 2
+
+// 把 globals 拷进 block、余下补零；超过 VIEW_GLOBALS_SIZE 返回 false 且不改 block。
+view_globals_pack :: proc(block: ^[VIEW_GLOBALS_SIZE]u8, globals: []u8) -> bool {
+	if len(globals) > VIEW_GLOBALS_SIZE do return false
+	block^ = {}
+	copy(block[:], globals)
+	return true
 }
 
 Material_Draw :: struct {
@@ -90,6 +107,7 @@ Material_Draw :: struct {
 	kind: Pass_Draw,
 	vertex_uniform: []u8,
 	frame_uniform: []u8,
+	view_globals: []u8, // Model Pass 的视图块，nil 为全零；见 VIEW_GLOBALS_SIZE
 	sprite_texture: ^foster.Texture,
 	pass_limit: int, // 0 绘制全部，否则只绘制前 N 个 Pass。
 	options: Draw_Options,
@@ -236,7 +254,7 @@ material_pass_values :: proc(p: Pass_Desc, b: Material_Binding, overrides: ^Inst
 // 提交单个 Pass：应用固定覆盖值、写入 uniform 与采样器、套用 Pass 状态后绘制。
 @(private)
 material_pass_submit :: proc(device: ^foster.GraphicsDevice, draw: Material_Draw, layout: Uniform_Layout,
-	p: Pass_Desc, pass_index: int, b: Material_Binding) {
+	p: Pass_Desc, pass_index: int, b: Material_Binding, globals: []u8) {
 	buffer, instance := material_pass_values(p, b, draw.options.instance_values)
 	foster.MaterialStageSetUniformBuffer(&b.material.Vertex, draw.vertex_uniform)
 	if layout == .Foster {
@@ -245,6 +263,10 @@ material_pass_submit :: proc(device: ^foster.GraphicsDevice, draw: Material_Draw
 	} else {
 		foster.MaterialStageSetUniformBuffer(&b.material.Fragment, draw.frame_uniform)
 		foster.MaterialStageSetUniformBuffer(&b.material.Fragment, buffer, 1)
+		if p.draw == .Model {
+			foster.MaterialStageSetUniformBuffer(&b.material.Vertex, globals, MODEL_VIEW_VERTEX_SLOT)
+			foster.MaterialStageSetUniformBuffer(&b.material.Fragment, globals, MODEL_VIEW_FRAGMENT_SLOT)
+		}
 	}
 	b.material.Fragment.Samplers = {}
 	copy(b.material.Fragment.Samplers[:], b.samplers)
@@ -302,12 +324,15 @@ material_draw :: proc(device: ^foster.GraphicsDevice, effect: Effect_Desc,
 			if instance_count(binding.schema) != draw.instance_slots do return .Instance_Mismatch
 		}
 	}
+	globals: [VIEW_GLOBALS_SIZE]u8
+	if !view_globals_pack(&globals, draw.view_globals) do return .View_Globals_Too_Large
 	selection: Pass_Selection
 	if error := material_select(effect, bindings, draw, &selection); error != .None do return error
 	if draw.instance_buffer != nil && draw.instance_count <= 0 do return .None
 	for i in 0..<selection.count {
 		pass := selection.passes[i]
-		material_pass_submit(device, draw, effect.uniforms, effect.passes[pass], pass, bindings[selection.bindings[i]])
+		material_pass_submit(device, draw, effect.uniforms, effect.passes[pass], pass,
+			bindings[selection.bindings[i]], globals[:])
 	}
 	return .None
 }

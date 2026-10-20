@@ -19,7 +19,8 @@ import "core:strings"
 
 // 分区：
 //   入口 —— 参数解析 / 检查顺序 / 汇总
-//   检查项执行 —— 子进程运行 / 过滤 / 结果打印（LOCAL_CHANGES 校验见 local_changes.odin）
+//   检查项执行 —— 子进程运行 / 过滤 / 结果打印（LOCAL_CHANGES 校验见 local_changes.odin，
+//                  shader 产物是否过期见 shader_outputs.odin）
 //   包发现 —— core/ kit/ tools/ 与 olib_sample/src
 //   路径 —— join / clean 的单返回值包装
 
@@ -149,6 +150,11 @@ main :: proc() {
 			fmt.printfln("skip   olib_sample（未在 %s 找到）", samples)
 		}
 	}
+
+	// ---- shader 产物：Compiled 与源码一致（tools/shaders -check，不需要 shadercross） ----
+	shader_roots := [3]string{path_join(c.root, "foster"), path_join(c.root, "kit"),
+		path_clean(path_join(c.root, "..", "olib_sample", "src"))}
+	check_shader_outputs(&c, shader_roots[:no_samples ? 2 : 3])
 
 	// ---- 汇总 ----
 	fmt.println()

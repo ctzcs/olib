@@ -4,11 +4,13 @@
 //   odin run tools/shaders                         编译 kit/rendering/3d/shaders（DebugLine3D）
 //   odin run <olib>/tools/shaders -- -dir:<目录>   编译游戏/示例自己的着色器目录（相对当前目录）
 //   odin run tools/shaders -- -dir:foster/assets/shaders  重建 Foster 三组默认 shader
+//   odin run tools/shaders -- -check -dir:<目录>  只检查 Compiled 是否与源码一致（不需要 shadercross）
 // 目录归属与源码/产物规则见同目录 README.md。
 //
 // 流程与上游 Foster 的 compile.sh 一致：目录下每个 *.hlsl（跳过 *.hlsli）的
 // vertex / fragment 两个阶段，先 HLSL -> .spv，再 .spv -> .dxil 与 .spv -> .msl，
 // 产物写到 <目录>/Compiled。入口函数固定为 vertex_main / fragment_main。
+// 全部成功后写 Compiled/sources.json 记下源码指纹，-check 与 tools/check 用它发现过期产物（见 sources.odin）。
 // shadercross 需在 PATH 上。Web（GLSL ES）是手写的，不在这里。
 package main
 
@@ -30,10 +32,15 @@ import lang "../../kit/rendering/shader/lang"
 
 main :: proc() {
 	dir := ""
+	check := false
 	// PowerShell 会把 `-dir:x` 拆成 `-dir:` 与 `x` 两个参数，值为空时取下一个参数。
 	args := os.args[1:]
 	for i := 0; i < len(args); i += 1 {
 		arg := args[i]
+		if arg == "-check" {
+			check = true
+			continue
+		}
 		if arg == "-dir" || strings.has_prefix(arg, "-dir:") {
 			dir = strings.trim_prefix(strings.trim_prefix(arg, "-dir"), ":")
 			if len(dir) == 0 && i + 1 < len(args) {
@@ -43,7 +50,7 @@ main :: proc() {
 			continue
 		}
 		fmt.eprintfln("未知参数: %s", arg)
-		fmt.eprintln("用法: odin run tools/shaders [-- -dir:<着色器目录>]")
+		fmt.eprintln("用法: odin run tools/shaders [-- [-check] -dir:<着色器目录>]")
 		os.exit(2)
 	}
 
@@ -55,6 +62,7 @@ main :: proc() {
 		dir = path_join(cwd, dir)
 	}
 	dir = path_clean(dir)
+	if check do os.exit(sources_check(dir) ? 0 : 1)
 
 	entries, err := os.read_all_directory_by_path(dir, context.allocator)
 	if err != nil {
@@ -92,6 +100,15 @@ main :: proc() {
 		fmt.eprintfln("无法创建 %s: %v", out, mk_err)
 		os.exit(1)
 	}
+	// 编译前记下源码：编译途中改了文件时宁可报过期，也不把旧产物记成新的。
+	record, record_reason := sources_collect(dir)
+	if record_reason != "" {
+		fmt.eprintln(record_reason)
+		os.exit(1)
+	}
+	record_files := len(record.files)
+	record_text, encoded := sources_encode(record)
+	if !encoded do os.exit(1)
 
 	for name in sources {
 		src := path_join(dir, name)
@@ -115,6 +132,9 @@ main :: proc() {
 		fmt.printfln("compiled %s", name)
 		free_all(context.temp_allocator)
 	}
+	// 全部成功后才写记录；中途失败时旧记录保留，-check 仍会报过期。
+	if !write_shader_file(path_join(out, SOURCES_RECORD), record_text) do os.exit(1)
+	fmt.printfln("recorded %s (%d source files)", SOURCES_RECORD, record_files)
 }
 
 // ==============================================================================

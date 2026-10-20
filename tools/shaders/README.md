@@ -79,4 +79,21 @@ odin run ../olib/tools/shaders -- -dir:src/forward3d/shaders
 手写 `.hlsl` 新增 shader 时同步更新相应模块的 `#load`；`.oshader` 材质由
 `material_register_directory` 按目录登记，增删 Pass 或效果不改 Odin 代码。之后运行 `odin run tools/check`，再执行涉及后端的
 GPU 回归或最终画面检查。`tools/check` 会通过编译检查嵌入引用的文件是否存在，
-但不运行 shadercross，不判断产物是否过期，也不代替 GPU 测试。
+但不运行 shadercross，也不代替 GPU 测试。
+
+## 产物是否过期
+
+全部编译成功后，工具写 `Compiled/sources.json`，记下每个源码文件的指纹：目录下（含子目录，跳过
+`Compiled` 和隐藏目录）的 `.oshader` / `.hlsl` / `.hlsli`，目录里有 `.oshader` 时再加上 olib 标准 include。
+指纹去掉 `\r` 再算，git 的换行转换不会造成误报。记录在编译前计算，编译途中改了文件只会被报成过期。
+
+```sh
+odin run ../olib/tools/shaders -- -check -dir:src/forward3d/shaders
+```
+
+`-check` 只比对记录与当前源码，不需要 shadercross：一致时退出码 0；改了、新增或删除了源码，或者没有记录时退出码 1，
+并列出文件和重新生成的命令。`tools/check` 对 olib 的 foster/、kit/ 与同级 olib_sample/src 下每个有记录的
+`Compiled` 运行它；没有记录的目录只提示跳过，重新生成一次后开始检查。游戏仓库可以在自己的检查脚本里调用 `-check`。
+
+2026-10-20 时 foster 默认 shader 和 olib_sample book_ui 的产物与当前工具链编译结果不一致（book_ui 还缺 `.msl`），
+stylized3d 有进行中的改动，这三个目录暂未记录；其余目录重新编译与已提交产物逐字节一致后才写入记录。

@@ -114,6 +114,22 @@ view_globals_padding_and_slot_counts :: proc(t: ^testing.T) {
 	testing.expect(t, vertex == 1 && fragment == 1)
 }
 
+// 每种 ZTest 都映射到 foster 的比较；Off 关闭测试，Default 不改调用方状态。
+@(test)
+pass_depth_maps_every_compare :: proc(t: ^testing.T) {
+	expected := [Pass_Depth]foster.DepthCompare{
+		.Default = .Equal, .Off = .Equal, .Less = .Less, .Less_Equal = .LessOrEqual, .Equal = .Equal,
+		.Always = .Always, .Greater = .Greater, .Greater_Equal = .GreatorOrEqual, .Not_Equal = .NotEqual, .Never = .Never,
+	}
+	for depth in Pass_Depth {
+		// 起始状态用 Equal、测试开启，便于看出 Default 不改、Off 只关测试。
+		command := foster.DrawCommand{DepthTestEnabled = true, DepthCompare = .Equal}
+		pass_state_apply(&command, {depth = depth})
+		testing.expectf(t, command.DepthCompare == expected[depth], "%v -> %v", depth, command.DepthCompare)
+		testing.expectf(t, command.DepthTestEnabled == (depth != .Off), "%v test enabled", depth)
+	}
+}
+
 @(test)
 draw_error_text_covers_every_error :: proc(t: ^testing.T) {
 	testing.expect_value(t, draw_error_text(.None), "")

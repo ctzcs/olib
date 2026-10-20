@@ -135,7 +135,7 @@ struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibIn
 | `Preview` | `2D` / `3D`；Shader 层指定工作区，Pass 层指定顶点接口；Model 默认 3D |
 | `Cull` | `Default` / `None` / `Front` / `Back` |
 | `Blend` | `Default` / `Opaque` / `Alpha` / `Additive` / `Premultiplied` |
-| `ZTest` | `Default` / `Off` / `Less` / `Less_Equal` / `Equal` / `Always` |
+| `ZTest` | `Default` / `Off` / `Less` / `Less_Equal` / `Equal` / `Always` / `Greater` / `Greater_Equal` / `Not_Equal` / `Never`；`Off` 关闭测试，`Always` 开启测试但总是通过 |
 | `ZWrite` | `Default` / `On` / `Off` |
 | `Disabled` | `On` 默认禁用此 Pass；省略或 `Off` 启用 |
 | `Output "name"` | Pass 的输出目标，默认 `color`；Shader 层省略时取最后一个 Pass 的输出 |

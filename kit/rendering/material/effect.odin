@@ -15,7 +15,8 @@ Target_Format :: enum { Color, Float16, Float32 }
 // Default 保留调用方状态；Model 默认不透明、背面剔除、Less 深度读写。
 Pass_Cull :: enum { Default, None, Front, Back }
 Pass_Blend :: enum { Default, Opaque, Alpha, Additive, Premultiplied }
-Pass_Depth :: enum { Default, Off, Less, Less_Equal, Equal, Always }
+// Off 关闭深度测试；Always 开启测试但总是通过。新值只追加在末尾：编译清单按整数保存枚举。
+Pass_Depth :: enum { Default, Off, Less, Less_Equal, Equal, Always, Greater, Greater_Equal, Not_Equal, Never }
 Pass_Write :: enum { Default, On, Off }
 Pass_State :: struct {
 	cull: Pass_Cull,
@@ -139,7 +140,7 @@ pass_validate :: proc(e: Effect_Desc, index: int, schemas: []Schema) -> string {
 	}
 	if p.state.cull < .Default || p.state.cull > .Back ||
 		p.state.blend < .Default || p.state.blend > .Premultiplied ||
-		p.state.depth < .Default || p.state.depth > .Always ||
+		p.state.depth < .Default || p.state.depth > .Never ||
 		p.state.depth_write < .Default || p.state.depth_write > .Off {
 		return "Invalid pass render state"
 	}

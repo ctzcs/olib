@@ -1,6 +1,7 @@
 #+test
 package lang
 
+import "core:fmt"
 import "core:strings"
 import "core:testing"
 
@@ -94,6 +95,25 @@ invalid_declarations_fail_without_partial_document :: proc(t: ^testing.T) {
 		doc := parse(source[:length], "truncated.oshader")
 		testing.expectf(t, doc.error != "", "truncated input accepted at %d", length)
 		dispose(&doc)
+	}
+}
+
+// ZTest 按枚举名解析，补全的四种比较与原有取值同样可用。
+@(test)
+model_depth_compare_names :: proc(t: ^testing.T) {
+	for name in ([?]string{"Greater", "Greater_Equal", "Not_Equal", "Never"}) {
+		text, _ := strings.replace_all(`Shader "Depth" {
+Pass "silhouette" { Draw Model ZTest NAME ZWrite Off
+HLSLPROGRAM
+float4 fragment_main() : SV_Target0 { return 1; }
+ENDHLSL
+}
+}`, "NAME", name, context.temp_allocator)
+		doc := parse(text, "depth.oshader")
+		defer dispose(&doc)
+		if testing.expectf(t, doc.error == "", "%s: %s", name, doc.error) {
+			testing.expect_value(t, fmt.tprint(doc.effect.passes[0].state.depth), name)
+		}
 	}
 }
 

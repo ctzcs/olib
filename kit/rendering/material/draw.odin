@@ -146,19 +146,22 @@ pass_state_apply :: proc(command: ^foster.DrawCommand, state: Pass_State) {
 	case .Default:
 	case .Off:
 		command.DepthTestEnabled = false
-	case .Less, .Less_Equal, .Equal, .Always:
-		command.DepthTestEnabled = true
-		#partial switch state.depth {
-		case .Less:
-			command.DepthCompare = .Less
-		case .Less_Equal:
-			command.DepthCompare = .LessOrEqual
-		case .Equal:
-			command.DepthCompare = .Equal
-		case .Always:
-			command.DepthCompare = .Always
-		case:
-		}
+	case .Less:
+		command.DepthTestEnabled, command.DepthCompare = true, .Less
+	case .Less_Equal:
+		command.DepthTestEnabled, command.DepthCompare = true, .LessOrEqual
+	case .Equal:
+		command.DepthTestEnabled, command.DepthCompare = true, .Equal
+	case .Always:
+		command.DepthTestEnabled, command.DepthCompare = true, .Always
+	case .Greater:
+		command.DepthTestEnabled, command.DepthCompare = true, .Greater
+	case .Greater_Equal:
+		command.DepthTestEnabled, command.DepthCompare = true, .GreatorOrEqual
+	case .Not_Equal:
+		command.DepthTestEnabled, command.DepthCompare = true, .NotEqual
+	case .Never:
+		command.DepthTestEnabled, command.DepthCompare = true, .Never
 	}
 	if state.depth_write != .Default do command.DepthWriteEnabled = state.depth_write == .On
 }

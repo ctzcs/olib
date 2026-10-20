@@ -40,13 +40,8 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 		fmt.eprintln(err)
 		return false
 	}
-	defer {
-		entries, _ := os.read_all_directory_by_path(workspace, context.temp_allocator)
-		for entry in entries {
-			_ = os.remove(entry.fullpath)
-		}
-		_ = os.remove(workspace)
-	}
+	defer remove_workspace(workspace)
+	if !copy_includes(workspace) do return false
 	files: [dynamic]string
 	defer {
 		for name in files {
@@ -130,6 +125,45 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 	}
 	fmt.printfln("compiled %s (%d passes)", source, len(doc.schemas))
 	return true
+}
+
+// 把 olib 标准 include 复制到工作区的 olib/ 下：生成的程序就在工作区，DXC 按当前文件所在目录找到
+// #include "olib/..."；shadercross 只接受一个 -I，留给 shader 源目录。
+copy_includes :: proc(workspace: string) -> bool {
+	source := path_join(lang.INCLUDE_DIRECTORY, "olib")
+	target := path_join(workspace, "olib")
+	if err := os.make_directory(target); err != nil {
+		fmt.eprintln("Cannot create", target, err)
+		return false
+	}
+	entries, err := os.read_all_directory_by_path(source, context.temp_allocator)
+	if err != nil {
+		fmt.eprintln("Cannot read", source, err)
+		return false
+	}
+	for entry in entries {
+		if entry.type != .Regular || !strings.has_suffix(entry.name, ".hlsli") do continue
+		data, read_err := os.read_entire_file(entry.fullpath, context.temp_allocator)
+		if read_err != nil {
+			fmt.eprintln("Cannot read", entry.fullpath, read_err)
+			return false
+		}
+		if !write_shader_file(path_join(target, entry.name), data) do return false
+	}
+	return true
+}
+
+// 工作区只有本次写入的文件和 olib/ 子目录；不跟随链接。
+remove_workspace :: proc(root: string) {
+	entries, _ := os.read_all_directory_by_path(root, context.temp_allocator)
+	for entry in entries {
+		if entry.type == .Directory {
+			remove_workspace(entry.fullpath)
+		} else {
+			_ = os.remove(entry.fullpath)
+		}
+	}
+	_ = os.remove(root)
 }
 
 write_shader_file :: proc(path: string, data: []u8) -> bool {

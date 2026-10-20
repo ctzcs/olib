@@ -74,3 +74,18 @@ single_file_build_snapshot_and_stale_watch_result :: proc(t: ^testing.T) {
 	defer parameter_build_dispose(&empty)
 	testing.expect(t, empty.error == "" && len(empty.schemas) == 0 && len(empty.effects) == 0)
 }
+
+// 编译目录里要有 olib 标准 include，且 olib/ 子目录能随临时目录一起删掉。
+@(test)
+snapshot_includes_copies_standard_include :: proc(t: ^testing.T) {
+	directory, err := os.make_directory_temp("", "olib_include_test_*", context.temp_allocator)
+	if !testing.expect(t, err == nil) {
+		return
+	}
+	testing.expect(t, snapshot_includes(directory))
+	for name in ([]string{"model.hlsli", "sprite.hlsli", "fullscreen.hlsli"}) {
+		testing.expectf(t, os.is_file(fmt.tprintf("%s/olib/%s", directory, name)), "missing olib/%s", name)
+	}
+	remove_workspace(directory)
+	testing.expect(t, !os.exists(directory))
+}

@@ -13,6 +13,7 @@ import "core:slice"
 import "core:strings"
 
 import "olib:core/devbuild"
+import lang "olib:kit/rendering/shader/lang"
 
 Resources :: struct {
 	samplers: int,
@@ -66,7 +67,7 @@ compile :: proc(source, format: string, source_text: string = "") -> (result: Bu
 		remove_workspace(directory)
 	}
 	root := filepath.dir(source)
-	if !snapshot_sources(root, directory) {
+	if !snapshot_sources(root, directory) || !snapshot_includes(directory) {
 		result.error = strings.clone("Cannot snapshot shader sources")
 		return
 	}
@@ -126,6 +127,15 @@ snapshot_sources :: proc(root, destination: string) -> bool {
 		}
 	}
 	return true
+}
+
+// 把 olib 标准 include 复制到编译目录的 olib/ 下（项目里同名的 olib/ 会被覆盖）。生成的程序就在该目录，
+// DXC 按当前文件所在目录找到 #include "olib/..."；shadercross 只接受一个 -I，留给项目源目录。
+@(private)
+snapshot_includes :: proc(destination: string) -> bool {
+	target := fmt.tprintf("%s/olib", destination)
+	if !os.is_dir(target) && os.make_directory(target) != nil do return false
+	return snapshot_sources(fmt.tprintf("%s/olib", lang.INCLUDE_DIRECTORY), target)
 }
 
 // 仅用于 make_directory_temp 创建、由本编译器写入的目录；不跟随链接。

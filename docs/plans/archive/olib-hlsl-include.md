@@ -1,5 +1,8 @@
 # Plan：引擎 b0 块改用 olib 标准 include
 
+> **状态：已完成（2026-10-20）** · 提交 `8a1250b`..`2e492ee`（olib_sample：`9f447da`）
+> 偏离：① 第 5 步按决策 8 跳过：stylized3d 仍有 63 处未提交改动，等这些改动提交后再迁移。② 计划文件先单独提交（`8a1250b`），归档的 `git mv` 需要它已被跟踪。③ Shader Lab 验证模式有两处间歇失败：基线的 `targets` 两次中失败一次（“switch back recreates history while retaining parameters and folding”），迁移后 4 次全部通过；迁移后的 `smoke` 8 次中有 1 次退出 1，当次没有保留诊断，其余 7 次通过。基线没有跑 `smoke`，无法确认它改动前是否也会偶发失败。
+
 ## 背景
 
 `.oshader` 的原则：外层（Properties、Pass、渲染状态、Draw、Preview、目标）是编辑器功能，`HLSLPROGRAM` 里尽量是原版 HLSL。

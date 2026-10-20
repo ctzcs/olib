@@ -5,7 +5,8 @@
 `<Shader>.shader.json`。它描述材质定义，与保存实例参数值的 JSON 区分；
 预览与发布共用解析器。Sprite 总是生成 BatcherVertex 批量变体；
 声明 Instanced 时额外输出 `<Shader>_<Pass>.instanced.vertex.<格式>`，两者共用片元代码。
-运行时分别填入 Pass_Binaries.vertex 与 instanced_vertex；修改 2D 输入约定后须一起重新生成。指定目录内的旧 `.hlsl` 可以并存，输出重名会在编译前报错。
+运行时由 `mat.material_register_directory` 按这些文件名找到产物（自己拼 `Pass_Binaries` 时分别填入 vertex 与 instanced_vertex）；
+修改 2D 输入约定后须一起重新生成。指定目录内的旧 `.hlsl` 可以并存，输出重名会在编译前报错。
 
 Shader 与使用它的功能放在一起。框架内置绘制属于 `foster`，库功能属于对应 `kit` 包，
 游戏材质和演示效果属于游戏/示例仓库。跨模块共享的代码按依赖方向提取到共同拥有者；
@@ -72,6 +73,7 @@ odin run ../olib/tools/shaders -- -dir:src/forward3d/shaders
 修改源码后重新生成对应产物；同步维护有对应功能的 Web 源码。若升级编译器，应单独检查
 产物差异与实际渲染，不把目录迁移和 shader 行为变更混在一起。
 
-新增 shader 时同步更新相应模块的 `#load`，运行 `odin run tools/check`，再执行涉及后端的
+手写 `.hlsl` 新增 shader 时同步更新相应模块的 `#load`；`.oshader` 材质由
+`material_register_directory` 按目录登记，增删 Pass 或效果不改 Odin 代码。之后运行 `odin run tools/check`，再执行涉及后端的
 GPU 回归或最终画面检查。`tools/check` 会通过编译检查嵌入引用的文件是否存在，
 但不运行 shadercross，不判断产物是否过期，也不代替 GPU 测试。

@@ -15,7 +15,7 @@ GPU 资源使用 Foster，解析、编解码与布局函数不需要创建窗口
 | `effect.odin` | `Effect_Desc / Pass_Desc`：多 Pass 声明，`effect_validate` 校验、`effect_sort` 拓扑排序，clone / dispose |
 | `instance.odin`、`resource.odin` | 实例 / 单参数组的 JSON 编解码（纯字节，不碰文件与 GPU） |
 | `material_library.odin` | `Material_Library`：登记 Effect、惰性创建 Shader、贴图缓存 |
-| `shader_code.odin` | `Shader_Binaries / Pass_Binaries`、`shader_pick`、`material_register_manifest`：按驱动选字节码并一次登记 |
+| `shader_code.odin` | `Shader_Binaries / Pass_Binaries`、`shader_pick`、`material_register_directory / material_register_manifest`：按驱动选字节码并登记效果 |
 | `material.odin` | `Material`：`material_load / reload / set_number / set_texture` |
 | `draw.odin` | `Material_Binding / Draw_Options / Draw_Error / material_draw`：选取 Pass、上传参数、提交 DrawCommand |
 
@@ -115,15 +115,24 @@ r2d.sprite_buffer_upload(&buffer, items, values = values)
 import mat "olib:kit/rendering/material"
 
 materials := mat.Material_Library{device = device, storage = &resources}
-// 清单与各 Pass 的 spv / dxil / msl 都由 tools/shaders 生成；库按驱动选择后端并登记。
-reason := mat.material_register_manifest(&materials, #load("Hero.shader.json"), passes)
-material, reason := mat.material_load(&materials, "materials/hero.json")
-// 检查 reason 后将 material 传给 r2d.image 或 r3d.model。
+// 嵌入 tools/shaders 的整个产物目录；库按驱动选择后端，登记其中所有材质效果。
+reason := mat.material_register_directory(&materials, #load_directory("shaders/Compiled"))
+material, load_error := mat.material_load(&materials, "materials/hero.json")
+// 检查 reason / load_error 后将 material 传给 r2d.image 或 r3d.model。
 ```
 
-`passes` 是 `[]mat.Pass_Binaries`，与清单里的 Pass 一一对应（见 `olib_sample/src/material3d/shaders.odin`）。
-已经自己持有 Effect、Schema 和字节码时，用底层的 `material_register(&materials, effect, schemas, code)`，
-其中 `code` 用 `shader_pick(driver, binaries)` 按驱动取字节码。
+`material_register_directory` 遍历目录里的每个 `*.shader.json`，按清单里的参数组名找当前后端的
+`<组名>.vertex / .fragment.<spv|dxil|msl>`，instanced 精灵另找 `<组名>.instanced.vertex.*`，其他文件忽略。
+首个 Pass 不是 Model / Sprite 的效果只供 Shader Lab 预览，跳过；缺文件、清单过期等错误以文件名开头，
+遇到第一个就返回。在 `.oshader` 里增删 Pass 或效果后只需重新运行 tools/shaders，不改 Odin 代码。
+
+`#load_directory` 必须直接作参数或变量初始化，写成 `X :: #load_directory(...)` 编译不过。它嵌入整个目录，
+产物目录最好只放本游戏用到的效果。热重载 Watch 默认只监听 `.odin`：要让重新生成的产物触发重编，
+把 Compiled 目录或 `spv / dxil / msl / json` 扩展名列入 `roots` / `extensions`（与 `#load` 相同）。
+
+字节码来自别处（自定义打包等）时，用 `material_register_manifest(&materials, manifest, passes)` 逐个登记，
+`passes` 是与清单参数组一一对应的 `[]mat.Pass_Binaries`。已经自己持有 Effect、Schema 和字节码时，
+用底层的 `material_register(&materials, effect, schemas, code)`，其中 `code` 用 `shader_pick(driver, binaries)` 按驱动取字节码。
 
 每次 load 创建独立参数实例，共享同一效果的 Shader 和同路径贴图。
 Effect/Schema 由库深复制，当前后端预编译字节码借用至 `material_library_dispose`。
@@ -168,8 +177,8 @@ Web 构建（`ODIN_OS == .JS`）没有预编译字节码：`shader_driver_suppor
 Web 只接受 Foster uniform 布局（矩阵与一个片元 float），Olib Clock/参数块、[Instance] 与实例缓冲都返回明确错误。
 原生的 Private 驱动需要平台私有格式，同样不支持。
 
-`Pass_Binaries.instanced_vertex` 是 Sprite 常驻缓冲的顶点变体；普通批量用 vertex，
-两种变体共用 fragment。自定义效果代码借用到材质库释放，内置 Shader 归设备所有。
+`Pass_Binaries.instanced_vertex` 是 Sprite 常驻缓冲的顶点变体（产物 `<组名>.instanced.vertex.*`，
+按目录登记时自动找到）；普通批量用 vertex，两种变体共用 fragment。自定义效果代码借用到材质库释放，内置 Shader 归设备所有。
 
 ## 渲染器与工具接入
 

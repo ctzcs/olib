@@ -24,7 +24,8 @@ r2d.dispose(&renderer)
 mat.material_library_dispose(&materials)
 ```
 
-自定义效果用 `material_register_manifest` 登记，再 `material_load` 或 `material_create` 创建材质。
+自定义效果用 `material_register_directory(&materials, #load_directory("<目录>/Compiled"))` 登记 tools/shaders 的产物目录，
+再 `material_load` 或 `material_create` 创建材质。
 不同 tint 自动合批；每个对象独立变化的材质字段用 `[Instance]` 和 `Instance_Values`。
 常驻实例缓冲继续使用平铺数值数组，见 [2D](2d/README.md) 和 [3D](3d/README.md)。
 
@@ -34,7 +35,7 @@ mat.material_library_dispose(&materials)
 
 | 要做什么 | 函数 / 类型 | 文件 |
 | --- | --- | --- |
-| 创建材质库、登记效果 | `Material_Library`、`material_create`、`material_register_manifest`、`material_register`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
+| 创建材质库、登记效果 | `Material_Library`、`material_create`、`material_register_directory`、`material_register_manifest`、`material_register`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
 | 加载材质、改参数、绑运行时贴图 | `material_load`、`material_reload`、`material_set_number`、`material_set_texture` | [material/material.odin](material/material.odin) |
 | 每个实例的值（可合批） | `Instance_Slot`、`instance_slot`、`instance_slot_count`、`Instance_Values`、`instance_values_set`、`instance_array_set`（缓冲用） | [material/instance_values.odin](material/instance_values.odin) |
 | 绘制失败原因 | `Draw_Error`、`draw_error_text` | [material/draw.odin](material/draw.odin) |

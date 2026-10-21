@@ -1,5 +1,8 @@
 # Shader Lab 改用 ImGui，ImGui 使用 olib 字体与图标
 
+> **状态：已完成（2026-10-22）** · 提交 `196665c`..`fd5fe19`；olib_sample `efcf66c`
+> 偏离：ImGui 1.92 的 sdlgpu3 直接以 SDL_GPUTexture 作 ImTextureID，Texture 不自建采样器与绑定；NewFrame 增加 force_focus，供检查在后台窗口注入输入；features 的分隔条/收起/紧凑侧栏步骤改为预览区尺寸检查，targets 用注入滚轮把纹理卡片滚进可见范围；检查只跑了 d3d12 与默认驱动，未跑 vulkan；模板 Live Editor 随后端默认换成 olib 字体与样式；olib_sample 的 tools/msdf_charset 保留，只用于复现现有字符集。
+
 ## 背景
 
 编辑器 UI 已默认用 odin-imgui（见 archive/editor-imgui.md），但 Shader Lab 仍用 kit/ui 手写侧栏、

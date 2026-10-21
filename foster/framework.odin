@@ -314,6 +314,7 @@ DefaultResourcesDispose :: proc(device: ^GraphicsDevice) {
 
 // Built-in shaders are vendored with the Odin package so it can be relocated.
 // [olib L-013] 原生 shader 产物统一放入 Compiled，源码留在 shaders。
+// [olib L-019] 产物由 tools/shaders 用当前工具链重建，Compiled/sources.json 记录源码指纹供 tools/check 检查过期。
 batcher_vertex_spv :: #load("assets/shaders/Compiled/Batcher.vertex.spv")
 batcher_fragment_spv :: #load("assets/shaders/Compiled/Batcher.fragment.spv")
 batcher_vertex_dxil :: #load("assets/shaders/Compiled/Batcher.vertex.dxil")

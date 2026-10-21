@@ -49,9 +49,11 @@ Field :: struct {
 	// 仅数值字段。true 时不占 uniform 槽，值随每个绘制对象的顶点传入，
 	// 因此不同取值的对象仍可合批。Shader 里照常用 _name 读取。
 	instance: bool,
-	// 仅 Texture 字段：采样器的过滤与两个方向的寻址方式。
+	// 仅 Texture 字段：采样器的过滤与两个方向的寻址方式。*_declared 记录 .oshader / 标签里是否显式写了，
+	// 精灵纹理只用写了的部分，其余跟随 Render2D 的 push_sampler。
 	filter: Texture_Filter,
 	wrap: Texture_Wrap,
+	filter_declared, wrap_declared: bool,
 }
 
 Schema :: struct {
@@ -188,6 +190,15 @@ field_sampler :: proc(f: Field) -> foster.TextureSampler {
 	case .Mirror: wrap = .MirroredRepeat
 	}
 	return foster.TextureSamplerMake(filter, wrap)
+}
+
+// 精灵纹理字段的采样器：字段显式写了 Filter / Wrap 的部分按字段，没写的部分沿用 inherited（Render2D 的 push_sampler）。
+field_sprite_sampler :: proc(f: Field, inherited: foster.TextureSampler) -> foster.TextureSampler {
+	sampler := inherited
+	declared := field_sampler(f)
+	if f.filter_declared do sampler.Filter = declared.Filter
+	if f.wrap_declared do sampler.WrapX, sampler.WrapY = declared.WrapX, declared.WrapY
+	return sampler
 }
 
 pack :: proc(schema: Schema, values: []Value, buffer: []u8) -> bool {

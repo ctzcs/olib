@@ -50,6 +50,8 @@ properties_passes_and_original_hlsl_locations :: proc(t: ^testing.T) {
 	// 贴图的采样方式随 Schema 发布；未声明的贴图保持线性、钳制。
 	testing.expect(t, doc.schemas[0].fields[2].filter == .Nearest && doc.schemas[0].fields[2].wrap == .Repeat)
 	testing.expect(t, doc.schemas[0].fields[1].filter == .Linear && doc.schemas[0].fields[1].wrap == .Clamp)
+	testing.expect(t, doc.schemas[0].fields[2].filter_declared && doc.schemas[0].fields[2].wrap_declared)
+	testing.expect(t, !doc.schemas[0].fields[1].filter_declared && !doc.schemas[0].fields[1].wrap_declared)
 	testing.expect(t, doc.effect.output == "color")
 	testing.expect(t, doc.effect.passes[0].target.scale == 0.5)
 	testing.expect(t, doc.effect.passes[1].inputs[0].target == "scene")

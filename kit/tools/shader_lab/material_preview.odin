@@ -57,8 +57,6 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 		view := r2d.View{target = drawable, time = e.time, delta_time = e.last_delta, frame = e.frame, pointer = pointer}
 		for pass, i in e.desc.passes[:limit] {
 			if !e.enabled[i] do continue
-			// 精灵帧按该 Pass 帧字段声明的采样方式取样。
-			r2d.push_sampler(&s.preview_sprites, preview_frame_sampler(s, pass))
 			frame.pass, frame.group = string(pass.id), string(pass.params)
 			if !custom || !s.preview_hooks.record(s.preview_hooks.user_data, frame, &material, &s.preview_sprites, nil) {
 				draw_error = r2d.image(&s.preview_sprites, foster.SubtextureFromTexture(texture),
@@ -112,15 +110,6 @@ preview_sprite_texture :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 	return texture
 }
 
-@(private = "file")
-preview_frame_sampler :: proc(s: ^Session, pass: mat.Pass_Desc) -> foster.TextureSampler {
-	index := bank_index(s.bank, string(pass.params))
-	if index < 0 || pass.sprite_texture == "" do return foster.TextureSamplerMake(.Linear, .Clamp)
-	for field in s.parameters[index].live.fields {
-		if field.id == string(pass.sprite_texture) do return mat.field_sampler(field)
-	}
-	return foster.TextureSamplerMake(.Linear, .Clamp)
-}
 
 // 保存整个对象效果的参数；临时借用组和数值，文件保存函数内部复制路径。
 save_material :: proc(s: ^Session, effect: int, path: string) -> bool {

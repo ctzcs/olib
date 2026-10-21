@@ -52,6 +52,7 @@ Shader "Water"
 - `[Step(0.01)]` 设置步长；`[Id("稳定标识")]` 让字段改名后保留值。未指定 Id 时取去掉第一个下划线后的属性名，大小写敏感。
 - 2D 属性可写 `[Filter(Linear|Nearest)]` 与 `[Wrap(Clamp|Repeat|Mirror)]` 指定采样器，默认 Linear、Clamp；
   例如平铺地面 `[Wrap(Repeat)] _Ground ("Ground", 2D) = ""`。写在非贴图属性上报错。
+  `SpriteTexture` 对应的属性只用显式写了的部分，没写的部分跟随 Render2D 的 `push_sampler`（默认 Nearest、Clamp）。
 - `[Instance]` 标记每对象数值字段（最多 16 个）；2D 走顶点 storage buffer，不占参数 uniform，
   不同取值仍可合批。tint 总在顶点颜色里，不需要额外标记。
 - 顶层 `Instanced` 声明生成常驻缓冲变体；当前解析器遇到 `[Instance]` 也会自动启用它。

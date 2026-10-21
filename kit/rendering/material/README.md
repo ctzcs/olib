@@ -155,7 +155,8 @@ ShaderLab 的本机路径适配属于工具内部实现，底层同样使用 Sto
 
 Texture 字段的采样器由 `field_sampler(field)` 按字段的 filter（Linear / Nearest）与 wrap（Clamp / Repeat / Mirror）创建，
 零值即线性、钳制。.oshader 写 `[Filter(Nearest)] [Wrap(Repeat)] _Albedo ("Albedo", 2D) = ""`，
-Odin 参数结构体写 `filter:"nearest" wrap:"repeat"` 标签。Shader Lab 预览与游戏使用同一规则。
+Odin 参数结构体写 `filter:"nearest" wrap:"repeat"` 标签。精灵纹理字段例外：只用显式写了的部分
+（`filter_declared` / `wrap_declared`），没写的部分跟随 Render2D 的 `push_sampler`。Shader Lab 预览与游戏使用同一规则。
 停止绘制后用 `material_library_dispose` 统一释放全部材质、Shader 和贴图；不浅复制资源对象。
 加载和重载在主线程、合法 GPU 生命周期内、提交绘制之外进行。缓存按库统一释放，
 目前不逐项卸载，建议按场景或资源会话划分库。

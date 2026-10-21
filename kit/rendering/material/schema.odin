@@ -129,6 +129,7 @@ field_sampler_read :: proc(f: ^Field, tag: reflect.Struct_Tag) -> string {
 	wrap, has_wrap := reflect.struct_tag_lookup(tag, "wrap")
 	if !has_filter && !has_wrap do return ""
 	if f.kind != .Texture do return fmt.tprintf("%s: filter/wrap apply only to textures", f.name)
+	f.filter_declared, f.wrap_declared = has_filter, has_wrap
 	if has_filter {
 		switch filter {
 		case "linear": f.filter = .Linear

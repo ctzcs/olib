@@ -3,6 +3,7 @@ package material
 
 import "core:mem"
 import "core:testing"
+import foster "olib:foster"
 
 
 @(test)
@@ -45,6 +46,15 @@ reflect_controls_and_validate_defaults :: proc(t: ^testing.T) {
 	sampled, sampled_error := describe("Sampled", "typed.hlsl", "3d", Sampled{})
 	testing.expect(t, sampled_error == "" && sampled.fields[0].filter == .Nearest && sampled.fields[0].wrap == .Repeat)
 	testing.expect(t, sampled.fields[1].filter == .Linear && sampled.fields[1].wrap == .Clamp)
+	testing.expect(t, sampled.fields[0].filter_declared && sampled.fields[0].wrap_declared && !sampled.fields[1].filter_declared)
+
+	// 精灵纹理只用显式写了的部分，其余沿用 Render2D 的 push_sampler。
+	inherited := foster.TextureSamplerMake(.Nearest, .Clamp)
+	testing.expect_value(t, field_sprite_sampler(sampled.fields[1], inherited), inherited)
+	only_wrap := Field{kind = .Texture, wrap = .Repeat, wrap_declared = true}
+	testing.expect_value(t, field_sprite_sampler(only_wrap, inherited), foster.TextureSamplerMake(.Nearest, .Repeat))
+	only_filter := Field{kind = .Texture, filter = .Linear, filter_declared = true}
+	testing.expect_value(t, field_sprite_sampler(only_filter, inherited), foster.TextureSamplerMake(.Linear, .Clamp))
 	Bad_Wrap :: struct { tiles: Texture_Path `wrap:"tile"` }
 	_, wrap_error := describe("Bad", "typed.hlsl", "3d", Bad_Wrap{})
 	testing.expect(t, wrap_error != "")

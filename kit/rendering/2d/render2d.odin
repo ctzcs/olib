@@ -631,7 +631,9 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 			index := 0
 			for field in binding.schema.fields {
 				if field.kind != .Texture do continue
-				if field.id == string(p.sprite_texture) do snapshot.Fragment.Samplers[index] = {texture, r.sampler}
+				if field.id == string(p.sprite_texture) {
+					snapshot.Fragment.Samplers[index] = {texture, mat.field_sprite_sampler(field, r.sampler)}
+				}
 				index += 1
 			}
 		}

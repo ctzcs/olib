@@ -230,7 +230,7 @@ properties :: proc(p: ^Parser) -> []mat.Field {
 	fields: [dynamic]mat.Field
 	textures, instances := 0, 0
 	for p.error == "" && p.token.text != "}" {
-		attributes, sampled := property_attributes(p)
+		attributes := property_attributes(p)
 		name := p.token.text
 		if p.token.quoted || !strings.has_prefix(name, "_") ||
 			!identifier(name[1:]) || strings.has_prefix(name, "_olib_") {
@@ -241,7 +241,8 @@ properties :: proc(p: ^Parser) -> []mat.Field {
 		field := property_declaration(p, name[1:], attributes.id, attributes.step)
 		field.instance = attributes.instance
 		field.filter, field.wrap = attributes.filter, attributes.wrap
-		if sampled && field.kind != .Texture {
+		field.filter_declared, field.wrap_declared = attributes.filter_declared, attributes.wrap_declared
+		if (field.filter_declared || field.wrap_declared) && field.kind != .Texture {
 			fail(p, "Filter and Wrap apply only to 2D properties")
 		}
 		if field.kind == .Texture do textures += 1
@@ -254,9 +255,9 @@ properties :: proc(p: ^Parser) -> []mat.Field {
 }
 
 // 属性前的 [Id("...")] [Step(n)] [Instance] [Filter(Linear|Nearest)] [Wrap(Clamp|Repeat|Mirror)] 特性，
-// 每种至多一次；Instance 没有参数。结果放在 Field 的 id/step/instance/filter/wrap，sampled 表示写了 Filter 或 Wrap。
+// 每种至多一次；Instance 没有参数。结果放在 Field 的 id/step/instance/filter/wrap 与 *_declared。
 @(private)
-property_attributes :: proc(p: ^Parser) -> (result: mat.Field, sampled: bool) {
+property_attributes :: proc(p: ^Parser) -> (result: mat.Field) {
 	result.step = 0.01
 	attributes := make(map[string]bool)
 	for p.token.text == "[" && p.error == "" {
@@ -279,7 +280,7 @@ property_attributes :: proc(p: ^Parser) -> (result: mat.Field, sampled: bool) {
 		case "Step":
 			result.step = number(p)
 		case "Filter":
-			sampled = true
+			result.filter_declared = true
 			switch p.token.text {
 			case "Linear": result.filter = .Linear
 			case "Nearest": result.filter = .Nearest
@@ -287,7 +288,7 @@ property_attributes :: proc(p: ^Parser) -> (result: mat.Field, sampled: bool) {
 			}
 			next(p)
 		case "Wrap":
-			sampled = true
+			result.wrap_declared = true
 			switch p.token.text {
 			case "Clamp": result.wrap = .Clamp
 			case "Repeat": result.wrap = .Repeat

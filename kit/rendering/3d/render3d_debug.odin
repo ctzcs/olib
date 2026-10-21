@@ -3,7 +3,7 @@ package rendering3d
 import dasset "olib:core/dasset"
 import world "olib:kit/world"
 
-// 与独立 Debug_Draw_3D 共用几何实现；submit 后保留，clear 时一起清空。
+// 调试线：submit 后保留，clear 时一起清空。
 // 线宽 / 深度测试可通过 r.debug.thickness / depth_test_enabled 设置。
 line :: proc(r: ^Render3D, from, to: [3]f32, color: [4]f32) {
 	debug_draw_line(&r.debug, from, to, color)

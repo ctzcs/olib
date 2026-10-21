@@ -1,6 +1,6 @@
-// rendering3d:debug_draw —— 立即模式调试线（对位 DragonLib DebugDraw3D）。
+// rendering3d:debug_draw —— Render3D 调试线的实现（对外 API 是 render3d_debug.odin 的 line / aabb / ...）。
 //
-// 提供 Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton 的排队绘制，render 后清空。
+// 排队 Line/Aabb/Sphere/Frustum/Axis/Grid/Skeleton 的线段，Render3D submit 时展开并绘制、clear 时清空。
 // GPU 路径走"朝向相机的细四边形"：Foster 管线固定为三角列表（无线拓扑），
 // 每段线扩成两个三角形仍用 DebugLine3D 着色器（位置+颜色顶点，拓扑无关），
 // 深度测试可选、始终不写深度。厚度是世界单位。
@@ -19,7 +19,7 @@ import world "olib:kit/world"
 //   类型 —— Debug_Draw_3D / 线顶点
 //   几何生成 —— aabb / sphere / frustum / axis / grid / skeleton
 //   顶点展开 —— 线段 -> 朝向相机的四边形
-//   GPU 渲染 —— render
+//   GPU 渲染 —— submit
 //   着色器 —— DebugLine3D 字节码（tools/shaders 编译入库、#load 内嵌）与装载
 
 // ------------------------------------------------------------------------------
@@ -49,14 +49,6 @@ Debug_Draw_3D :: struct {
 
 DEBUG_DRAW_DEFAULT_THICKNESS :: f32(0.02)
 
-debug_draw_init :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bool {
-	d^ = {
-		depth_test_enabled = true,
-		thickness          = DEBUG_DRAW_DEFAULT_THICKNESS,
-	}
-	return debug_draw_prepare(d, device)
-}
-
 @(private)
 debug_draw_prepare :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) -> bool {
 	if d.has_gpu do return true
@@ -71,6 +63,7 @@ debug_draw_prepare :: proc(d: ^Debug_Draw_3D, device: ^foster.GraphicsDevice) ->
 	return true
 }
 
+@(private)
 debug_draw_dispose :: proc(d: ^Debug_Draw_3D) {
 	if d.has_gpu {
 		foster.MaterialDispose(&d.material)
@@ -84,10 +77,12 @@ debug_draw_dispose :: proc(d: ^Debug_Draw_3D) {
 	d^ = {}
 }
 
+@(private)
 debug_draw_line_count :: proc(d: ^Debug_Draw_3D) -> int {
 	return len(d.vertices) / 2
 }
 
+@(private)
 debug_draw_clear :: proc(d: ^Debug_Draw_3D) {
 	builtin.clear(&d.vertices)
 }
@@ -96,16 +91,19 @@ debug_draw_clear :: proc(d: ^Debug_Draw_3D) {
 // 几何生成
 // ------------------------------------------------------------------------------
 
+@(private)
 debug_draw_line :: proc(d: ^Debug_Draw_3D, a, b: [3]f32, color: [4]f32) {
 	append(&d.vertices, Debug_Line_Vertex{position = a, color = color})
 	append(&d.vertices, Debug_Line_Vertex{position = b, color = color})
 }
 
+@(private)
 debug_draw_aabb :: proc(d: ^Debug_Draw_3D, bounds: dasset.Dasset_Bounds, color: [4]f32) {
 	corners := aabb_corners(bounds)
 	debug_draw_box_edges(d, corners, color)
 }
 
+@(private)
 debug_draw_sphere :: proc(d: ^Debug_Draw_3D, center: [3]f32, radius: f32, color: [4]f32, segments := 32) {
 	if radius < 0 || segments < 3 do return
 	tau := f32(math.TAU)
@@ -126,6 +124,7 @@ debug_draw_sphere :: proc(d: ^Debug_Draw_3D, center: [3]f32, radius: f32, color:
 }
 
 // 视锥线框：由 ViewProjection 逆变换回世界空间的 8 角点。
+@(private)
 debug_draw_frustum :: proc(d: ^Debug_Draw_3D, view_projection: world.Matrix4, color: [4]f32) {
 	inverse, ok := world.matrix4_inverse(view_projection)
 	if !ok do return
@@ -145,6 +144,7 @@ debug_draw_frustum :: proc(d: ^Debug_Draw_3D, view_projection: world.Matrix4, co
 }
 
 // 坐标轴：X 红 / Y 绿 / Z 蓝（按 world 变换）。
+@(private)
 debug_draw_axis :: proc(d: ^Debug_Draw_3D, world_matrix: world.Matrix4, length: f32 = 1) {
 	origin_h := world.matrix4_transform_vec4(world_matrix, world.Vec4{0, 0, 0, 1})
 	origin := [3]f32{origin_h[0], origin_h[1], origin_h[2]}
@@ -161,6 +161,7 @@ debug_draw_axis :: proc(d: ^Debug_Draw_3D, world_matrix: world.Matrix4, length: 
 }
 
 // XZ 平面网格。
+@(private)
 debug_draw_grid :: proc(d: ^Debug_Draw_3D, half_lines: int, spacing: f32, color: [4]f32) {
 	if half_lines < 0 || spacing <= 0 do return
 	extent := f32(half_lines) * spacing
@@ -172,6 +173,7 @@ debug_draw_grid :: proc(d: ^Debug_Draw_3D, half_lines: int, spacing: f32, color:
 }
 
 // 骨架线：is_palette=true 时矩阵是 palette（需经 inverse IBM 重建 global）。
+@(private)
 debug_draw_skeleton :: proc(
 	d:        ^Debug_Draw_3D,
 	skeleton: ^dasset.Dasset_Skeleton,
@@ -255,17 +257,7 @@ debug_draw_expand :: proc(d: ^Debug_Draw_3D, camera_position: [3]f32,
 // GPU 渲染
 // ------------------------------------------------------------------------------
 
-// 上传展开后的四边形并发射（渲染后清空队列）。无 GPU 初始化时只清空。
-debug_draw_render :: proc(d: ^Debug_Draw_3D, target: foster.DrawableTarget, camera: ^world.Camera3D) {
-	defer debug_draw_clear(d)
-	if !d.has_gpu || len(d.vertices) == 0 do return
-
-	world.camera3d_set_viewport(camera, target.WidthInPixels, target.HeightInPixels)
-	debug_draw_submit(d, {target = target, view_matrix = world.camera3d_view(camera),
-		view_projection = world.camera3d_view_projection(camera)})
-}
-
-// 保留记录的绘制实现；旧 debug_draw_render 的 defer 负责其原有清空策略。
+// 绘制已排队的线段，不清空（Render3D 保留到 clear）。
 @(private)
 debug_draw_submit :: proc(d: ^Debug_Draw_3D, view: View) {
 	if !d.has_gpu || len(d.vertices) == 0 do return

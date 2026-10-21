@@ -52,8 +52,8 @@ for item in queue.items { /* 自己的 DrawCommand */ }
 使用可复用工作区的稳定 O(n log n) 归并排序，Render3D 内部也用这一实现。
 
 LOD 独立使用 `Model_Lod`、`model_lod_init / select`，或 `Lod_Selector`、`lod_screen_height`；
-Render3D 不自动选 LOD。手写渲染器仍可用 `Debug_Draw_3D`、`debug_draw_line / aabb / sphere / frustum / axis / grid / skeleton`。
-独立 `debug_draw_render` 沿用画完清空的语义，Render3D 共用几何实现但提交后保留。
+Render3D 不自动选 LOD。调试线只有 Render3D 的 `line / aabb / sphere / frustum / axis / grid / skeleton` 一套；
+手写渲染器另建一个只记录调试线的 Render3D，画完 submit 再 clear。
 
 ## 模型材质 Shader 布局
 

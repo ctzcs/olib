@@ -1,22 +1,25 @@
 package core_editor
 
-import "core:fmt"
-
 import foster "olib:foster"
-import r2d "olib:kit/rendering/2d"
-import mat "olib:kit/rendering/material"
-import ui "olib:kit/ui"
-import clay "olib:thirdparty/clay-odin"
+import imgui "olib:thirdparty/odin-imgui"
+import imgui_foster "olib:thirdparty/odin-imgui/imgui_impl_ofoster"
 
 // 分区：编辑会话 / 输入归属 / 运行时编辑命令 / 面板绘制。
 // 编辑当前试玩实例，不写场景文件、不维护文档撤销历史。
-// DLL 拥有会话；State 与待处理命令进入快照，UI 与瞬时输入重建。
-PANEL_WIDTH :: f32(280)
-TITLE :: "LIVE EDITOR"
-Edit_Command :: enum { Move_Left, Move_Right, Score_Down, Score_Up, Toggle_Pause }
+// DLL 拥有会话和本 DLL 的 ImGui 上下文；State（含 Dock 布局）与待处理命令进入快照，
+// ImGui 上下文、GPU 对象与瞬时输入重建。
+TITLE :: "Live Editor"
+DOCK_ID :: "editor-dock"
+// 首次打开时面板占窗口宽度的比例；之后以拖动结果为准，随快照保留。
+PANEL_RATIO :: f32(0.3)
+// ImGuiDockNodeFlags_DockSpace 是 imgui_internal.h 的私有位，绑定里没有生成。
+DOCK_NODE_DOCKSPACE :: transmute(imgui.DockNodeFlags)i32(1 << 10)
+Edit_Kind :: enum { Set_Position, Score_Down, Score_Up, Toggle_Pause }
+Edit_Command :: struct { kind: Edit_Kind, value: f32 }
 Preview :: struct { x: f32, score: i64, paused: bool }
 State :: struct {
 	open: bool,
+	layout: string, // ImGui ini 文本：Dock 分割与窗口位置，Session 拥有
 }
 Pointer_Owner :: enum {
 	None,
@@ -27,60 +30,57 @@ Pointer_Owner :: enum {
 Session :: struct {
 	state: State,
 	pending: [dynamic]Edit_Command,
-	ctx: ui.UI_Context,
-	materials: mat.Material_Library,
-	renderer: r2d.Render2D, // 借用 materials；Session 初始化后不得搬动
-	theme: ui.UI_Theme,
+	game_view: foster.Rect, // 上一帧中央 Dock 节点的最终像素区域；宽度为 0 表示整窗
 	owner: Pointer_Owner,
 	previous_down, ready: bool,
+	gui: bool, // 本 DLL 的 ImGui 上下文与后端已创建
 }
 Input :: struct {
-	game_mouse, editor_mouse: foster.Vec2,
-	game_down, editor_down, block_keys: bool,
+	game_mouse: foster.Vec2,
+	game_down, block_keys: bool,
 }
 
-init :: proc(e: ^Session, device: ^foster.GraphicsDevice, font: ^foster.MsdfFont,
-	texture: foster.Texture) -> bool {
-	if !ui.ui_init(&e.ctx, 280, 720) do return false
-	e.materials = {device = device}
-	if reason := r2d.init(&e.renderer, &e.materials); reason != "" {
-		fmt.eprintln(reason)
-		return false
+// 在 load 中调用：每个 DLL 副本创建自己的上下文，并恢复快照里的布局。
+init :: proc(e: ^Session, app: ^foster.App, scale: f32) -> bool {
+	// 不开键盘导航：方向键/空格留给游戏，避免同一按键被面板和游戏同时处理。
+	if !imgui_foster.Init(app, {.DockingEnable}) do return false
+	e.gui = true
+	io := imgui.GetIO()
+	io.IniFilename = nil // 布局只随快照保留，不在工作目录写 imgui.ini
+	if scale != 1 {
+		style := imgui.GetStyle()
+		imgui.Style_ScaleAllSizes(style, scale)
+		style.FontScaleMain = scale
 	}
-	e.theme = ui.UI_THEME_DARK
-	e.theme.body_font_id = u16(ui.ui_register_font(&e.ctx, font, texture, .MSDF))
-	e.theme.body_font_size = 16
-	e.theme.heading_font_size = 22
+	if e.state.layout != "" {
+		imgui.LoadIniSettingsFromMemory(cstring(raw_data(e.state.layout)), uint(len(e.state.layout)))
+	}
 	return true
 }
 
 dispose :: proc(e: ^Session) {
-	ui.ui_dispose(&e.ctx)
-	r2d.dispose(&e.renderer)
-	mat.material_library_dispose(&e.materials)
+	if e.gui do imgui_foster.Shutdown()
+	e.gui = false
+	delete(e.state.layout)
 	delete(e.pending)
 }
 
-// 面板占独立的最终像素视口，游戏不会绘制或接收此区域的输入。
-viewports :: proc(open: bool, width, height, scale: f32) -> (game, panel: foster.Rect) {
-	panel_width := open ? min(PANEL_WIDTH*scale, width*0.45) : 0
-	game = {0, 0, max(width-panel_width, 1), height}
-	panel = {game.Width, 0, panel_width, height}
-	return
+// 帧外调用；结果借用 ImGui 内存，只在下一次调用 ImGui 前有效。
+layout_text :: proc(e: ^Session) -> string {
+	if !e.gui do return e.state.layout
+	return string(imgui.SaveIniSettingsToMemory())
 }
 
 toggle :: proc(e: ^Session) {
 	e.state.open = !e.state.open
-	// 隐藏/重新打开不能把尚未松开的按键转交给另一个视口。
+	// 隐藏/重新打开不能把尚未松开的按键转交给另一边。
 	e.owner = .Discard
 	e.ready = false
 }
 
-route :: proc(e: ^Session, panel: foster.Rect, mouse: foster.Vec2, down, focused: bool) -> (input: Input) {
+// over_editor：面板打开且 ImGui 要鼠标（悬停在面板上，或正拖动面板里的控件）。
+route :: proc(e: ^Session, mouse: foster.Vec2, down, focused, over_editor: bool) -> (input: Input) {
 	input.game_mouse = {-10000, -10000}
-	input.editor_mouse = {-10000, -10000}
-	inside := e.state.open && mouse.x >= panel.X && mouse.x < panel.X+panel.Width &&
-		mouse.y >= panel.Y && mouse.y < panel.Y+panel.Height
 	if !focused {
 		e.owner = .Discard
 		e.ready = false
@@ -92,50 +92,81 @@ route :: proc(e: ^Session, panel: foster.Rect, mouse: foster.Vec2, down, focused
 		if !e.previous_down do e.owner = .None
 	}
 	if down && !e.previous_down {
-		e.owner = !e.ready ? .Discard : inside ? .Editor : .Game
+		e.owner = !e.ready ? .Discard : over_editor ? .Editor : .Game
 	}
 	e.previous_down = down
-	input.block_keys = inside || e.owner == .Editor || e.owner == .Discard
-	// 归属保持到松开帧；跨视口拖出仍会收到松开，但不会激活另一边。
-	if e.owner == .Game || (!down && e.owner == .None && !inside) {
+	input.block_keys = over_editor || e.owner == .Editor || e.owner == .Discard
+	// 归属保持到松开帧；游戏的拖动经过面板仍会收到松开，但不会激活面板。
+	if e.owner == .Game || (!down && e.owner == .None && !over_editor) {
 		input.game_mouse = mouse
 		input.game_down = down
-	}
-	if e.state.open && (e.owner == .Editor || (!down && e.owner == .None && inside)) {
-		input.editor_mouse = mouse
-		input.editor_down = down
 	}
 	return
 }
 
-draw :: proc(e: ^Session, w: ^Preview, target: foster.DrawableTarget, panel: foster.Rect,
-	input: Input, scale, dt: f32) {
-	if !e.state.open do return
-	ui.ui_set_viewport(&e.ctx, panel, scale)
-	ui.ui_set_pointer(&e.ctx, input.editor_mouse.x, input.editor_mouse.y, input.editor_down)
-	ui.ui_begin(&e.ctx, dt)
-	root := ui.ui_column_decl(12)
-	root.layout.padding = clay.PaddingAll(16)
-	root.layout.sizing.height = clay.SizingGrow({})
-	root.backgroundColor = ui.ui_clay_color({27, 36, 49, 255})
-	if clay.UI()(root) {
-		ui.ui_heading(&e.ctx, &e.theme, TITLE)
-		ui.ui_label_dim(&e.ctx, &e.theme, "F1: hide / show")
-		ui.ui_label(&e.ctx, &e.theme, fmt.tprintf("Position: %.1f", w.x))
-		if clay.UI()(ui.ui_row_decl(8)) {
-			if ui.ui_button(&e.ctx, &e.theme, "left", "-25") do append(&e.pending, .Move_Left)
-			if ui.ui_button(&e.ctx, &e.theme, "right", "+25") do append(&e.pending, .Move_Right)
-		}
-		ui.ui_label(&e.ctx, &e.theme, fmt.tprintf("Score: %d", w.score))
-		if clay.UI()(ui.ui_row_decl(8)) {
-			if ui.ui_button(&e.ctx, &e.theme, "less", "-1") do append(&e.pending, .Score_Down)
-			if ui.ui_button(&e.ctx, &e.theme, "more", "+1") do append(&e.pending, .Score_Up)
-		}
-		if ui.ui_button(&e.ctx, &e.theme, "pause", w.paused ? "Resume" : "Pause") {
-			append(&e.pending, .Toggle_Pause)
-		}
-		ui.ui_label_dim(&e.ctx, &e.theme, "Changes affect this run.")
+// 每次 Update 调用：按上一帧 ImGui 的悬停结果分配输入，再把原始输入交给 ImGui。
+update_input :: proc(e: ^Session, app: ^foster.App, mouse: foster.Vec2, down, focused: bool, dt: f32) -> Input {
+	if !e.gui || !e.state.open do return route(e, mouse, down, focused, false)
+	io := imgui.GetIO()
+	input := route(e, mouse, down, focused, io.WantCaptureMouse)
+	input.block_keys ||= io.WantTextInput
+	// 重载、F1 或离焦时按住的鼠标先松开，ImGui 不能把它当作新的点击。
+	if e.owner == .Discard {
+		io.ConfigFlags += {.NoMouse}
+	} else {
+		io.ConfigFlags -= {.NoMouse}
 	}
-	ui.ui_draw(&e.ctx, &e.renderer)
-	r2d.submit(&e.renderer, {target = target})
+	imgui_foster.NewFrame(app, dt)
+	return input
+}
+
+// 每次 Render 在游戏之后调用；中央节点的区域留给下一帧的游戏绘制和输入。
+draw :: proc(e: ^Session, w: ^Preview, app: ^foster.App) {
+	if !e.gui || !e.state.open {
+		e.game_view = {}
+		return
+	}
+	if !imgui_foster.BeginRender(app) do return
+	dock := imgui.GetID(DOCK_ID)
+	if imgui.DockBuilderGetNode(dock) == nil do default_layout(dock, imgui.GetMainViewport().WorkSize)
+	imgui.DockSpaceOverViewport(dock, nil, {.PassthruCentralNode, .NoDockingOverCentralNode})
+	if imgui.Begin(TITLE) do panel(e, w)
+	imgui.End()
+	if central := imgui.DockBuilderGetCentralNode(dock); central != nil {
+		scale := imgui.GetIO().DisplayFramebufferScale
+		e.game_view = {central.Pos.x*scale.x, central.Pos.y*scale.y,
+			central.Size.x*scale.x, central.Size.y*scale.y}
+	}
+	imgui_foster.EndRender(app)
+}
+
+// 没有快照布局时：面板停靠右侧，中央节点留给游戏。
+default_layout :: proc(dock: imgui.ID, size: imgui.Vec2) {
+	imgui.DockBuilderAddNode(dock, DOCK_NODE_DOCKSPACE)
+	imgui.DockBuilderSetNodeSize(dock, size)
+	panel, center: imgui.ID
+	imgui.DockBuilderSplitNode(dock, .Right, PANEL_RATIO, &panel, &center)
+	imgui.DockBuilderDockWindow(TITLE, panel)
+	imgui.DockBuilderFinish(dock)
+}
+
+// 控件只追加命令，由下一次 Update 经 core 规则校验后生效。
+panel :: proc(e: ^Session, w: ^Preview) {
+	imgui.TextDisabled("F1: hide / show")
+	if imgui.CollapsingHeader("Game", {.DefaultOpen}) {
+		x := w.x
+		if imgui.SliderFloat("Position", &x, 20, 580, "%.0f", imgui.SliderFlags_AlwaysClamp) {
+			append(&e.pending, Edit_Command{kind = .Set_Position, value = x})
+		}
+		imgui.Text("Score: %lld", w.score)
+		imgui.SameLine()
+		if imgui.Button("-1") do append(&e.pending, Edit_Command{kind = .Score_Down})
+		imgui.SameLine()
+		if imgui.Button("+1") do append(&e.pending, Edit_Command{kind = .Score_Up})
+		// ### 后是固定 ID，文字切换时控件身份不变。
+		if imgui.Button(w.paused ? "Resume###pause" : "Pause###pause") {
+			append(&e.pending, Edit_Command{kind = .Toggle_Pause})
+		}
+	}
+	imgui.TextDisabled("Changes affect this run.")
 }

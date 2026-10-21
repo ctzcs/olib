@@ -28,8 +28,8 @@ src/
 └─ game/              Windows/Web 薄发布入口（package main）
 ```
 
-- `play.bat` 启动开发版；F1 收起/打开面板，可边玩边改位置、分数及暂停；F3 打开悬浮性能面板。
-- 修改 core 的游戏代码或 core_editor 的工具 UI 后保存，自动编译一个 DLL，保留游戏进度、面板开关及未处理命令。UI/GPU 对象重建，按住输入先等待松开，避免误触。
+- `play.bat` 启动开发版；编辑面板用 Dear ImGui，默认停靠在右侧，游戏画在中央 Dock 区域；F1 收起/打开面板，可边玩边改位置、分数及暂停；F3 打开悬浮性能面板。玩家 UI 仍用 kit/ui。
+- 修改 core 的游戏代码或 core_editor 的工具 UI 后保存，自动编译一个 DLL，保留游戏进度、面板开关、Dock 布局及未处理命令。UI、ImGui 上下文和 GPU 对象重建，按住输入先等待松开，避免误触。
 - `publish.bat` 发布 Windows，`publish_web.bat` 发布 Web；两者编译 src/game、复用 core，均排除 editor、core_editor 和加载器。Web 无热重载，刷新新开一局。
 - 开发入口自带非阻塞失败摘要：说明旧版仍运行或首次未加载，完整错误写入 build/hotreload-last-error.txt；只有实际加载成功才清除提示。编译中保留旧提示，F5 可重试。
 - 默认通过 kit/storage 初始化跨平台存储，共享资源函数放 core/services.odin，资源与容器由入口持有，业务直接用 Foster API 读写；存档格式和保存时机由游戏定义。

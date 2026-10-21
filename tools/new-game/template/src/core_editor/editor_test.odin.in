@@ -6,18 +6,27 @@ import "core:testing"
 @(test)
 pointer_ownership_survives_leaving_panel_and_cancels_on_hide :: proc(t: ^testing.T) {
 	e := Session{state = {open = true}}
-	_, panel := viewports(true, 960, 720, 1)
-	_ = route(&e, panel, {800, 100}, false, true)
-	press := route(&e, panel, {800, 100}, true, true)
-	testing.expect(t, press.editor_down && !press.game_down && press.block_keys)
-	drag := route(&e, panel, {100, 100}, true, true)
-	testing.expect(t, drag.editor_down && !drag.game_down && drag.block_keys)
+	_ = route(&e, {800, 100}, false, true, true)
+	press := route(&e, {800, 100}, true, true, true)
+	testing.expect(t, e.owner == .Editor && !press.game_down && press.block_keys)
+	// 拖出面板后 ImGui 仍持有这次按下，游戏不能接收。
+	drag := route(&e, {100, 100}, true, true, false)
+	testing.expect(t, !drag.game_down && drag.block_keys)
 	toggle(&e)
-	held := route(&e, panel, {100, 100}, true, true)
-	testing.expect(t, !held.editor_down && !held.game_down)
-	_ = route(&e, panel, {100, 100}, false, true)
-	routed := route(&e, panel, {100, 100}, true, true)
-	testing.expect(t, routed.game_down && !routed.editor_down)
-	lost := route(&e, panel, {100, 100}, true, false)
-	testing.expect(t, lost.block_keys && !lost.game_down && !lost.editor_down)
+	held := route(&e, {100, 100}, true, true, false)
+	testing.expect(t, e.owner == .Discard && !held.game_down)
+	_ = route(&e, {100, 100}, false, true, false)
+	routed := route(&e, {100, 100}, true, true, false)
+	testing.expect(t, e.owner == .Game && routed.game_down && !routed.block_keys)
+	// 游戏的拖动经过面板仍归游戏，直到松开。
+	crossing := route(&e, {800, 100}, true, true, true)
+	testing.expect(t, e.owner == .Game && crossing.game_down)
+	lost := route(&e, {100, 100}, true, false, false)
+	testing.expect(t, lost.block_keys && !lost.game_down)
+}
+
+@(test)
+headless_session_keeps_layout_text :: proc(t: ^testing.T) {
+	e := Session{state = {layout = "[Docking][Data]\n"}}
+	testing.expect_value(t, layout_text(&e), "[Docking][Data]\n")
 }

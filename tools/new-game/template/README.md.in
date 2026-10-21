@@ -55,15 +55,15 @@ A/D 或方向键移动，Enter/按钮加分，Space/按钮暂停，New game 重�
 
 规则/UI 是普通 Odin 函数，接入代码集中在 src/editor/main.odin 和 core_editor/module.odin。World 及未消费操作队列自动按 JSON 字段编码，动态数组独立恢复。新增字段要在恢复路径设置缺省值并验证；不兼容格式升级 STATE_VERSION 并实现迁移，否则保留旧模块、拒绝切换。不能静默清空游戏。宿主服务协议改变则升级 core.SERVICES_VERSION 并重启。
 
-默认保留位置、分数、历史、时间、暂停、面板开关和游戏/编辑器的待处理按钮操作。UI/Clay/GPU 对象重建，瞬时交互重置；以后新增相机、背包或设置状态时放入 core.State 的自有数据，并补快照测试。热重载不是磁盘存档，也不隔离游戏崩溃。
+默认保留位置、分数、历史、时间、暂停、面板开关、面板 Dock 布局和游戏/编辑器的待处理操作。UI/Clay/ImGui 上下文/GPU 对象重建，瞬时交互重置；以后新增相机、背包或设置状态时放入 core.State 的自有数据，并补快照测试。热重载不是磁盘存档，也不隔离游戏崩溃。
 
 监听范围在 src/editor/main.odin 的 Watch.roots：core_editor、core（递归含子包）。新增外部内容或 #load 资源时显式加入；editor 入口、core/services.odin 的服务协议/资源函数、core/args_native.odin、宿主字体、olib 和编译器改动需重启。服务 ABI 变化升级 core.SERVICES_VERSION，游戏快照版本为 core.STATE_VERSION，编辑器快照版本为 core_editor.EDITOR_STATE_VERSION；任一状态格式不兼容时拒绝切换，不能静默重开。热重载延迟包含检测和编译耗时。
 
 ## 边玩边编辑
 
-开发版默认显示右侧 LIVE EDITOR，F1 可收起；游戏在左侧继续运行。面板可按步长修改位置、增减分数以及暂停/继续，操作在下一次 Update 经 core 的规则函数校验后生效。鼠标交互归属保持到松开，悬停编辑器时不触发游戏键盘快捷键；离焦或隐藏会取消瞬时输入；热重载重建游戏与编辑器 UI，取消瞬时捕获，按住的鼠标必须先松开才会接收新操作。
+开发版默认把 Live Editor 停靠在右侧，F1 可收起；游戏绘制在中央 Dock 区域，拖动分隔条或把面板停靠到其他边时游戏区域随之变化。面板用 Dear ImGui（`olib:thirdparty/odin-imgui` 及其 Foster 后端）实现：滑条修改位置、按钮增减分数及暂停/继续，操作在下一次 Update 经 core 的规则函数校验后生效。玩家 UI 仍用 kit/ui；编辑器和开发工具用 ImGui 现成的折叠、滑条、输入框、表格和 Docking。鼠标交互归属按下时由 ImGui 是否要鼠标决定并保持到松开，悬停面板或在面板里输入文字时不触发游戏键盘快捷键（未开 ImGui 键盘导航）；离焦或隐藏会取消瞬时输入；热重载重建游戏与编辑器 UI，取消瞬时捕获，按住的鼠标必须先松开才会接收新操作。
 
-core_editor 的 Session 持有编辑器 UI、待处理命令和面板开关，与游戏实例都归 DLL 所有。module.odin 的组合快照保存 core 编码的游戏数据以及编辑会话持久数据；UI、GPU 资源和指针不进入快照，恢复时独立分配并重建。游戏和编辑器的待处理命令各在下一次 Update 消费一次；候选 load 不消费旧命令、不改旧局面或入口资源。编译、恢复或版本校验失败时保留旧游戏和编辑器。
+core_editor 的 Session 持有本 DLL 的 ImGui 上下文、待处理命令和面板开关，与游戏实例都归 DLL 所有；每次 load 创建上下文，unload 前 Shutdown，不与宿主或旧 DLL 共享。module.odin 的组合快照保存 core 编码的游戏数据以及编辑会话持久数据，布局以 ImGui ini 文本随快照保留（不写 imgui.ini，重启进程回到默认布局）；ImGui 上下文、GPU 资源和指针不进入快照，恢复时独立分配并重建。游戏和编辑器的待处理命令各在下一次 Update 消费一次；候选 load 不消费旧命令、不改旧局面或入口资源。编译、恢复或版本校验失败时保留旧游戏和编辑器。
 
 这是当前运行局面的编辑面板，不是场景文件编辑器：没有磁盘保存、关卡文档或撤销历史。新增这类功能时按编辑工具约定补文档与事务。普通编辑器 UI 放在 src/core_editor，业务修改规则放在 core/rules.odin，不把编辑器引入 core 或发布入口。
 
@@ -107,6 +107,6 @@ core/services.odin 通过 `olib:kit/storage` 初始化根，editor/game 入口�
 
 ## 所有权
 
-Editor App 持有窗口、设备、字体、存储容器和监听器；DLL 借用这些资源，持有游戏实例、编辑会话、游戏/编辑器 UI 和各自的 r2d.Render2D（含材质库）。切换在帧更新开头等待 GPU idle 后发生；失败候选也完整释放。新增任务/回调时，在卸载前注销、停止并 join，外部注册仅在成功 activate 后进行。
+Editor App 持有窗口、设备、字体、存储容器和监听器，失败提示和 F3 性能面板用 kit/ui；DLL 借用这些资源，持有游戏实例、游戏 UI 及其 r2d.Render2D（含材质库）、编辑会话和 ImGui 上下文。切换在帧更新开头等待 GPU idle 后发生；失败候选也完整释放。新增任务/回调时，在卸载前注销、停止并 join，外部注册仅在成功 activate 后进行。
 
 模板生成后源码归本项目维护，不自动覆盖升级。olib 是唯一库依赖，不依赖 olib_sample 或模板生成器。字体来源、字符集与许可见 assets/fonts。

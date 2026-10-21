@@ -5,7 +5,8 @@
 - 日常业务入口为 `src/core/world.odin`、`src/core/rules.odin`、`src/core/ui.odin`。热重载底座已接入，不再从示例复制宿主。
 - 桌面开发默认保留状态热重载。改状态时同步检查 `src/core/core.odin` 的快照、恢复默认值及版本；普通 UI/玩法函数不用 export。
 - `src/editor` 是薄常驻开发入口，`src/core_editor` 是可热替换的编辑器实现与 DLL 接入；core_editor 连同 core 编成一个 DLL。core/game 不导入 core_editor；所有包不导入入口；editor 不静态导入 core_editor，不调用静态游戏实例。不另建 host、editor/play、src/tools/editor 或根目录宿主。
-- 游戏逻辑、游戏 UI 和编辑器工具 UI 一起热替换。DLL 拥有游戏/编辑会话，组合快照保存进度、面板开关和未处理命令；UI 和瞬时输入重建，按住输入等松开再接收。候选不改旧状态或持久存储。监听 core 和 core_editor（含子包）；editor 入口、core/services.odin、core/args_native.odin、olib、Odin 改动后重启。游戏和编辑器状态格式都维护版本，不静默重开；服务 ABI 变化升级 core.SERVICES_VERSION。
+- 玩家 UI 用 kit/ui；编辑器、开发面板和调试工具用 odin-imgui（Foster 后端），不为编辑器在 kit/ui 上手写折叠、滑条、输入框或 Dock。
+- 游戏逻辑、游戏 UI 和编辑器工具 UI 一起热替换。DLL 拥有游戏/编辑会话和自己的 ImGui 上下文，组合快照保存进度、面板开关、Dock 布局和未处理命令；UI 和瞬时输入重建，按住输入等松开再接收。候选不改旧状态或持久存储。监听 core 和 core_editor（含子包）；editor 入口、core/services.odin、core/args_native.odin、olib、Odin 改动后重启。游戏和编辑器状态格式都维护版本，不静默重开；服务 ABI 变化升级 core.SERVICES_VERSION。
 - Windows/Web 发布共用 src/game/main.odin 和 core；Web 不接热重载、editor 或 core_editor。桌面依赖放 #+build !js 文件，Web 的 main 返回不释放仍供帧循环使用的状态。运行 publish_web.bat 发布、publish_web.bat serve 本地预览；WASM 不得有 SDL 函数导入。
 - 编译/加载失败反馈留在 src/editor/main.odin；不能移进 DLL。完整日志保存在 build/hotreload-last-error.txt，提示只能在 watch_apply 实际成功后清除，不能把 Ready 当成功。
 - 默认使用 kit/storage 选择跨平台资源根与用户根；共享协议与资源函数位于 core/services.odin，由 editor/game 入口持有 Services.assets/user_storage，业务直接使用 Foster 存储 API。存储 ID 稳定，保存时机和格式由 core 负责，不在热重载 load/unload 中自动写盘。

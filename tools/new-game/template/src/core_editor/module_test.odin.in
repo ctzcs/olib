@@ -1,6 +1,7 @@
 #+test
 package core_editor
 
+import "core:strings"
 import "core:testing"
 import reload "olib:core/hotreload"
 import "game:core"
@@ -14,11 +15,13 @@ game_and_editor_snapshot_own_state_and_commands :: proc(t: ^testing.T) {
 	defer module_unload(&first)
 	a := cast(^Module_Instance)first.instance
 	a.tools.state.open = false
+	a.tools.state.layout = strings.clone("[Docking][Data]\n")
 	a.tools.owner = .Editor
 	a.tools.ready = true
 	a.tools.previous_down = true
-	append(&a.tools.pending, .Move_Right, .Score_Up, .Toggle_Pause)
-	append(&a.game.state.pending, {add_point = true})
+	append(&a.tools.pending, Edit_Command{kind = .Set_Position, value = 125},
+		Edit_Command{kind = .Score_Up}, Edit_Command{kind = .Toggle_Pause})
+	append(&a.game.state.pending, core.Commands{add_point = true})
 	core.apply(&a.game.state.world, {add_point = true})
 	bytes := make([]u8, module_snapshot_size(&first))
 	defer delete(bytes)
@@ -29,6 +32,8 @@ game_and_editor_snapshot_own_state_and_commands :: proc(t: ^testing.T) {
 	b := cast(^Module_Instance)second.instance
 	testing.expect(t, !b.tools.state.open && !b.tools.ready && !b.tools.previous_down)
 	testing.expect_value(t, b.tools.owner, .Discard)
+	testing.expect_value(t, b.tools.state.layout, a.tools.state.layout)
+	testing.expect(t, raw_data(b.tools.state.layout) != raw_data(a.tools.state.layout))
 	testing.expect(t, raw_data(b.tools.pending) != raw_data(a.tools.pending))
 	testing.expect(t, raw_data(b.game.state.pending) != raw_data(a.game.state.pending))
 	testing.expect(t, raw_data(b.game.state.world.history) != raw_data(a.game.state.world.history))
@@ -44,20 +49,27 @@ game_and_editor_snapshot_own_state_and_commands :: proc(t: ^testing.T) {
 		testing.expect(t, !module_load(&rejected, {data = transmute([]u8)string(`{"game":[123]}`), version = version}))
 		module_unload(&rejected)
 	}
-	testing.expect(t, len(a.tools.pending) == 3 && !services.input.down)
+	// 越界的编辑命令被拒绝，候选连同已解码的布局一起释放。
+	append(&a.tools.pending, Edit_Command{kind = .Set_Position, value = 1e9})
+	invalid := make([]u8, module_snapshot_size(&first))
+	defer delete(invalid)
+	testing.expect(t, module_save(&first, invalid))
+	rejected := reload.Call{host_context = &ctx, services = &services}
+	testing.expect(t, !module_load(&rejected, {data = invalid, version = MODULE_STATE_VERSION}))
+	module_unload(&rejected)
+	testing.expect(t, len(a.tools.pending) == 4 && !services.input.down)
 }
 
 @(test)
 reload_discards_held_pointer_until_release :: proc(t: ^testing.T) {
 	e := Session{state = {open = true}, owner = .Discard}
-	_, panel := viewports(true, 960, 720, 1)
-	input := route(&e, panel, {900, 50}, true, true)
-	testing.expect(t, !input.editor_down && !input.game_down && input.block_keys)
-	input = route(&e, panel, {100, 50}, true, true)
-	testing.expect(t, !input.editor_down && !input.game_down)
-	_ = route(&e, panel, {100, 50}, false, true)
-	input = route(&e, panel, {100, 50}, true, true)
-	testing.expect(t, input.game_down && !input.editor_down)
-	input = route(&e, panel, {900, 50}, false, true)
-	testing.expect(t, !input.editor_down && !input.game_down)
+	input := route(&e, {900, 50}, true, true, true)
+	testing.expect(t, !input.game_down && input.block_keys)
+	input = route(&e, {100, 50}, true, true, false)
+	testing.expect(t, !input.game_down)
+	_ = route(&e, {100, 50}, false, true, false)
+	input = route(&e, {100, 50}, true, true, false)
+	testing.expect(t, input.game_down && e.owner == .Game)
+	input = route(&e, {900, 50}, false, true, true)
+	testing.expect(t, !input.game_down)
 }

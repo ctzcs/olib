@@ -1,6 +1,7 @@
 #+test
 package shader
 
+import "core:fmt"
 import "core:strings"
 import "core:testing"
 
@@ -125,4 +126,16 @@ shader_sort_detects_current_frame_cycle :: proc(t: ^testing.T) {
 	order, reason = shader_sort(shader)
 	defer delete(order)
 	testing.expect(t, reason == "" && len(order) == 2 && order[0] == 1 && order[1] == 0)
+}
+
+// 每个参数组的统一参数不超过 MAX_UNIFORM_BYTES：每个数值字段占 16 字节，1024 个正好到上限。
+@(test)
+shader_validate_limits_uniform_bytes :: proc(t: ^testing.T) {
+	limit := MAX_UNIFORM_BYTES / PARAM_SLOT_BYTES
+	fields := make([]Field, limit + 1, context.temp_allocator)
+	for &f, i in fields do f = {id = fmt.tprintf("f%d", i), name = fmt.tprintf("f%d", i), kind = .Scalar, maximum = 1}
+	schemas := []Schema{{name = "Body", preview = "2d", fields = fields[:limit]}}
+	testing.expect_value(t, shader_validate(single_pass_shader(base_pass()), schemas), "")
+	schemas[0].fields = fields
+	testing.expect(t, strings.contains(shader_validate(single_pass_shader(base_pass()), schemas), "parameters exceed 16384 bytes"))
 }

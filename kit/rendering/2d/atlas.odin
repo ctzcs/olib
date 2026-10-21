@@ -2,12 +2,10 @@
 //
 // 与来源格式无关：矩形表由各来源（网格/Kenney XML/Aseprite 打包/自定义 proc）产出，
 // 经 atlas_from_rects（单页）或 atlas_from_pages（多页）注入。一页放不下时打包器开新页；
-// 同一页的精灵可以合批，换页像换图集一样断批。纹理上传与裁剪按需进行——atlas_upload
-// 传 device 后 subtexture/crop 才可用（CPU 模式可先做矩形查询）。
+// 同一页的精灵可以合批，换页像换图集一样断批。atlas_upload 传 device 后 subtexture 才可用
+// （CPU 模式可先做矩形查询）；上传后释放 CPU 像素。
 package rendering2d
 
-import "core:fmt"
-import "core:mem"
 import "core:strings"
 
 import foster "olib:foster"
@@ -16,7 +14,7 @@ import foster "olib:foster"
 // 类型
 // ------------------------------------------------------------------------------
 
-// 图集的一页：源像素与上传后的纹理。源像素在 atlas_crop 之外用不到，上传后可以释放。
+// 图集的一页：源像素与上传后的纹理。源像素只在上传前存在，atlas_upload 成功后释放。
 Atlas_Page :: struct {
 	image:   foster.Image,
 	texture: foster.Texture,
@@ -38,11 +36,6 @@ Sprite_Atlas :: struct {
 	regions: map[string]Atlas_Region,
 
 	has_upload: bool,
-
-	// 裁剪缓存：把某页的某个矩形裁成独立小纹理（九宫格角/边/中块用，
-	// 绕开 UV 方向坑走整图绘制路径）。
-	crop_cache:  map[string]foster.Texture,
-	owned_crops: [dynamic]foster.Texture,
 }
 
 // ------------------------------------------------------------------------------
@@ -77,7 +70,8 @@ atlas_from_pages :: proc(atlas: ^Sprite_Atlas, images: []foster.Image, regions: 
 	}
 }
 
-// 上传全部页（幂等）；任何一页失败则释放已上传的页并返回 false。没有 device 的测试/工具流程可以永不上传。
+// 上传全部页（幂等）；全部成功后释放各页 CPU 像素。任何一页失败则释放已上传的页并返回 false，像素保留。
+// 没有 device 的测试/工具流程可以永不上传。
 atlas_upload :: proc(atlas: ^Sprite_Atlas, device: ^foster.GraphicsDevice) -> bool {
 	if atlas.has_upload do return true
 	if device == nil || len(atlas.pages) == 0 do return false
@@ -88,17 +82,16 @@ atlas_upload :: proc(atlas: ^Sprite_Atlas, device: ^foster.GraphicsDevice) -> bo
 			return false
 		}
 	}
+	for &page in atlas.pages {
+		delete(page.image.Pixels)
+		page.image = {}
+	}
 	atlas.has_upload = true
 	return true
 }
 
-// 释放全部资源（页纹理/裁剪缓存/源图/区域表）。终止态调用。
+// 释放全部资源（页纹理/源图/区域表）。终止态调用。
 atlas_dispose :: proc(atlas: ^Sprite_Atlas) {
-	for &crop in atlas.owned_crops {
-		if crop.Resource != nil do foster.TextureDispose(&crop)
-	}
-	delete(atlas.owned_crops)
-	delete(atlas.crop_cache) // 纹理本体在 owned_crops 里已逐个释放
 	for &page in atlas.pages {
 		if page.texture.Resource != nil do foster.TextureDispose(&page.texture)
 		delete(page.image.Pixels)
@@ -146,53 +139,4 @@ atlas_subtexture :: proc(atlas: ^Sprite_Atlas, name: string) -> (foster.Subtextu
 	}
 	frame := foster.Rect{f32(region.frame.X), f32(region.frame.Y), f32(region.frame.Width), f32(region.frame.Height)}
 	return foster.SubtextureMake(texture, src, frame), true
-}
-
-// ------------------------------------------------------------------------------
-// 裁剪 —— 独立小纹理（带缓存）
-// ------------------------------------------------------------------------------
-
-// 把图集某页的某矩形裁成独立纹理（九宫格角/边/中块用）。基于该页源像素，
-// 首次裁剪后缓存；atlas_dispose 统一释放。
-atlas_crop :: proc(atlas: ^Sprite_Atlas, device: ^foster.GraphicsDevice, page: int, src: foster.RectInt) -> (foster.Texture, bool) {
-	if page < 0 || page >= len(atlas.pages) do return {}, false
-	key := atlas_crop_key(page, src)
-	if tex, ok := atlas.crop_cache[key]; ok {
-		delete(key, context.allocator)
-		return tex, true
-	}
-
-	image := &atlas.pages[page].image
-	if device == nil || src.Width <= 0 || src.Height <= 0 ||
-	   src.X < 0 || src.Y < 0 || src.X + src.Width > image.Width || src.Y + src.Height > image.Height {
-		delete(key, context.allocator)
-		return {}, false
-	}
-
-	cropped := foster.ImageMake(src.Width, src.Height, foster.Color{0, 0, 0, 0})
-	for row in 0..<src.Height {
-		dst_start := row * src.Width
-		src_start := (src.Y + row) * image.Width + src.X
-		mem.copy(
-			raw_data(cropped.Pixels[dst_start:dst_start + src.Width]),
-			raw_data(image.Pixels[src_start:src_start + src.Width]),
-			src.Width * size_of(foster.Color),
-		)
-	}
-
-	tex := foster.TextureFromImage(device, &cropped, key)
-	delete(cropped.Pixels)
-	if tex.Resource == nil {
-		delete(key, context.allocator)
-		return {}, false
-	}
-
-	atlas.crop_cache[key] = tex
-	append(&atlas.owned_crops, tex)
-	return tex, true
-}
-
-@(private)
-atlas_crop_key :: proc(page: int, src: foster.RectInt) -> string {
-	return fmt.aprintf("%d:%d,%d,%d,%d", page, src.X, src.Y, src.Width, src.Height, allocator = context.allocator)
 }

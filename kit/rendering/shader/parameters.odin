@@ -12,6 +12,7 @@ import foster "../../../foster"
 
 // GPU 绑定上限与布局：每个数字参数占一个 float4 槽。
 MAX_TEXTURES :: 16
+// 每个参数组的统一参数字节上限：Vulkan 只保证 16 KiB 的 uniform 缓冲；shader_validate 检查。
 MAX_UNIFORM_BYTES :: 16384
 PARAM_SLOT_BYTES :: 16
 // 每个绘制对象自带的数值字段（[Instance]）的硬上限；它们随顶点而不是 uniform 传给 Shader。
@@ -116,15 +117,6 @@ schema_clone :: proc(s: Schema) -> Schema {
 		r.fields[i].texture = strings.clone(f.texture)
 	}
 	return r
-}
-
-schema_equal :: proc(a, b: Schema) -> bool {
-	if a.name != b.name || a.shader != b.shader || a.preview != b.preview || len(a.fields) != len(b.fields) do return false
-	if a.label != b.label || a.folder != b.folder do return false
-	for f, i in a.fields {
-		if f != b.fields[i] do return false
-	}
-	return true
 }
 
 values_dispose :: proc(values: []Value) {

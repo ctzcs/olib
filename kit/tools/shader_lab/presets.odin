@@ -8,10 +8,6 @@ import "core:strings"
 import foster "olib:foster"
 import sh "olib:kit/rendering/shader"
 
-// 兼容现有调用；持久格式现在由运行时可用的 material 包提供。
-Preset_Field :: sh.Resource_Field
-Preset :: sh.Resource
-
 // 全部数值与纹理准备成功后一次切换；失败不改变旧值和 GPU 资源。
 values_apply :: proc(s: ^Session, index: int, values: []sh.Value) -> bool {
 	if index < 0 || index >= s.program_count do return false

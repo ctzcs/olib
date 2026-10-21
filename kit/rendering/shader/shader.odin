@@ -164,6 +164,9 @@ pass_validate :: proc(e: Shader_Desc, index: int, schemas: []Schema) -> string {
 	}
 	if e.instanced && !object do return "Instanced shaders require Sprite or Model passes"
 	if instance_count(schema^) > 0 && !e.instanced do return "Instance fields require an Instanced shader"
+	if uniform_size(schema^) > MAX_UNIFORM_BYTES {
+		return fmt.tprintf("%s: parameters exceed %d bytes", p.id, MAX_UNIFORM_BYTES)
+	}
 	if instance_count(schema^) > MAX_INSTANCE_FIELDS {
 		return fmt.tprintf("%s: more than %d Instance fields", p.id, MAX_INSTANCE_FIELDS)
 	}

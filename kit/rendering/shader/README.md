@@ -40,7 +40,7 @@ import sh "olib:kit/rendering/shader"
   `MAX_TARGET_SIZE`（8192）、`MAX_RESOURCE_BYTES`（1 MiB）、`MAX_RESOURCE_FIELDS`（256）；数值只在对应常量处修改。
 - **字符串所有权**：`Schema` 用 `schema_clone / schema_dispose`，`Shader_Desc` 用 `shader_clone / shader_dispose`
   （内部通过 `clone_text / delete_text` 统一处理 `distinct string`）。新增拥有字符串或切片的字段时，
-  须同步对应的 clone、dispose（Schema 另有 `schema_equal`）。
+  须同步对应的 clone、dispose。
 
 ## 参数组：Schema / Field / Value
 

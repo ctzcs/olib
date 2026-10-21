@@ -37,8 +37,7 @@ r2d.atlas_dispose(&icons)
 加载失败会清理本次分配并返回 false。
 
 纹理为 RGBA8、无 mipmap，显存约 64 MiB；PNG 文件大小不等于显存占用。
-默认上传后释放 CPU 图像，额外的约 64 MiB 解码像素只在加载期间存在。
-此时 `atlas_crop` 返回失败；确实需要 CPU 裁剪时传 `keep_pixels = true`。
+上传后释放 CPU 图像，额外的约 64 MiB 解码像素只在加载期间存在。
 采用普通线性采样、预乘 alpha 混合；白色图标通过 tint 改色。
 UI 在最终像素目标绘制，小尺寸与非整数缩放仍需在项目最终输出中验收。
 

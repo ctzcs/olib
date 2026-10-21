@@ -8,16 +8,14 @@ import foster "olib:foster"
 
 // atlas 必须为零值，地址稳定并存活到全部 Subtexture 使用结束；禁止复制已加载图集。
 // device 必须已初始化。成功后由调用方在 device 销毁前 atlas_dispose。
-// 默认释放 CPU 像素（约 64 MiB），仅保留纹理与名称表；需要 atlas_crop 时传 true。
+// 上传后释放 CPU 像素（约 64 MiB），只保留纹理与名称表。
 // 失败不保留分配。重复调用已使用的 atlas 返回 false，不覆盖其内容。
 builtin_icons_load :: proc(
 	atlas: ^Sprite_Atlas,
 	device: ^foster.GraphicsDevice,
-	keep_pixels := false,
 ) -> bool {
 	if atlas == nil || device == nil do return false
-	if atlas.has_upload || atlas.pages != nil || atlas.regions != nil || atlas.crop_cache != nil ||
-		len(atlas.owned_crops) != 0 {
+	if atlas.has_upload || atlas.pages != nil || atlas.regions != nil {
 		return false
 	}
 	rects := kenney_build_rects(#load("../../../assets/icons/game-icons.xml"))
@@ -35,10 +33,6 @@ builtin_icons_load :: proc(
 	if !atlas_upload(atlas, device) {
 		atlas_dispose(atlas)
 		return false
-	}
-	if !keep_pixels {
-		delete(atlas.pages[0].image.Pixels)
-		atlas.pages[0].image = {}
 	}
 	return true
 }

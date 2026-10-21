@@ -5,82 +5,59 @@
 完整语法、当前每 Pass 独立参数值的语义与发布方式见链接。
 
 `olib:kit/tools/shader_lab` 提供 2D/3D Shader 预览、Properties 参数面板、纹理缩略图与选择、
-调色板、参数预设、多 Pass、RenderTexture、上一帧反馈和热重载，支持宿主自定义模型与绘制。它依赖
-`rendering/material / rendering/2d / rendering/3d / rendering/shader/dev / ui`，不依赖示例仓库。
-独立启动入口位于同级 `olib_sample/src/shader_lab/main.odin`。
+调色板、参数预设、多 Pass、RenderTexture、上一帧反馈和热重载，支持宿主自定义模型与绘制。界面用
+Dear ImGui（`thirdparty/odin-imgui` 与其 Foster 后端），依赖 `rendering/material / rendering/2d /
+rendering/3d / rendering/shader/dev`，不依赖示例仓库。独立启动入口位于同级 `olib_sample/src/shader_lab/main.odin`。
 
 ## 宿主接入
 
-宿主持有地址稳定的 `Session`，提供 GraphicsDevice、MSDF 字体、项目路径和可选主题。
-工具不创建窗口、不接管 App 回调、不读取全局输入、不调用 Exit，也不清空宿主渲染目标。
+宿主持有地址稳定的 `Session`、ImGui 上下文（字体、样式与输入由 ImGui 后端提供）和 Dock 布局；
+工具只在宿主的 ImGui 帧里提交两个窗口：控制窗口 `lab.CONTROL_WINDOW` 与预览窗口 `lab.PREVIEW_WINDOW`。
+工具不创建窗口、不接管 App 回调、不读取 foster 输入、不调用 Exit，也不清空宿主渲染目标。
 
 ```odin
 import lab "olib:kit/tools/shader_lab"
+import imgui_foster "olib:thirdparty/odin-imgui/imgui_impl_ofoster"
 
-// editor.lab 是宿主中地址稳定的 lab.Session；字体与纹理由宿主加载。
+// 宿主先初始化 ImGui 后端（默认加载 olib 字体与样式），editor.lab 是地址稳定的 lab.Session。
 ok := lab.init(&editor.lab, device, {
     source_root = "content/shaders",
-    font = &editor.msdf_font,
-    font_texture = editor.msdf_texture,
-    // icons = &editor.icons, // 可选，共享已上传的 r2d.builtin_icons_load 图集。
     file_dialogs = true, // 宿主须处理下文的文件请求；不用对话框时保留 false。
-    // theme = &editor.theme, // 可选，初始化时复制。
 })
 
-// Update：持续推进热重载。即使暂停预览时间，也会检测源码变化。
+// Update：持续推进热重载。即使暂停预览时间，也会检测源码变化。窗口离焦或隐藏工具时调用 cancel。
 lab.update(&editor.lab, delta_time)
+if !window_focused do lab.cancel(&editor.lab)
+imgui_foster.NewFrame(app, delta_time)
 
-// Render：宿主按最终目标像素提供区域和已路由的输入。
-consumed := lab.render(&editor.lab, target, panel_rect, lab.Input{
-    pointer = pointer_in_target_pixels,
-    delta = pointer_delta_in_target_pixels,
-    scroll = wheel,
-    left_down = left_down,
-    right_down = right_down,
-    right_pressed = right_pressed,
-    focused = tool_has_input_focus,
-    escape = escape_pressed,
-    navigation = navigation,
-    vertical_adjust = up_down_adjust,
-    dropped_files = dropped_paths, // 本帧拖入的文件；只借用至 render 返回。
-})
-// consumed.pointer / consumed.keyboard 用于后续输入分配。
+// Render：在 BeginRender 与 EndRender 之间调用 draw；Pass 在这里渲染进各自目标，窗口在 EndRender 时画出。
+if imgui_foster.BeginRender(app) {
+    // 可选：DockSpaceOverViewport + DockBuilderDockWindow(lab.CONTROL_WINDOW / lab.PREVIEW_WINDOW, ...)
+    lab.draw(&editor.lab, dropped_paths, drop_position) // 本帧拖入的文件与位置（窗口逻辑坐标）；可省略
+    imgui_foster.EndRender(app)
+}
 
-// 隐藏、停用面板时取消捕获与调色板预览；重新显示可继续使用原 Session。
-lab.cancel(&editor.lab)
-
-// 关闭工具时释放；随后才可释放宿主字体、图集纹理和 GraphicsDevice。
+// 关闭工具时释放；在 ImGui 后端 Shutdown 与 GraphicsDevice 释放之前。
 lab.dispose(&editor.lab)
 ```
 
-- `init` 复制路径和主题；借用设备、字体及图集。失败返回 false，成功后 Session 不得复制/搬动。
-- 字体始终以 `.MSDF` 注册，无 Bitmap 回退；宿主负责提供正确的距离场图集和所需字符。
-  标签缺字会输出诊断，工具不会自行访问示例字体路径或运行系统字体烘焙。
-- 图标使用仓库 `assets/icons` 的内置图集：folder、展开箭头、勾选、播放控制与常用操作均按名称取子图。
-  默认每会话初始化时上传一次、关闭时释放；可通过 `Config.icons` 借用宿主图集，多个工具共享约 64 MiB
-  的 GPU 纹理。借用图集须地址稳定并活到 `dispose` 之后，工具不会释放它；图标 tint 跟随主题与选中状态。
-- `render` 的目标可以是窗口或宿主 Target。工具在区域大小的内部目标中绘制，按 1:1 合成到区域，
-  非零原点和窗口 DPI 转换由输入坐标匹配。区域原点对齐整数像素，不随低分辨率场景放大 UI。
-  场景预览直接取选中 Shader 的 Pass 目标，不另外保留场景目标。
-  只有当前选中 Shader 分配 RenderTexture（包含深度、MSAA resolve 和 Previous 双缓冲）。
-  切换后在本帧 UI/缩略图提交完毕时释放旧目标，新 Shader 在下一帧渲染开始时创建，避免悬空纹理引用。
-  无 Shader 时直接在最终输出绘制背景；最终输出目标用于合成预览和原生像素 UI，仍保留。
-- Texture 的 Clear、替换和参数恢复会保留本帧缩略图借用的旧纹理，最终 UI 提交后再释放。
-  Clear 后恢复内置棋盘格，不让已排入绘制的图片引用失效。
-- 面板需要宽度至少 320、高度大于 180 像素；更小区域跳过绘制并取消捕获。
-  侧栏的工作区、Shader 选择器和详情页签位置固定；Pass 列表与详情内容分别滚动。
-  Shader 菜单使用浮层，展开菜单或 Shader folder 不挤动其它区域。详情滚动按工作区、Shader 和 Pass
-  的稳定 ID 记忆，预览设置单独记忆；均只保留在当前 Session。支持拖动右侧分隔条调宽、收起/面板切换。
-  逻辑宽度小于 760 时使用覆盖式侧栏，
-  收起后可查看完整预览。布局只保留在当前 Session，拖动时 Escape 或失焦恢复原宽度。
-- UI 比例取 `clamp(min(像素宽/1280, 像素高/800), 1, 1.6)`；1600×1000 为 125%。
-  字体、控件、间距和命中统一缩放，MSDF 在最终输出目标直接绘制。小窗口不把正文缩到 16px 以下，
-  采用滚动与覆盖侧栏；Shader 的低分辨率 RenderTexture 不影响 UI 字体采样。
-- 工具拥有独立 UI_Context；在宿主自己的 `ui_begin / ui_end` 区间之外调用 `render`。
-  多个工具实例可按顺序绘制，各自持有参数、相机和捕获状态；宿主负责分配焦点及区域。
-- `focused=false` 停止工具交互并取消当前操作。拖动移出面板仍须把移动和松开送给捕获者；
-  宿主文字输入或其他模态界面占用键盘时，不向工具转发导航动作。
-- Escape 取消工具操作；是否关闭整个应用由宿主决定。调色板取消恢复打开时的颜色，
+- `init` 复制路径；借用设备。失败返回 false，成功后 Session 不得复制/搬动。init 时从内置图集挑出
+  界面用到的图标（`ICON_NAMES`），缩成每格 40 像素的小图标表交给 ImGui，dispose 时释放。
+- 字体就是宿主 ImGui 的当前字体。olib 后端默认的 Noto Sans CJK SC 子集覆盖 ASCII、Latin-1 与 GB2312；
+  热重载后 Shader / Pass / 参数组 / 字段标签有缺字时输出诊断（`missing_glyphs` 计数），不回退到其他字体。
+- 输入归属交给 ImGui：悬停或拖动工具窗口时 `WantCaptureMouse` 为真，宿主据此决定游戏是否接收输入。
+  右键轨道旋转与滚轮缩放只在 3D 预览图上开始，ImGui 的激活状态保持捕获到松开。
+  Escape 取消调色板与轨道旋转、关闭 Shader 菜单；是否关闭整个应用由宿主决定。
+- 预览窗口内容区按最终输出像素 1:1 显示当前 Pass 目标；目标尺寸取上一帧测得的预览区，
+  所以调整窗口或停靠后下一帧重建。只有当前选中 Shader 分配 RenderTexture（包含深度、MSAA resolve 和
+  Previous 双缓冲）；无 Shader 时只画背景。
+- 本帧绘制列表引用的纹理在宿主 EndRender 提交前不能释放：切换 Shader 后旧目标、Texture 的 Clear 和替换
+  留下的旧纹理都延迟到下一次 `draw` 开始时释放。Clear 后恢复内置棋盘格。
+- 布局、滚动和停靠由 ImGui 管理。Shader 菜单是浮层（`shader_menu` 控制），选中、点击外面或 Escape 关闭，
+  不挤动 Pass 列表；“参数 / 预览设置”只替换下方详情。同一 ImGui 上下文只放一个 Session（窗口名固定）。
+- `widget_rect(session, id)` 返回最近一次 `draw` 里按稳定 ID 登记的控件矩形（ImGui 坐标，即窗口逻辑坐标），
+  例如 `pass:<id>`、`shader:<name>`、`<参数组>:<字段>`、`color-sv`；宿主或外部检查可据此定位。
+- 调色板是模态弹窗：打开时记下原色并实时预览，应用保留，取消、Escape、`cancel` 恢复原色。
   数值和相机变化仅作用于预览；预设是显式保存的快照，不自动改写 Properties 默认值或宿主材质文档。
   工具不提供材质文档与撤销历史；将预览结果应用到游戏内容时，由宿主执行编辑事务。
 
@@ -157,7 +134,7 @@ Properties 声明是所有 Pass 的模板，值按各 Pass 分别保存。单 Pa
 未连接的纹理字段使用图片选择器；已连接字段显示目标名称和缩略图。
 全屏 Shader 每个目标只有一个生产 Pass；Model / Sprite 材质的 Pass 共用同一个目标并按顺序绘制。
 每个 Pass 写一个颜色附件，可带深度；当前不提供 MRT、Compute 或深度纹理采样。
-不同 Shader 的目标和反馈互相独立。中文 Label 需要宿主字体包含相应字形。
+不同 Shader 的目标和反馈互相独立。中文 Label 需要宿主 ImGui 字体包含相应字形。
 
 ### 模型材质 / 本体 + 描边
 
@@ -228,29 +205,31 @@ UI 始终在全部 Pass 完成后按最终像素绘制，不进入模糊/反馈�
 
 ## 示例与检查入口
 
-在 `olib_sample` 运行 `run.bat shader_lab`。可追加 `embedded` 查看带偏移的嵌入区域；
-`source <目录>` 指定源码根目录。示例只负责启动接线，预览素材仍属于示例项目。
-截图与故障注入代码位于示例仓库的 `tools/shader_lab_checks`，提供 `shot / colors / smoke / features / multipass`
-入口；它们不进入库的工具包，也不是运行工具的必需依赖。仅选择与本次改动相关的检查，
+在 `olib_sample` 运行 `run.bat shader_lab`；`source <目录>` 指定源码根目录。示例只负责启动接线
+（ImGui、Dock 布局、文件对话框与拖放），预览素材仍属于示例项目。整帧先画进离屏目标再贴到窗口，
+截图读取该目标，包含 ImGui 界面。截图与故障注入代码位于示例仓库的 `tools/shader_lab_checks`，提供
+`shot / colors / smoke / features / multipass / hierarchy / targets` 入口；它们不进入库的工具包，也不是运行工具的必需依赖。仅选择与本次改动相关的检查，
 不把这些示例作为新项目默认任务；旧入口若写到其他位置，留存产物应归并到上述固定目录。
 
-检查期间只接受注入的输入，真实鼠标键盘被屏蔽，桌面上的操作不会混进自动点击。每一步都等明确状态
+检查期间只接受注入的输入，真实鼠标键盘被屏蔽，桌面上的操作不会混进自动点击；ImGui 也按有焦点处理，
+窗口被别的程序挡在后面不影响注入。点击位置取 `lab.widget_rect` 的控件矩形，参数区看不到的控件先注入滚轮滚过去。
+每一步都等明确状态
 （注入已被一次渲染消费、候选包提交、Shader 就绪、窗口尺寸生效），不按帧数或经过的时间推测。
 失败时完整状态与事件日志写到所属项目的 `library/tmp/shader-lab-<模式>-failure.txt`，每次运行开始时删除旧报告。
 
-`features embedded d3d12` 集中检查预设往返、默认值、失败回滚、过期文件请求、图片热更新、
-自定义预览和侧栏布局；不重复 smoke 的完整故障注入。原生对话框的实际选择由手动操作验收。
+`features d3d12` 集中检查预设往返、默认值、失败回滚、过期文件请求、图片热更新、
+自定义预览、新建 Shader 和预览区尺寸；不重复 smoke 的完整故障注入。原生对话框的实际选择由手动操作验收。
 
 示例 `shaders/Trail2D.oshader` 和 `Trail3D.oshader` 定义拖尾效果：场景 → 半分辨率横向模糊 →
-纵向模糊 → 上一帧反馈。`multipass embedded d3d12` 集中检查单 Pass Shader、2D/3D、HDR/MSAA、
+纵向模糊 → 上一帧反馈。`multipass d3d12` 集中检查单 Pass Shader、2D/3D、HDR/MSAA、
 反馈暂停/单步/重置/resize，以及循环依赖和错误 Shader 的回退恢复，不运行其它整套冒烟。
 
-`hierarchy embedded d3d12` 集中检查显示名、folder、checkbox、最终/中间输出独立切换、显示名热改迁移，
+`hierarchy d3d12` 集中检查显示名、folder、checkbox、最终/中间输出独立切换、显示名热改迁移，
 Shader 列表只展示文件中声明的 Shader、显式单 Pass 扩成多 Pass 时的选择/参数保持，
-2D/3D 列表隔离与状态恢复、浮层不挤动 Pass 列表、固定区域坐标及参数/设置滚动位置恢复，
-以及普通、125% 和窄窗口的最终截图与输入命中；不运行其它完整故障注入。
+2D/3D 列表隔离与状态恢复、浮层不挤动 Pass 列表、页签切换不移动选择区，
+以及大窗口与窄窗口下预览区和 Pass 目标跟随尺寸的最终截图；不运行其它完整故障注入。
 
-`targets embedded d3d12` 集中检查仅选中 Shader 持有目标、2D/3D 切换释放/重建、深度/MSAA、多 Pass resize、
+`targets d3d12` 集中检查仅选中 Shader 持有目标、2D/3D 切换释放/重建、深度/MSAA、多 Pass resize、
 反馈重置与参数保留、候选包按当前选择热重载、空 Shader 包和恢复声明，以及实际点击 Texture Clear 后恢复棋盘格；
 不跑完整 UI 点击序列或故障注入。
 

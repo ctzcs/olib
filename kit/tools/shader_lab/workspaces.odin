@@ -1,10 +1,7 @@
 package shader_lab
 
-// 分区：工作区书签 / 固定区域的滚动记忆。只拥有预览状态，不改写 .oshader 或材质预设。
-import "core:fmt"
+// 工作区书签：2D/3D 各自记住选中的 Shader、Pass、载体和相机。只拥有预览状态，不改写 .oshader 或材质预设。
 import "core:strings"
-import ui "olib:kit/ui"
-import clay "olib:thirdparty/clay-odin"
 
 Workspace_State :: struct {
 	shader, pass, preview: string, // 拥有的稳定 ID，跨候选包提交仍有效。
@@ -93,40 +90,4 @@ workspace_restore :: proc(s: ^Session) {
 		return
 	}
 	s.workspace_empty = true
-}
-
-// ui_begin 已快照上一布局的实际滚动位置。按稳定容器 ID 保存，不把旧 Pass 偏移套给新 Pass。
-scroll_memory_capture :: proc(s: ^Session) {
-	clear(&s.scroll_restores)
-	for scroll in s.ctx.scrolls do s.scroll_offsets[scroll.id] = scroll.offset
-}
-
-lab_scroll :: proc(s: ^Session, id: string, height, width: f32, gap: u16 = 8) -> clay.ElementDeclaration {
-	key := clay.ID(id).id
-	exists := false
-	for scroll in s.ctx.scrolls do exists = exists || scroll.id == key
-	decl := ui.ui_scroll_decl(&s.ctx, id, height, width, gap)
-	if !exists {
-		if offset, saved := s.scroll_offsets[key]; saved {
-			decl.clip.childOffset = offset
-			append(&s.scroll_restores, ui.UI_Scroll_Entry{id = key, offset = offset})
-		}
-	}
-	return decl
-}
-
-scroll_memory_restore :: proc(s: ^Session) {
-	for scroll in s.scroll_restores {
-		data := clay.GetScrollContainerData(clay.ElementId{id = scroll.id})
-		if data.found do data.scrollPosition^ = scroll.offset
-	}
-}
-
-inspector_scroll_id :: proc(s: ^Session) -> string {
-	if s.preview_settings do return fmt.tprintf("inspector:settings:%d", s.workspace)
-	if s.selected_shader >= 0 && s.inspect_pass >= 0 {
-		e := &s.shaders[s.selected_shader]
-		return fmt.tprintf("inspector:%d:%s:%s", s.workspace, e.desc.name, e.desc.passes[s.inspect_pass].id)
-	}
-	return fmt.tprintf("inspector:%d:empty", s.workspace)
 }

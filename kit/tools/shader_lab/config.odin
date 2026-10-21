@@ -1,40 +1,24 @@
 package shader_lab
 
-// 宿主负责窗口、输入路由和 MSDF 资产；工具只持有独立的预览会话。
-import foster "olib:foster"
+// 宿主负责窗口、ImGui 上下文与字体、输入路由和 Dock 布局；工具只持有独立的预览会话，
+// 每帧在宿主的 ImGui 帧里提交自己的窗口。
 import r2d "olib:kit/rendering/2d"
 import r3d "olib:kit/rendering/3d"
 import mat "olib:kit/rendering/material"
-import ui "olib:kit/ui"
+
+// 工具提交的两个窗口名，宿主可据此停靠；同一 ImGui 上下文只放一个 Session。
+CONTROL_WINDOW :: "Shader Lab"
+PREVIEW_WINDOW :: "Shader 预览"
 
 Config :: struct {
 	// source_root 递归发现 .oshader。
 	source_root: string,
-	// 借用至 dispose；必须是真正的距离场，工具始终以 .MSDF 注册。
-	font: ^foster.MsdfFont,
-	font_texture: foster.Texture,
-	// 可选，借用宿主已上传的内置图标图集；nil 时工具自行加载和释放。
-	icons: ^r2d.Sprite_Atlas,
-	// 可选，init 时复制；nil 使用工具默认主题。
-	theme: ^ui.UI_Theme,
 	paused: bool,
 	// 宿主通过 file_request / file_reply 接入自己的文件对话框。
 	file_dialogs: bool,
 	// 可选：用系统默认程序打开源码文件（参数组里的“编辑 <文件>”按钮）；nil 时只显示文件名。path 是绝对路径。
 	open_file: proc(path: string) -> bool,
 	preview: Preview_Hooks,
-}
-
-// pointer / delta 使用目标最终像素；宿主自行转换 DPI，并决定输入归属。
-// 已捕获的拖动即使移出 region 也继续传入；失焦传 focused=false，隐藏时调用 cancel。
-Input :: struct {
-	pointer, delta, scroll: foster.Vec2,
-	left_down, right_down, right_pressed: bool,
-	focused, escape: bool,
-	navigation: ui.UI_Navigation,
-	vertical_adjust: f32,
-	// 本帧拖入的文件；只借用到 render 返回。坐标仍为 pointer。
-	dropped_files: []string,
 }
 
 // 自定义预览的这一次绘制：要画的 Pass、它的参数组与预览维度、时间和目标尺寸。

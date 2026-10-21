@@ -4,8 +4,7 @@ package shader_lab
 import "core:fmt"
 import foster "olib:foster"
 import sh "olib:kit/rendering/shader"
-import ui "olib:kit/ui"
-import clay "olib:thirdparty/clay-odin"
+import imgui "olib:thirdparty/odin-imgui"
 
 preview_size_label :: proc(s: ^Session) -> string {
 	if s.selected_shader >= 0 {
@@ -74,82 +73,75 @@ group_folder :: proc(s: ^Session, index: int, id: string) {
 	p := &s.parameters[index]
 	name := display_name(p.live.label, p.name)
 	if p.live.folder != "" do name = fmt.tprintf("%s / %s", p.live.folder, name)
-	branch := ui.ui_column_decl(6)
-	branch.layout.sizing.width = clay.SizingFixed(panel_width(s))
-	branch.layout.padding.left = 16
-	branch.border = {color = ui.ui_clay_color(s.theme.panel_border), width = {left = 1}}
-	s.parameter_inset = 16
-	defer s.parameter_inset = 0
-	if clay.UI()(branch) {
-		if lab_button(s, id, name, false, true, "media/folder",
-			p.folder_closed ? "ui/arrow-right-03" : "ui/arrow-down-03") {
-			cancel(s)
-			p.folder_closed = !p.folder_closed
-		}
-		if p.folder_closed do return
-		// 宿主接了 open_file 时，源码文件名就是“用代码编辑器打开”的按钮。
-		if s.open_file != nil {
-			if lab_button(s, fmt.tprintf("open-source:%s", p.name), fmt.tprintf("编辑 %s", p.live.shader), false, true,
-				"media/code") && !s.open_file(texture_path(s, p.live.shader)) {
-				bank_error(s, fmt.tprintf("Cannot open %s", p.live.shader))
-			}
-		} else {
-			ui.ui_label_dim(&s.ctx, &s.small_theme, p.live.shader)
-		}
-		if s.file_dialogs && s.selected_shader >= 0 && sh.shader_is_material(s.shaders[s.selected_shader].desc) {
-			ui.ui_label_dim(&s.ctx, &s.small_theme, "保存 / 载入整个材质")
-		}
-		if clay.UI()(ui.ui_row_decl(4)) {
-			if s.file_dialogs {
-				if lab_button(s, "preset-save", "保存", icon = "ui/save") do request_file(s, index, .Save_Preset)
-				if lab_button(s, "preset-load", "载入", icon = "media/import") do request_file(s, index, .Load_Preset)
-			}
-			if lab_button(s, "preset-reset", "重置", icon = "editing/undo") do _ = reset_defaults(s, index)
-		}
-		if s.request.id != 0 do ui.ui_label_dim(&s.ctx, &s.small_theme, "Waiting for file selection...")
-		parameters_panel(s, index)
+	if lab_button(s, id, name, !p.folder_closed, true, "media/folder") {
+		cancel(s)
+		p.folder_closed = !p.folder_closed
 	}
+	if p.folder_closed do return
+	imgui.Indent()
+	defer imgui.Unindent()
+	// 宿主接了 open_file 时，源码文件名就是“用代码编辑器打开”的按钮。
+	if s.open_file != nil {
+		if lab_button(s, fmt.tprintf("open-source:%s", p.name), fmt.tprintf("编辑 %s", p.live.shader), icon = "media/code") &&
+			!s.open_file(texture_path(s, p.live.shader)) {
+			bank_error(s, fmt.tprintf("Cannot open %s", p.live.shader))
+		}
+	} else {
+		lab_dim(p.live.shader)
+	}
+	if s.file_dialogs && s.selected_shader >= 0 && sh.shader_is_material(s.shaders[s.selected_shader].desc) {
+		lab_dim("保存 / 载入整个材质")
+	}
+	if s.file_dialogs {
+		if lab_button(s, "preset-save", "保存", icon = "ui/save") do request_file(s, index, .Save_Preset)
+		imgui.SameLine()
+		if lab_button(s, "preset-load", "载入", icon = "media/import") do request_file(s, index, .Load_Preset)
+		imgui.SameLine()
+	}
+	if lab_button(s, "preset-reset", "重置", icon = "editing/undo") do _ = reset_defaults(s, index)
+	if s.request.id != 0 do lab_dim("Waiting for file selection...")
+	parameters_panel(s, index)
 }
 
-// 无论一个还是多个 Pass，只有 Shader 这一个选择入口。
+// 无论一个还是多个 Pass，只有 Shader 这一个选择入口。菜单是 s.shader_menu 控制的浮层，
+// 点外面、选中或 Escape 关闭，不挤动下方的 Pass 列表。
 shader_selector :: proc(s: ^Session) {
-	ui.ui_label_dim(&s.ctx, &s.small_theme, "Shader")
 	name := "选择 Shader"
 	if s.selected_shader >= 0 {
 		e := &s.shaders[s.selected_shader]
 		name = display_name(e.desc.label, e.desc.name)
 	}
-	if s.shader_menu && ui.ui_clicked(&s.ctx) && !clay.PointerOver(clay.ID("shader-popup")) && !clay.PointerOver(clay.ID("shader-menu")) {
+	if lab_button(s, "shader-menu", name, s.shader_menu, true, "media/clapper") do s.shader_menu = true
+	anchor := imgui.GetItemRectMin()
+	size := imgui.GetItemRectSize()
+	if s.shader_menu && !imgui.IsPopupOpen("shader-popup") do imgui.OpenPopup("shader-popup")
+	imgui.SetNextWindowPos({anchor.x, anchor.y + size.y + 2})
+	imgui.SetNextWindowSizeConstraints({size.x, 0}, {max(size.x, 480), 360})
+	if !imgui.BeginPopup("shader-popup") {
 		s.shader_menu = false
+		return
 	}
-	if lab_button(s, "shader-menu", name, true, true, "media/clapper",
-		s.shader_menu ? "ui/arrow-up-03" : "ui/arrow-down-03") {
-		s.shader_menu = !s.shader_menu
+	defer imgui.EndPopup()
+	if !s.shader_menu {
+		imgui.CloseCurrentPopup()
+		return
 	}
-	if !s.shader_menu do return
-	popup := ui.ui_scroll_decl(&s.ctx, "shader-popup", min(248, max(96, s.ctx.height-200)), panel_width(s), 4)
-	popup.floating = {attachTo = .ElementWithId, parentId = clay.ID("shader-menu").id,
-		attachment = {element = .LeftTop, parent = .LeftBottom}, offset = {0, 4}, zIndex = 30,
-		pointerCaptureMode = .Capture}
-	popup.layout.padding = clay.PaddingAll(6)
-	popup.backgroundColor = ui.ui_clay_color(s.theme.panel)
-	popup.border = {color = ui.ui_clay_color(s.theme.panel_border), width = {left = 1, right = 1, top = 1, bottom = 1}}
-	popup.cornerRadius = clay.CornerRadiusAll(4)
-	if clay.UI()(popup) {
-		for e, i in s.shaders {
-			if shader_has_3d(s, i) != (s.workspace == 1) do continue
-			if lab_button(s, fmt.tprintf("shader:%s", e.desc.name), display_name(e.desc.label, e.desc.name), s.selected_shader == i, true) {
-				select_shader(s, i)
-				s.shader_menu = false
-			}
+	for e, i in s.shaders {
+		if shader_has_3d(s, i) != (s.workspace == 1) do continue
+		label := display_name(e.desc.label, e.desc.name)
+		if imgui.Selectable(fmt.ctprintf("%s##shader:%s", label, e.desc.name), s.selected_shader == i) {
+			select_shader(s, i)
+			s.shader_menu = false
 		}
-		// 新建：按当前工作区写一份能直接编译的模板到源码目录，热重载后自动选中。
-		templates := s.workspace == 1 ? []Shader_Template{.Model, .Model_Instanced} : []Shader_Template{.Sprite, .Post_Process}
-		for template in templates {
-			if lab_button(s, fmt.tprintf("shader-new:%v", template), template_menu_label(template), false, true, "symbols/plus") {
-				if _, reason := new_shader(s, template); reason != "" do bank_error(s, reason)
-				s.shader_menu = false
-			}
+		track(s, fmt.tprintf("shader:%s", e.desc.name))
+	}
+	imgui.Separator()
+	// 新建：按当前工作区写一份能直接编译的模板到源码目录，热重载后自动选中。
+	templates := s.workspace == 1 ? []Shader_Template{.Model, .Model_Instanced} : []Shader_Template{.Sprite, .Post_Process}
+	for template in templates {
+		if lab_button(s, fmt.tprintf("shader-new:%v", template), template_menu_label(template), false, true, "symbols/plus") {
+			if _, reason := new_shader(s, template); reason != "" do bank_error(s, reason)
+			s.shader_menu = false
 		}
 	}
 }
@@ -158,44 +150,40 @@ passes_panel :: proc(s: ^Session) {
 	if s.selected_shader < 0 do return
 	e := &s.shaders[s.selected_shader]
 	pending_pass := -1
-	if clay.UI()(ui.ui_column_decl(4)) {
-		for i in e.order {
-			p := e.desc.passes[i]
-			selected := s.inspect_pass == i
-			if clay.UI()(ui.ui_row_decl(4)) {
-				if lab_checkbox(s, fmt.tprintf("pass-enabled:%s:%s", e.desc.name, p.id), e.enabled[i]) {
-					set_pass_enabled(s, s.selected_shader, i, !e.enabled[i])
-				}
-				label := display_name(p.label, string(p.id))
-				if lab_button(s, fmt.tprintf("pass:%s", p.id), label, selected, true) {
-					if selected {
-						cancel(s)
-						e.expanded[i] = !e.expanded[i]
-					} else {
-						e.expanded[i] = true
-					}
-					pending_pass = i
-				}
-			}
+	for i in e.order {
+		p := e.desc.passes[i]
+		selected := s.inspect_pass == i
+		if lab_checkbox(s, fmt.tprintf("pass-enabled:%s:%s", e.desc.name, p.id), e.enabled[i]) {
+			set_pass_enabled(s, s.selected_shader, i, !e.enabled[i])
 		}
+		imgui.SameLine()
+		label := display_name(p.label, string(p.id))
+		if imgui.Selectable(fmt.ctprintf("%s##pass:%s", label, p.id), selected) {
+			if selected {
+				cancel(s)
+				e.expanded[i] = !e.expanded[i]
+			} else {
+				e.expanded[i] = true
+			}
+			pending_pass = i
+		}
+		track(s, fmt.tprintf("pass:%s", p.id))
 	}
 	if pending_pass >= 0 do select_shader(s, s.selected_shader, pending_pass)
 }
 
 inspector_panel :: proc(s: ^Session) {
 	if s.workspace_empty || s.program_count == 0 do return
-	if s.selected_shader < 0 do return
+	if s.selected_shader < 0 || s.inspect_pass < 0 do return
 	e := &s.shaders[s.selected_shader]
-	if s.inspect_pass >= 0 {
-		i := s.inspect_pass
-		p := e.desc.passes[i]
-		ui.ui_label_ex(&s.ctx, &s.theme, display_name(p.label, string(p.id)), s.theme.text, 18)
-		if !e.enabled[i] do ui.ui_label_dim(&s.ctx, &s.small_theme, "已禁用 · 单输入直通，否则清屏")
-		if e.expanded[i] {
-			group_folder(s, s.selected, fmt.tprintf("group-folder:%s:%s", e.desc.name, p.id))
-		} else {
-			ui.ui_label_dim(&s.ctx, &s.small_theme, "参数已折叠，点击上方 Pass 展开")
-		}
+	i := s.inspect_pass
+	p := e.desc.passes[i]
+	imgui.SeparatorText(cstr(display_name(p.label, string(p.id))))
+	if !e.enabled[i] do lab_dim("已禁用 · 单输入直通，否则清屏")
+	if e.expanded[i] {
+		group_folder(s, s.selected, fmt.tprintf("group-folder:%s:%s", e.desc.name, p.id))
+	} else {
+		lab_dim("参数已折叠，点击上方 Pass 展开")
 	}
 }
 

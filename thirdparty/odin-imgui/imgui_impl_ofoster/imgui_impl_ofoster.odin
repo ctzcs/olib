@@ -157,7 +157,10 @@ Shutdown :: proc() {
 // NewFrame feeds ImGui's IO from ofoster's polled input state. Call it every
 // update, BEFORE the game consumes the same input (so WantCaptureMouse and
 // friends gate it), and before Render. dt <= 0 falls back to app.Time.Delta.
-NewFrame :: proc(owner: ^foster.App, dt: f32 = -1) {
+// force_focus reports the window as focused, e.g. while automated checks
+// inject input into a window that someone else's work keeps in the background
+// (ImGui clears held keys and buttons when it loses focus).
+NewFrame :: proc(owner: ^foster.App, dt: f32 = -1, force_focus := false) {
 	if !ready {
 		return
 	}
@@ -185,7 +188,7 @@ NewFrame :: proc(owner: ^foster.App, dt: f32 = -1) {
 
 	// focus (polled; ImGui only needs the transitions)
 	if owner.Window.Handle != nil {
-		focused := .INPUT_FOCUS in sdl.GetWindowFlags(owner.Window.Handle)
+		focused := force_focus || .INPUT_FOCUS in sdl.GetWindowFlags(owner.Window.Handle)
 		imgui.IO_AddFocusEvent(io, focused)
 	}
 

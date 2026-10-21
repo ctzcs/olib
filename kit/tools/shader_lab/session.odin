@@ -2,8 +2,8 @@ package shader_lab
 
 // 会话拥有预览参数、相机、GPU 资源与各组独立的热重载会话。
 // HLSL 由外部编辑器修改/保存；这里的参数仅供预览，不写回源码，无文档撤销历史。
-// UI 先消费输入；右键轨道旋转只在预览内开始，捕获持续到释放或离焦。
-// 分区：状态 / 生命周期 / 更新与取消。面板和绘制分别见 panel / preview。
+// 输入由宿主的 ImGui 分配；右键轨道旋转只在预览图上开始，捕获持续到松开或 cancel。
+// 分区：状态 / 生命周期 / 更新与取消。窗口和绘制分别见 windows / preview。
 
 import "core:fmt"
 import "core:math"
@@ -15,9 +15,8 @@ import mat "olib:kit/rendering/material"
 import r3d "olib:kit/rendering/3d"
 import sh "olib:kit/rendering/shader"
 import dev "olib:kit/rendering/shader/dev"
-import ui "olib:kit/ui"
 import world "olib:kit/world"
-import clay "olib:thirdparty/clay-odin"
+import imgui_foster "olib:thirdparty/odin-imgui/imgui_impl_ofoster"
 
 Session :: struct {
 	device: ^foster.GraphicsDevice,
@@ -30,13 +29,8 @@ Session :: struct {
 	sprite_mesh: foster.Mesh,
 	// instanced 模型的管线探测按 [Instance] 字段数各用一个实例缓冲（只用格式），首次需要时创建。
 	probe_instances: [sh.MAX_INSTANCE_FIELDS + 1]r3d.Model_Buffer,
-	font: ^foster.MsdfFont, // 借用宿主字体，宿主须在 dispose 后释放。
-	icons: ^r2d.Sprite_Atlas,
-	owned_icons: r2d.Sprite_Atlas,
+	icons: imgui_foster.Icons, // 从内置图集挑出 ICON_NAMES 缩成的小图标表
 	delta_time: f32,
-	region: foster.Rect,
-	input: Input,
-	capture: ui.UI_Input_Capture,
 	source_root: string,
 	using bank: ^Parameter_Bank,
 	pending_bank: ^Parameter_Bank,
@@ -46,33 +40,30 @@ Session :: struct {
 	selected_shader, inspect_pass: int,
 	preview_pass: int, // -1 始终看最终效果；与编辑中的 inspect_pass 分开。
 	shader_menu, preview_settings: bool,
-	ui_scale: f32,
 	workspace: int, // 0: 2D，1: 3D。
 	workspace_empty: bool,
 	workspaces: [2]Workspace_State,
-	scroll_offsets: map[u32]clay.Vector2,
-	scroll_restores: [dynamic]ui.UI_Scroll_Entry,
 	tick_serial: u64,
 	step_requested: bool,
 	parameter_watch: dev.Parameter_Watch,
 	fonts_dirty: bool,
+	missing_glyphs: int, // 最近一次标签校验中 ImGui 字体缺的字数
 	color_picker: Color_Picker,
 	meshes: [3]foster.Mesh,
 	texture: foster.Texture,
 	sprite_texture: foster.Texture, // Sprite 预览帧采用预乘 Alpha，旧图像预览保持原输入。
-	output: foster.Target,
-	panel_active: bool,
+	drawing: bool, // draw 进行中：本帧 ImGui 绘制列表可能已引用旧纹理
 	retired_textures: [dynamic]^foster.Texture,
-	batch: r2d.Render2D, // UI：panel 记录，preview 叠加到输出时提交；预览合成用 render
-	ctx: ui.UI_Context,
-	theme, heading_theme, small_theme: ui.UI_Theme,
+	widgets: map[u64]Widget_Rect, // 最近一次 draw 登记的控件矩形，见 widget_rect
+	dropped_files: []string, // 本次 draw 借用的拖入文件
+	drop_position: [2]f32,
 	camera: world.Camera3D,
 	mode: int,
 
 	yaw, pitch, distance, clock: f32,
 	paused, orbiting: bool,
-	viewport: foster.Rect,
-	pointer: foster.Vec2,
+	viewport: foster.Rect, // 预览图在最终输出中的像素区域，决定 Pass 目标尺寸与鼠标 UV
+	pointer: foster.Vec2, // 鼠标的最终输出像素坐标
 	initialized: bool,
 	render_serial: int,
 	file_dialogs: bool,
@@ -82,9 +73,6 @@ Session :: struct {
 	preview_hooks: Preview_Hooks,
 	custom_preview: bool,
 	pending_shader: string, // new_shader 写出的 Shader 名，编译进 bank 后自动选中
-	sidebar_width, sidebar_effective, splitter_original: f32,
-	sidebar_collapsed, compact, splitting: bool,
-	parameter_inset: f32, // 当前 Shader folder 的布局缩进，仅在构建 UI 时使用。
 	texture_poll: f32,
 }
 
@@ -97,26 +85,22 @@ Vertex2D :: struct {
 // 生命周期
 // ==============================================================================
 
-// Config 的路径被复制；device / font / font_texture 借用至 dispose。Session 不得搬动。
+// Config 的路径被复制；device 借用至 dispose。Session 不得搬动。宿主的 ImGui 后端
+// 可在 init 之前或之后初始化，draw 时必须已就绪。
 init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> bool {
-	if s.initialized || device == nil || config.font == nil || config.font_texture.Resource == nil do return false
-	if config.font.Size <= 0 || config.font.DistanceRange <= 0 do return false
-	if config.source_root == "" do return false
-	if config.icons != nil {
-		if !config.icons.has_upload || len(config.icons.pages) == 0 || config.icons.pages[0].texture.Resource == nil do return false
-		s.icons = config.icons
-	} else {
-		if !r2d.builtin_icons_load(&s.owned_icons, device) do return false
-		s.icons = &s.owned_icons
-	}
+	if s.initialized || device == nil || config.source_root == "" do return false
+	icon_image, icon_rects, decoded := r2d.builtin_icons_decode()
+	if !decoded do return false
+	icons_ok := imgui_foster.IconsInit(&s.icons, device, icon_image, icon_rects^, ICON_NAMES[:], ICON_CELL)
+	delete(icon_image.Pixels)
+	r2d.kenney_rects_dispose(icon_rects)
+	if !icons_ok do return false
 	s.device = device
 	s.bank = new(Parameter_Bank)
 	s.selected_shader = -1
 	s.inspect_pass = -1
 	s.preview_pass = -1
-	s.ui_scale = 1
-	s.scroll_offsets = make(map[u32]clay.Vector2)
-	s.font = config.font
+	s.viewport = {0, 0, 960, 640} // 预览窗口第一次测量前的目标尺寸
 	s.source_root = strings.clone(config.source_root)
 	s.distance = 4
 	s.yaw = 0.4
@@ -132,15 +116,10 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 		w.custom_preview = s.custom_preview
 		w.yaw, w.pitch, w.distance = s.yaw, s.pitch, s.distance
 	}
-	s.sidebar_width = 312
 	s.clock = 1
 	dev.parameters_init(&s.parameter_watch, s.source_root)
 	s.library = {device = device}
 	if reason := r2d.init(&s.render, &s.library); reason != "" {
-		fmt.eprintln("Shader Lab:", reason)
-		return false
-	}
-	if reason := r2d.init(&s.batch, &s.library); reason != "" {
 		fmt.eprintln("Shader Lab:", reason)
 		return false
 	}
@@ -186,12 +165,6 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	foster.ImagePremultiply(&image)
 	s.sprite_texture = foster.TextureFromImage(device, &image, "premultiplied sprite frame")
 	world.camera3d_init(&s.camera, 960, 640)
-	assert(ui.ui_init(&s.ctx, 1280, 800))
-	s.theme = config.theme != nil ? config.theme^ : lab_theme()
-	s.theme.body_font_id = u16(ui.ui_register_font(&s.ctx, s.font, config.font_texture, .MSDF))
-	s.heading_theme = s.theme
-	s.small_theme = s.theme
-	if config.theme == nil do s.small_theme.small_font_size = 14
 	s.initialized = true
 	fmt.println("Shader Lab: save .oshader/HLSLI to reload. Sources:", s.source_root)
 	return true
@@ -212,19 +185,15 @@ dispose :: proc(s: ^Session) {
 	foster.MeshDispose(&s.sprite_mesh)
 	for &buf in s.probe_instances do r3d.model_buffer_dispose(&buf)
 	mat.material_library_dispose(&s.library)
-	r2d.dispose(&s.batch)
-	ui.ui_dispose(&s.ctx)
-	r2d.atlas_dispose(&s.owned_icons)
+	imgui_foster.IconsDispose(&s.icons)
 	foster.TextureDispose(&s.texture)
 	foster.TextureDispose(&s.sprite_texture)
 	texture_retire_flush(s)
 	delete(s.retired_textures)
-	foster.TargetDispose(&s.output)
+	delete(s.widgets)
 	delete(s.source_root)
 	delete(s.pending_shader)
 	for &workspace in s.workspaces do workspace_dispose(&workspace)
-	delete(s.scroll_offsets)
-	delete(s.scroll_restores)
 	s^ = {}
 }
 
@@ -257,16 +226,9 @@ update :: proc(s: ^Session, delta_time: f32) {
 	}
 }
 
-// 停用/隐藏面板时也应调用；调色板恢复原值，其他输入捕获清空。
+// 停用/隐藏面板、窗口离焦时调用；工具内按 Escape 也会调用。调色板恢复原值，轨道旋转结束。
 cancel :: proc(s: ^Session) {
 	if !s.initialized do return
 	color_picker_close(s, false)
 	s.orbiting = false
-	if s.splitting do s.sidebar_width = s.splitter_original
-	s.splitting = false
-	s.ctx.active_id = 0
-	s.ctx.focused_id = 0
-	// 取消捕获不伪造鼠标松开，否则按住时下一帧会被当成新的点击。
-	ui.ui_set_modal(&s.ctx, "")
-	s.capture = {}
 }

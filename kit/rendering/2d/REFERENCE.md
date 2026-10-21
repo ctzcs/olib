@@ -49,19 +49,3 @@ submit/reset 后恢复默认，不应靠状态跨帧保留。
 
 作者统一写 OlibSpriteInput / olib_sprite，见 [lang README](../shader/lang/README.md#2d-效果的-hlsl-约定)。
 索引缓冲按容量增长后复用，顶点与实例数值每次 submit 上传，不在图元调用中发 Draw。
-
-## material_draw：Shader Lab 的立即入口
-
-```odin
-err := r2d.material_draw(&renderer, effect, bindings, r2d.Material_Draw2D{
-    frame = frame, transform = foster.Matrix3x2Identity, color = foster.White,
-    view = {target = target}, pass_limit = 0,
-    options = {enabled = enabled, prepare = prepare, submit = submit_callback, user_data = state},
-})
-```
-
-这是工具入口，直接使用 Effect_Desc 和 []Material_Binding，借用 Render2D 的 GPU 资源。
-pass_limit = 0 画全部，正数只取前 N 个；options.pass_id 可限定 Pass。
-prepare 可改命令，submit 回调可接管提交；回调中的实例数值已应用该 Pass 的覆盖。
-它立即执行，不处理或清空已记录图元，混用时调用方先 submit 安排顺序。
-Shader、纹理和绑定由工具管理，必须在绘制期间有效。

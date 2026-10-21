@@ -161,7 +161,7 @@ preview_options :: proc(s: ^Session) {
 			if lab_button(s, id, names[i], s.mode == i) do s.mode = i
 		}
 	}
-	if s.preview_hooks.prepare != nil || s.preview_hooks.draw != nil {
+	if s.preview_hooks.record != nil {
 		if lab_button(s, "preview-host", "使用宿主模型", s.custom_preview) do s.custom_preview = !s.custom_preview
 	}
 	if model3d {

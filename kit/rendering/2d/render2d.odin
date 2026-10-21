@@ -61,11 +61,6 @@ Render2D :: struct {
 	// r2d.buffer 用的单位四边形角点网格，首次使用时创建。
 	corner_mesh: foster.Mesh,
 	corner_ready: bool,
-	// material_draw（Shader Lab 立即绘制）用的单个四边形与实例数值，首次使用时创建。
-	tool_mesh: foster.Mesh,
-	tool_ready: bool,
-	tool_values: foster.StorageBuffer,
-	tool_values_ready: bool,
 }
 
 Render2D_Scissor :: struct {
@@ -126,8 +121,6 @@ dispose :: proc(r: ^Render2D) {
 	delete(r.instance_values)
 	if r.instance_ready do foster.StorageBufferDispose(&r.instance_buffer)
 	if r.corner_ready do foster.MeshDispose(&r.corner_mesh)
-	if r.tool_ready do foster.MeshDispose(&r.tool_mesh)
-	if r.tool_values_ready do foster.StorageBufferDispose(&r.tool_values)
 	if r.library != nil do foster.MeshDispose(&r.mesh)
 	r^ = {}
 }
@@ -455,8 +448,7 @@ buffer :: proc(r: ^Render2D, material: ^mat.Material, buf: ^Sprite_Buffer, count
 	if buf.slots != mat.instance_slot_count(material) do return .Instance_Mismatch
 	if texture == nil || texture.Resource == nil do return .Missing_Sprite_Texture
 	selection: mat.Pass_Selection
-	request := mat.Material_Draw{kind = .Sprite, sprite_texture = texture, options = {pass_id = pass_id}}
-	if error := mat.material_select(effect.desc, material.bindings, request, &selection); error != .None do return error
+	if error := mat.material_select(effect.desc, material.bindings, .Sprite, pass_id, texture, &selection); error != .None do return error
 	if selection.count == 0 do return .None
 	if !render2d_corner_mesh(r) do return .Missing_Device
 	render2d_run_begin(r, material, pass_id, texture, selection, nil)
@@ -539,9 +531,7 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 		}
 	}
 	selection: mat.Pass_Selection
-	request := mat.Material_Draw{kind = .Sprite, sprite_texture = frame_texture,
-		options = {pass_id = pass_id, instance_values = values}}
-	if error := mat.material_select(m.effect.desc, m.bindings, request, &selection); error != .None do return error
+	if error := mat.material_select(m.effect.desc, m.bindings, .Sprite, pass_id, frame_texture, &selection); error != .None do return error
 	if selection.count == 0 do return .None
 	if !render2d_run_matches(r, last, m, pass_id, frame_texture, selection) {
 		render2d_run_begin(r, m, pass_id, frame_texture, selection, values)

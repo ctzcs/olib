@@ -67,10 +67,3 @@ quad :: proc(r: ^r2d.Render2D, texture: ^foster.Texture, rect: foster.Rect) {
 		{(rect.X+rect.Width), (rect.Y+rect.Height)}, {rect.X, (rect.Y+rect.Height)}, {0, 0}, {1, 0}, {1, 1}, {0, 1}, foster.White)
 }
 
-
-// 同一 prepare 路径用于候选管线探测与实际绘制，避免只在内置球体上验证宿主 Shader。
-preview_frame :: proc(s: ^Session, index: int, dimension: string, target: foster.DrawableTarget) -> Preview_Frame {
-	return {device = s.device, target = target, material = &s.materials[index],
-		group = s.parameters[index].name, dimension = dimension,
-		time = s.clock, width = target.WidthInPixels, height = target.HeightInPixels}
-}

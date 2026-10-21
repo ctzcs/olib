@@ -12,22 +12,15 @@ material_pass_selection_preserves_order_and_disabled_flags :: proc(t: ^testing.T
 		{id = "shadow"}, {id = "body"}, {id = "outline", disabled = true},
 	}}
 	indices: [MAX_PASSES]int
-	count, error := material_pass_indices(effect, {}, &indices)
+	count, error := material_pass_indices(effect, "", &indices)
 	testing.expect(t, error == .None && count == 2 && indices[0] == 0 && indices[1] == 1)
-	count, error = material_pass_indices(effect, {options = {pass_id = "body"}}, &indices)
+	count, error = material_pass_indices(effect, "body", &indices)
 	testing.expect(t, error == .None && count == 1 && indices[0] == 1)
-	count, error = material_pass_indices(effect, {options = {pass_id = "missing"}}, &indices)
+	count, error = material_pass_indices(effect, "missing", &indices)
 	testing.expect(t, error == .Unknown_Pass && count == 0)
-	count, error = material_pass_indices(effect, {options = {pass_id = "outline"}}, &indices)
+	// 声明为 disabled 的 Pass 按 ID 选中也不画。
+	count, error = material_pass_indices(effect, "outline", &indices)
 	testing.expect(t, error == .None && count == 0)
-	count, error = material_pass_indices(effect, {
-		options = {pass_id = "outline", enabled = []bool{true, true, true}},
-	}, &indices)
-	testing.expect(t, error == .None && count == 1 && indices[0] == 2)
-	count, error = material_pass_indices(effect, {pass_limit = 1, options = {pass_id = "body"}}, &indices)
-	testing.expect(t, error == .None && count == 0)
-	_, error = material_pass_indices(effect, {options = {enabled = []bool{true}}}, &indices)
-	testing.expect(t, error == .Bad_Pass_Selection)
 }
 
 // 用真实 StorageContainer 内存条目验证文件 -> 效果解析，不创建窗口或伪造 GPU。
@@ -146,7 +139,7 @@ material_from_bindings_borrows_tool_bindings :: proc(t: ^testing.T) {
 	testing.expect_value(t, reason, "")
 	testing.expect(t, material.owner == &library && material.effect == &effect && len(material.bindings) == 1)
 	selection: Pass_Selection
-	testing.expect_value(t, material_select(material.effect.desc, material.bindings, Material_Draw{kind = .Model}, &selection), Draw_Error.None)
+	testing.expect_value(t, material_select(material.effect.desc, material.bindings, .Model, "", nil, &selection), Draw_Error.None)
 	testing.expect_value(t, selection.count, 1) // outline 声明为禁用
 
 	_, missing_device := material_from_bindings(&Material_Library{}, &effect, bindings)

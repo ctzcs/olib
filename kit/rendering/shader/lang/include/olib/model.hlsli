@@ -1,4 +1,4 @@
-// olib 标准引擎块：Draw Model（Render3D、model_material_draw、Shader Lab 3D 预览，也用于 3D 的 Preview_Model）。
+// olib 标准引擎块：Draw Model（Render3D 与 Shader Lab 的 3D 材质预览，也用于 3D 的 Preview_Model）。
 // 宿主每次绘制填写这两个块；字节数与 kit/rendering/3d 的 MATERIAL_VERTEX_BLOCK_SIZE / MATERIAL_FRAME_BLOCK_SIZE
 // 一致，由 tests/kit/rendering/3d 的布局测试检查。用法：#include "olib/model.hlsli"。
 // 矩阵按行向量约定使用：mul(float4(position, 1), Wvp)。

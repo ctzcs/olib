@@ -183,33 +183,20 @@ step :: proc(s: ^Session) {
 	s.step_requested = true
 }
 
+// 非材质效果的绘制命令与热重载的管线探测都用内置几何；最后一个参数是 Pass ID，调用方用它标识探测。
 pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: mat.Pass_Draw,
-	target: foster.DrawableTarget, pass: string, time: f32 = -1, dt: f32 = 0,
-	frame_index: u64 = 0) -> foster.DrawCommand {
+	target: foster.DrawableTarget, _: string = "") -> foster.DrawCommand {
 	preview3d := draw != .Fullscreen && bank.parameters[index].live.preview == "3d"
 	mesh := preview3d ? (s.mode == 3 ? 2 : 1) : 0
 	command: foster.DrawCommand
 	geometry := &s.meshes[mesh]
-	// 材质预览时 Render2D 的工具四边形存着当前精灵；探测管线时只需要同样的顶点格式。
-	if draw == .Sprite do geometry = s.render.tool_ready ? &s.render.tool_mesh : &s.sprite_mesh
+	// 精灵 Pass 只用于管线探测（材质预览走 Render2D），需要的是 BatcherVertex 布局。
+	if draw == .Sprite do geometry = &s.sprite_mesh
 	foster.DrawCommandFromMesh(&command, target, geometry, &bank.materials[index])
 	command.DepthTestEnabled = preview3d
 	command.DepthWriteEnabled = preview3d
 	command.CullMode = preview3d ? .Back : .None
 	if draw != .Preview_Model && draw != .Sprite do command.BlendMode = foster.BlendModeDisabled
-	if draw != .Fullscreen && s.custom_preview && s.preview_hooks.prepare != nil {
-		custom: foster.DrawCommand
-		frame := Preview_Frame{device = s.device, target = target, material = &bank.materials[index],
-			group = bank.parameters[index].name, dimension = bank.parameters[index].live.preview,
-			time = time < 0 ? s.clock : time, width = target.WidthInPixels, height = target.HeightInPixels,
-			pass = pass, delta_time = dt, frame_index = frame_index}
-		if s.preview_hooks.prepare(s.preview_hooks.user_data, frame, &custom) {
-			foster.DrawCommandDispose(&command)
-			command = custom
-		} else {
-			foster.DrawCommandDispose(&custom)
-		}
-	}
 	return command
 }
 
@@ -279,7 +266,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 			continue
 		}
 		drawable := foster.DrawableTargetFromTarget(target)
-		command := pass_command(s, s.bank, index, p.draw, drawable, string(p.id), e.time, dt, e.frame)
+		command := pass_command(s, s.bank, index, p.draw, drawable, string(p.id))
 		mat.pass_state_apply(&command, p.state)
 		pass_uniforms(s, index, p.draw, drawable, e.time, dt, e.frame)
 		parameters_bind(s, index)
@@ -311,16 +298,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 			}
 		}
 		target_clear(s, target, p.target.clear)
-		if p.draw == .Preview_Model && s.custom_preview && s.preview_hooks.draw != nil {
-			frame := preview_frame(s, index, parameter.live.preview, drawable)
-			frame.time = e.time
-			frame.delta_time = dt
-			frame.frame_index = e.frame
-			frame.pass = string(p.id)
-			s.preview_hooks.draw(s.preview_hooks.user_data, frame, &command)
-		} else {
-			foster.GraphicsDeviceDraw(s.device, &command)
-		}
+		foster.GraphicsDeviceDraw(s.device, &command)
 		foster.DrawCommandDispose(&command)
 	}
 	for p, i in e.desc.passes {

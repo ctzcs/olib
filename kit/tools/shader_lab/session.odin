@@ -119,7 +119,7 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	s.paused = config.paused
 	s.file_dialogs = config.file_dialogs
 	s.preview_hooks = config.preview
-	s.custom_preview = config.preview.prepare != nil || config.preview.draw != nil
+	s.custom_preview = config.preview.record != nil
 	for &w, i in s.workspaces {
 		w.mode = i == 1 ? 2 : 0
 		w.paused = s.paused

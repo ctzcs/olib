@@ -158,7 +158,7 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 	if slots < 0 || slots > mat.MAX_INSTANCE_FIELDS do return .Instance_Mismatch
 	if flat != nil && len(flat) != len(items) * slots do return .Instance_Mismatch
 	selection: mat.Pass_Selection
-	if error := mat.material_select(m.effect.desc, m.bindings, {kind = .Model}, &selection);
+	if error := mat.material_select(m.effect.desc, m.bindings, .Model, "", nil, &selection);
 		error != .None do return error
 	if len(items) == 0 do return .None
 	uniforms: [mat.MAX_PASSES][]u8
@@ -197,7 +197,7 @@ buffer :: proc(r: ^Render3D, mesh: ^foster.Mesh, material: ^mat.Material,
 	if buf.buffer.Base.GraphicsDevice != r.library.device do return .Device_Mismatch
 	if buf.slots != mat.instance_slot_count(material) || count < 0 || count > buf.capacity do return .Instance_Mismatch
 	selection: mat.Pass_Selection
-	if error := mat.material_select(material.effect.desc, material.bindings, {kind = .Model}, &selection);
+	if error := mat.material_select(material.effect.desc, material.bindings, .Model, "", nil, &selection);
 		error != .None do return error
 	if count == 0 do return .None
 	uniforms: [mat.MAX_PASSES][]u8

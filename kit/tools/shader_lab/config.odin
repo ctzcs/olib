@@ -3,6 +3,8 @@ package shader_lab
 // 宿主负责窗口、输入路由和 MSDF 资产；工具只持有独立的预览会话。
 import foster "olib:foster"
 import r2d "olib:kit/rendering/2d"
+import r3d "olib:kit/rendering/3d"
+import mat "olib:kit/rendering/material"
 import ui "olib:kit/ui"
 
 Config :: struct {
@@ -33,22 +35,20 @@ Input :: struct {
 	dropped_files: []string,
 }
 
+// 自定义预览的这一次绘制：要画的 Pass、它的参数组与预览维度、时间和目标尺寸。
 Preview_Frame :: struct {
-	device: ^foster.GraphicsDevice,
-	target: foster.DrawableTarget,
-	material: ^foster.Material,
+	pass: string, // 本次要画的 Pass ID；2D 记录时作为 pass_id 传入
 	group, dimension: string,
-	time: f32,
-	width, height: int,
-	pass: string, // 显式声明的 Pass ID；未被 Pass 引用的组不执行 GPU 管线探测。
-	delta_time: f32,
+	time, delta_time: f32,
 	frame_index: u64,
+	width, height: int,
 }
 
 Preview_Hooks :: struct {
 	user_data: rawptr,
-	// 填写实际绘制命令，同时用于热重载管线探测；false 使用内置模型。
-	prepare: proc(user_data: rawptr, frame: Preview_Frame, command: ^foster.DrawCommand) -> bool,
-	// 可覆盖 b0 等宿主输入后绘制；须使用 prepare 声明的管线配置。
-	draw: proc(user_data: rawptr, frame: Preview_Frame, command: ^foster.DrawCommand),
+	// 材质效果的自定义预览：用游戏同一套 API 记录要画的东西，Shader Lab 负责提交。对每个要画的 Pass 调用一次；
+	// 2D 记录时把 frame.pass 作为 pass_id 传入，3D 只管记录（Shader Lab 按该 Pass 提交）。sprites / models
+	// 按效果维度只给一个，另一个为 nil。返回 false 使用内置几何。非材质效果（Fullscreen、Preview_Model）总用内置几何。
+	record: proc(user_data: rawptr, frame: Preview_Frame, material: ^mat.Material,
+		sprites: ^r2d.Render2D, models: ^r3d.Render3D) -> bool,
 }

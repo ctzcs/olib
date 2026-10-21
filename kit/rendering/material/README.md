@@ -17,7 +17,7 @@ GPU 资源使用 Foster，解析、编解码与布局函数不需要创建窗口
 | `material_library.odin` | `Material_Library`：登记 Effect、惰性创建 Shader、贴图缓存 |
 | `shader_code.odin` | `Shader_Binaries / Pass_Binaries`、`shader_pick`、`material_register_directory / material_register_manifest`：按驱动选字节码并登记效果 |
 | `material.odin` | `Material`：`material_load / reload / set_number / set_texture` |
-| `draw.odin` | `Material_Binding / Draw_Options / Draw_Error / material_draw`：选取 Pass、上传参数、提交 DrawCommand |
+| `draw.odin` | `Material_Binding / Draw_Error / material_select / pass_state_apply`：Render2D / Render3D 共用的 Pass 选择、绑定检查、参数打包与 Pass 状态 |
 
 包含关系（名字里的 Material 容易混，按这张图读）：
 
@@ -30,10 +30,9 @@ Material_Library ─┬─ Material_Effect ─ Effect_Desc（Pass 列表）+ []S
 ```
 
 2D 的 `r2d.image/texture` 记录几何与材质快照，`r2d.submit` 按连续兼容记录逐 Pass 绘制。
-3D 的 `Render3D` 记录快照，submit 按视图剔除、排序与实例化；工具的 `r2d.material_draw` 和
-`r3d.model_material_draw` 仍使用立即 Pass 执行器。Render2D 提交后清空，Render3D 保留到显式 clear。
-`Draw_Options { enabled, pass_id, instance_values, user_data, prepare, submit }` 保留工具所需的
-选择、参数覆盖与回调；业务只需 `pass_id` 和 `values`。
+3D 的 `Render3D` 记录快照，submit 按视图剔除、排序与实例化。Render2D 提交后清空，Render3D 保留到显式 clear。
+Shader Lab 的材质预览也走这两个渲染器：`material_from_bindings` 用工具自己持有的效果与 GPU 绑定组成 `Material`
+（不登记、不拥有资源），之后与游戏的材质一样记录、提交。
 
 ## 每个实例的值：槽位与句柄
 
@@ -186,9 +185,9 @@ Web 只接受 Foster uniform 布局（矩阵与一个片元 float），Olib Cloc
 ## 渲染器与工具接入
 
 `material_library.odin` 提供 `Material_Library`，`material.odin` 提供 `Material` 和游戏材质加载入口。
-`draw.odin` 提供 `Material_Binding`、`Material_Draw`、`Draw_Options`、`material_draw` 和 `pass_state_apply`，
-负责选取 Pass、验证绑定、上传参数、绑定纹理、应用状态并提交 DrawCommand。
-2D/3D 绘制入口与 Shader Lab 复用相同的 Pass 选择、数值覆盖与状态规则；业务通常从 `r2d.image` 或 `r3d.model` 接入。
+`draw.odin` 提供 `Material_Binding`、`material_select`、`material_pass_values` 和 `pass_state_apply`：
+Render2D / Render3D 记录时用它们选取 Pass、检查绑定、打包参数并应用 Pass 状态；Shader Lab 通过这两个渲染器预览，
+规则与游戏完全相同。业务从 `r2d.image` 或 `r3d.model` 接入。
 所有绘制入口返回 `Draw_Error`，`.None` 表示成功，`draw_error_text(error)` 得到可读文本。
 Render2D 记录成功不代表已提交；被禁用的 Pass 不记录。
 
@@ -294,7 +293,7 @@ passes := []mat.Pass_Desc{
 参数值，**不打包 Shader 或 Pass 定义**；运行时资源表必须能把这个名字解析为随游戏发布的同一份定义。
 多个 Pass 引用相同参数组时共用该组数值，可用 Pass.values 固定区分。
 
-GPU 执行见 [rendering3d 的 model_material_draw](../3d/REFERENCE.md#model_material_drawshader-lab-的底层入口)。完整实例见
+GPU 执行见 [Render3D](../3d/README.md)。完整实例见
 `olib_sample/src/material3d`，Shader/参数的唯一来源是 `olib_sample/src/shader_lab`。
 游戏业务默认使用 [Material_Library](README.md#公共材质资源)：
 `material_load` 自动解析效果并加载 Shader/纹理，之后直接传给 `r3d.model`。

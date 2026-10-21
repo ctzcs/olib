@@ -16,80 +16,26 @@ model_effect :: proc() -> Effect_Desc {
 	return {name = "E", output = "color", passes = passes}
 }
 
+// 选择阶段：未知 ID、Pass 过多；绑定阶段：种类不符、缺绑定、绑定不完整。
 @(test)
-material_draw_reports_why_it_refused :: proc(t: ^testing.T) {
-	device: foster.GraphicsDevice
-	mesh: foster.Mesh
+material_select_reports_why_it_refused :: proc(t: ^testing.T) {
 	effect := model_effect()
-	draw := Material_Draw{mesh = &mesh, kind = .Model}
-
-	testing.expect_value(t, material_draw(nil, effect, nil, draw), Draw_Error.Missing_Device)
-	testing.expect_value(t, material_draw(&device, effect, nil, Material_Draw{kind = .Model}), Draw_Error.Missing_Mesh)
-	fullscreen := effect
-	fullscreen.passes = []Pass_Desc{{id = "a", params = "Body", draw = .Fullscreen, output = "color"}}
-	testing.expect_value(t, material_draw(&device, fullscreen, nil, draw), Draw_Error.Not_Material_Effect)
-
-	// 选择阶段：未知 ID、enabled 太短、没有 Pass。
-	draw.options.pass_id = "ghost"
-	testing.expect_value(t, material_draw(&device, effect, nil, draw), Draw_Error.Unknown_Pass)
-	draw.options = {enabled = []bool{true}}
-	testing.expect_value(t, material_draw(&device, effect, nil, draw), Draw_Error.Bad_Pass_Selection)
-	draw.options = {}
+	selection: Pass_Selection
+	testing.expect_value(t, material_select(effect, nil, .Model, "ghost", nil, &selection), Draw_Error.Unknown_Pass)
 	crowded := effect
 	crowded.passes = make([]Pass_Desc, MAX_PASSES+1, context.temp_allocator)
 	for &pass in crowded.passes do pass = {id = "p", params = "Body", draw = .Model, output = "color"}
-	testing.expect_value(t, material_draw(&device, crowded, nil, draw), Draw_Error.Too_Many_Passes)
-
-	// 绑定阶段：种类不符、缺绑定、绑定不完整。
-	sprite := draw
-	sprite.kind = .Sprite
-	testing.expect_value(t, material_draw(&device, effect, nil, sprite), Draw_Error.Wrong_Pass_Kind)
-	testing.expect_value(t, material_draw(&device, effect, nil, draw), Draw_Error.Missing_Binding)
+	testing.expect_value(t, material_select(crowded, nil, .Model, "", nil, &selection), Draw_Error.Too_Many_Passes)
+	testing.expect_value(t, material_select(effect, nil, .Sprite, "", nil, &selection), Draw_Error.Wrong_Pass_Kind)
+	testing.expect_value(t, material_select(effect, nil, .Model, "", nil, &selection), Draw_Error.Missing_Binding)
 	broken := []Material_Binding{{schema = {name = "Body"}}}
-	testing.expect_value(t, material_draw(&device, effect, broken, draw), Draw_Error.Invalid_Binding)
+	testing.expect_value(t, material_select(effect, broken, .Model, "", nil, &selection), Draw_Error.Invalid_Binding)
+	// outline 被声明禁用：按 ID 选中它成功，但不选出任何 Pass，也不需要绑定。
+	testing.expect_value(t, material_select(effect, nil, .Model, "outline", nil, &selection), Draw_Error.None)
+	testing.expect_value(t, selection.count, 0)
 }
 
-@(test)
-material_draw_checks_instance_buffer_rules :: proc(t: ^testing.T) {
-	device: foster.GraphicsDevice
-	mesh: foster.Mesh
-	buffer: foster.VertexBuffer
-	schema := Schema{name = "Body", preview = "3d", fields = {{id = "hue", name = "hue", kind = .Scalar, maximum = 1, instance = true}}}
-	passes := []Pass_Desc{{id = "body", params = "Body", draw = .Model, output = "color"}}
-	instanced := Effect_Desc{name = "E", output = "color", passes = passes, instanced = true}
-	plain := Effect_Desc{name = "E", output = "color", passes = passes}
-	bindings := []Material_Binding{{schema = schema}}
-	draw := Material_Draw{mesh = &mesh, kind = .Model}
-	// instanced 模型效果必须带实例缓冲。
-	testing.expect_value(t, material_draw(&device, instanced, bindings, draw), Draw_Error.Instance_Buffer_Required)
-	// 普通效果不能带实例缓冲；缓冲字段数必须与 Schema 一致。
-	draw.instance_buffer, draw.instance_count, draw.instance_slots = &buffer, 10, 1
-	testing.expect_value(t, material_draw(&device, plain, bindings, draw), Draw_Error.Not_Instanced_Effect)
-	draw.instance_slots = 0
-	testing.expect_value(t, material_draw(&device, instanced, bindings, draw), Draw_Error.Instance_Mismatch)
-	// 字段数一致后才进入绑定检查（这里没有可用 Shader）。
-	draw.instance_slots = 1
-	testing.expect_value(t, material_draw(&device, instanced, bindings, draw), Draw_Error.Invalid_Binding)
-	// 精灵 instanced 效果既可用实例缓冲（缓冲变体），也可以逐个绘制（批量变体），不再要求缓冲。
-	draw.kind = .Sprite
-	sprite := instanced
-	sprite.passes = []Pass_Desc{{id = "body", params = "Body", draw = .Sprite, output = "color"}}
-	testing.expect_value(t, material_draw(&device, sprite, bindings, draw), Draw_Error.Invalid_Binding)
-	draw.instance_buffer = nil
-	testing.expect_value(t, material_draw(&device, sprite, bindings, draw), Draw_Error.Invalid_Binding)
-}
-
-@(test)
-material_draw_treats_all_disabled_passes_as_success :: proc(t: ^testing.T) {
-	device: foster.GraphicsDevice
-	mesh: foster.Mesh
-	effect := model_effect()
-	// outline 被声明禁用：显式选择它成功但不提交任何 Draw，也不需要绑定。
-	draw := Material_Draw{mesh = &mesh, kind = .Model, options = {pass_id = "outline"}}
-	testing.expect_value(t, material_draw(&device, effect, nil, draw), Draw_Error.None)
-}
-
-// 视图块整块补零，超长在选择 Pass 之前拒绝；Model 比 Sprite 多出顶点 b1 / 片元 b2 两个槽。
+// 视图块整块补零，超长拒绝且不改动；Model 比 Sprite 多出顶点 b1 / 片元 b2 两个槽。
 @(test)
 view_globals_padding_and_slot_counts :: proc(t: ^testing.T) {
 	block: [VIEW_GLOBALS_SIZE]u8
@@ -99,11 +45,6 @@ view_globals_padding_and_slot_counts :: proc(t: ^testing.T) {
 	too_long := make([]u8, VIEW_GLOBALS_SIZE + 16, context.temp_allocator)
 	testing.expect(t, !view_globals_pack(&block, too_long))
 	testing.expect_value(t, block[0], u8(1)) // 失败不改 block
-
-	device: foster.GraphicsDevice
-	mesh: foster.Mesh
-	draw := Material_Draw{mesh = &mesh, kind = .Model, view_globals = too_long}
-	testing.expect_value(t, material_draw(&device, model_effect(), nil, draw), Draw_Error.View_Globals_Too_Large)
 
 	vertex, fragment := material_uniform_counts(model_effect())
 	testing.expect(t, vertex == 2 && fragment == 3)

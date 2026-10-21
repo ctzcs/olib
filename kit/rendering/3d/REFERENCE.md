@@ -194,31 +194,9 @@ foster.TargetInit(&scene, device, w, h, attachments[:], "scene color + depth")
 - **`mat.shader_pick` 没有 msl 时 Metal 拿到空字节码**，`foster.ShaderInit` 会越界崩溃；要支持 Mac 就三种都传。
 - **Web 不适用**：Web 后端是 WebGL + 手写 GLSL ES（命名 uniform，不用 UBO），shadercross 不输出 GLSL。
 
-## model_material_draw：Shader Lab 的底层入口
+## 范围
 
-这是独立的立即绘制工具入口。Shader Lab 用自己管理的 GPU 资源（`mat.Material_Binding`）预览效果，直接调用：
-
-```odin
-// 每组一个绑定；samplers 按 Schema 中 Texture 字段顺序，空路径也要绑定默认纹理。
-bindings := []mat.Material_Binding{
-	{instance.groups[0].schema, instance.groups[0].values, &surface_gpu, surface_samplers},
-	{instance.groups[1].schema, instance.groups[1].values, &outline_gpu, outline_samplers},
-}
-err := r3d.model_material_draw(device, effect, bindings, {
-	mesh = &preview_mesh, world_matrix = transform,
-	view = {target = scene_target, view_projection = camera_view_projection, time = elapsed},
-	pointer = pointer, pass_limit = preview_pass + 1, // 预览专用：Pointer.xy 与只画前 N 个 Pass
-})
-```
-
-- 把一个静态网格的所有 `.Model` Pass 依次画到同一个外部颜色/深度目标；`options.pass_id` 非空时只画该 Pass。
-  先用 `mat.effect_order` 或 `mat.instance_make` 校验定义；执行器借用资源，不加载文件、不清屏、不决定场景排序。
-- 每次提交重新绑定数值、纹理和 Pass 覆盖，不同实例可顺序复用同一批 `foster.Material`。调用期间所有指针保持有效，
-  Shader/Material 地址不能在初始化后因容器扩容而移动。
-- `options`（`mat.Draw_Options`）里空 `enabled` 使用声明值；预览用 prepare/submit 回调扩展网格和绘制，显式 `Pass.state`
-  在 prepare 后应用，Shader Lab 的候选管线探测也使用相同状态。
-- 须提供有效世界矩阵和 VP，不能把零矩阵当单位阵。instanced 效果传 `instances` / `instance_count`，此时 `world_matrix` 被忽略。
-
-工具入口不负责场景排序；业务的剔除与排序由 Render3D 提供。库不提供蒙皮材质、自动阴影调度或逐模型后处理。示例描边沿顶点法线外扩，
+Shader Lab 的材质预览也走 Render3D（借用自己的 GPU 绑定，见 `mat.material_from_bindings`），与游戏同一套剔除、排序与状态规则。
+库不提供蒙皮材质、自动阴影调度或逐模型后处理。示例描边沿顶点法线外扩，
 宽度是 HLSL 常量，颜色属于材质参数；硬边/非均匀缩放的法线和描边策略由 Shader 作者处理。
 发布游戏使用预编译 Shader，不 import Shader Lab 或 shader/dev。

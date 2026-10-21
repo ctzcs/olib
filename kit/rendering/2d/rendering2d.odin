@@ -6,7 +6,6 @@
 //   atlas_kenney.odin   Kenney/Starling XML 坐标来源
 //   atlas_aseprite.odin .aseprite 目录 -> 单张图集的构建器（打包侧）
 //   render2d.odin       Render2D：2D 唯一的绘制入口（记录后统一提交，olib 材质，含 UI）
-//   render2d_tool.odin  Shader Lab 的立即绘制入口 material_draw
 //   sprite_buffer.odin  常驻显存的精灵实例缓冲（r2d.buffer 绘制）
 //   animation_set.odin  帧动画集合（图集子图 + 时长 + 命名动画）
 //

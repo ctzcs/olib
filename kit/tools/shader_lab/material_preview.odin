@@ -46,6 +46,9 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 	pointer := [2]f32{(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height}
 	limit := s.preview_pass >= 0 ? min(s.preview_pass+1, len(e.desc.passes)) : len(e.desc.passes)
 	sprite := mat.effect_is_sprite(e.desc)
+	custom := s.custom_preview && s.preview_hooks.record != nil
+	frame := Preview_Frame{dimension = sprite ? "2d" : "3d", time = e.time, delta_time = e.last_delta,
+		frame_index = e.frame, width = target.Width, height = target.Height}
 	draw_error: mat.Draw_Error
 	if sprite {
 		texture := preview_sprite_texture(s, e)
@@ -56,9 +59,12 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 			if !e.enabled[i] do continue
 			// 精灵帧按该 Pass 帧字段声明的采样方式取样。
 			r2d.push_sampler(&s.preview_sprites, preview_frame_sampler(s, pass))
-			draw_error = r2d.image(&s.preview_sprites, foster.SubtextureFromTexture(texture),
-				{scale, 0, 0, scale, f32(target.Width)/2, f32(target.Height)/2},
-				origin = {f32(texture.Width)/2, f32(texture.Height)/2}, material = &material, pass_id = pass.id)
+			frame.pass, frame.group = string(pass.id), string(pass.params)
+			if !custom || !s.preview_hooks.record(s.preview_hooks.user_data, frame, &material, &s.preview_sprites, nil) {
+				draw_error = r2d.image(&s.preview_sprites, foster.SubtextureFromTexture(texture),
+					{scale, 0, 0, scale, f32(target.Width)/2, f32(target.Height)/2},
+					origin = {f32(texture.Width)/2, f32(texture.Height)/2}, material = &material, pass_id = pass.id)
+			}
 			if draw_error == .None do draw_error = r2d.submit(&s.preview_sprites, view)
 			if draw_error != .None do break
 		}
@@ -69,12 +75,15 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 		view := r3d.View{target = drawable, view_projection = world.camera3d_view_projection(&s.camera),
 			view_matrix = world.camera3d_view(&s.camera), draw_debug = false,
 			time = e.time, delta_time = e.last_delta, frame = e.frame}
-		r3d.clear(&s.preview_models)
-		draw_error = r3d.model(&s.preview_models, &s.meshes[s.mode == 3 ? 2 : 1], &material, world.MATRIX4_IDENTITY)
 		for pass, i in e.desc.passes[:limit] {
-			if draw_error != .None do break
 			if !e.enabled[i] do continue
-			draw_error = r3d.submit(&s.preview_models, view, pass.id)
+			r3d.clear(&s.preview_models)
+			frame.pass, frame.group = string(pass.id), string(pass.params)
+			if !custom || !s.preview_hooks.record(s.preview_hooks.user_data, frame, &material, nil, &s.preview_models) {
+				draw_error = r3d.model(&s.preview_models, &s.meshes[s.mode == 3 ? 2 : 1], &material, world.MATRIX4_IDENTITY)
+			}
+			if draw_error == .None do draw_error = r3d.submit(&s.preview_models, view, pass.id)
+			if draw_error != .None do break
 		}
 		r3d.clear(&s.preview_models) // 记录借用本帧组装的材质，不留到下一帧
 	}

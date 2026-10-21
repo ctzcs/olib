@@ -111,30 +111,23 @@ GPU 纹理、默认值和预设的直接 API 均须在主线程调用。
 
 ## 宿主自定义预览
 
-通过 `Config.preview` 设置 `Preview_Hooks{user_data, prepare, draw}`。
-`prepare` 接收当前组名、2d/3d、目标尺寸、材质和预览目标，填写零初始化的 `DrawCommand`：
+通过 `Config.preview` 设置 `Preview_Hooks{user_data, record}`。材质效果（`.Model`、`.Sprite`）的预览由宿主用
+游戏同一套 API 记录要画的东西，Shader Lab 负责提交到预览目标：
 
 ```odin
-prepare_preview :: proc(data: rawptr, frame: lab.Preview_Frame, command: ^foster.DrawCommand) -> bool {
+record_preview :: proc(data: rawptr, frame: lab.Preview_Frame, material: ^mat.Material,
+    sprites: ^r2d.Render2D, models: ^r3d.Render3D) -> bool {
     host := cast(^Editor)data
-    if frame.dimension != "3d" do return false // 使用内置预览。
-    foster.DrawCommandFromMesh(command, frame.target, &host.preview_mesh, frame.material)
-    command.DepthTestEnabled = true
-    command.DepthWriteEnabled = true
-    command.CullMode = .Back
-    return true
+    if models == nil do return false // 2D 效果使用内置预览
+    return r3d.model(models, &host.preview_mesh, material, host.preview_transform) == .None
 }
 ```
 
-同一 prepare 会用于热重载候选管线检查与实际绘制，因此它应只描述命令，不产生游戏状态副作用。
-返回 true 后工具接管命令内部临时分配并释放；宿主仍拥有模型和 `user_data`，必须活到工具停止使用。
-省略 `draw` 时工具直接绘制该命令；需要自定义相机或时间输入时，可在 draw 回调覆盖 b0，再调用
-`GraphicsDeviceDraw(frame.device, command)`。回调使用 prepare 描述的管线配置，不清空宿主目标。
-生成参数仍由工具绑定到片段 b1，Shader 入口/资源布局遵循当前 Shader Lab 协议。
-回调作用于效果中的 `.Preview_Model`、`.Model` 和 `.Sprite` Pass；`.Fullscreen` 使用内置全屏网格。
-对象材质的显式 `state` 在 prepare 后应用，候选管线探测和实际绘制遵循相同规则。
-`Preview_Frame.pass` 为声明的 Pass ID，尺寸是该 Pass 的实际目标尺寸；
-实际绘制回调还提供效果时间、delta_time 和 frame_index。顶部 Host 按钮可切换内置/宿主模型。
+回调对每个要画的 Pass 调用一次；2D 记录时把 `frame.pass` 作为 `pass_id` 传入，3D 只管记录，Shader Lab 按该 Pass 提交。
+`sprites` / `models` 按效果维度只给一个，返回 false 使用内置几何。材质借用到本次回调结束，宿主仍拥有网格和 `user_data`。
+`Preview_Frame` 提供 Pass ID、参数组、维度、效果时间与目标尺寸。非材质效果（`.Fullscreen`、`.Preview_Model`）
+总用内置几何；热重载的管线探测也只用内置几何，宿主几何须是渲染器支持的同一顶点格式。
+顶部按钮可切换内置/宿主预览。
 
 ## 多 Pass 与历史帧
 
@@ -159,7 +152,7 @@ Properties 声明是所有 Pass 的模板，值按各 Pass 分别保存。单 Pa
 
 `olib_sample` 的 `Outlined.oshader` 使用两个 `.Model` Pass：本体背面剔除并写深度，描边
 外扩顶点、正面剔除、只读深度。二者必须使用同一个 output 和 target 描述，不接受图目标输入。
-预览调用 `rendering3d.model_material_draw`；游戏里的 `material3d` 示例使用 `Render3D.model/models` 记录，再 `submit`。
+预览与游戏的 `material3d` 示例一样用 `Render3D.model` 记录，再按 Pass `submit`。
 这里的“当前 Pass”显示从首个 Pass 累积绘制到选中 Pass 的结果，关闭某 Pass 只跳过绘制，
 不会清除其他 Pass 的颜色/深度。旧图像效果仍保留独立目标、输入拓扑和历史帧机制。
 
@@ -253,7 +246,7 @@ UI 始终在全部 Pass 完成后按最终像素绘制，不进入模糊/反馈�
 ### 精灵材质 / 阴影 + 本体
 
 `olib_sample` 的 `SpriteShadow.oshader` 使用 `.Sprite`：偏移阴影 + 本体。2D 工作区可选择该效果，
-预览直接调用 `r2d.material_draw`（[工具接口](../../rendering/2d/REFERENCE.md#material_drawshader-lab-的立即入口)），游戏示例在 `src/material2d`。
+预览与游戏一样用 `r2d.image` 记录后 `submit`，游戏示例在 `src/material2d`。
 `.Sprite` 和旧 `.Preview_Model` 的顶点 uniform 接口不同；不能只改 draw 类型而沿用旧 Shader。
 整材质保存/载入同时适用于 Model 和 Sprite，按 Effect 名匹配，失败保留整个旧材质。
 Shader 接口与业务接入见 [kit/rendering/2d](../../rendering/2d/README.md)。

@@ -9,35 +9,23 @@ import r3d "olib:kit/rendering/3d"
 import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
 
-Material_Preview :: struct { session: ^Session, effect: ^Effect_Runtime }
-
-material_preview_prepare :: proc(data: rawptr, pass: int, command: ^foster.DrawCommand, _: ^mat.Instance_Values) {
-	host := cast(^Material_Preview)data
-	s, e := host.session, host.effect
-	p := e.desc.passes[pass]
-	foster.DrawCommandDispose(command)
-	command^ = pass_command(s, s.bank, bank_index(s.bank, string(p.params)), p.draw,
-		foster.DrawableTargetFromTarget(&e.targets[0].buffers[0]), string(p.id), e.time, e.last_delta, e.frame)
-}
-
-material_preview_submit :: proc(data: rawptr, pass: int, command: ^foster.DrawCommand, _: ^mat.Instance_Values) {
-	host := cast(^Material_Preview)data
-	s, e := host.session, host.effect
-	if s.custom_preview && s.preview_hooks.draw != nil {
-		p := e.desc.passes[pass]
-		frame := preview_frame(s, bank_index(s.bank, string(p.params)), mat.effect_is_sprite(e.desc) ? "2d" : "3d", foster.DrawableTargetFromTarget(&e.targets[0].buffers[0]))
-		frame.pass, frame.time, frame.delta_time, frame.frame_index = string(p.id), e.time, e.last_delta, e.frame
-		s.preview_hooks.draw(s.preview_hooks.user_data, frame, command)
-	} else {
-		foster.GraphicsDeviceDraw(s.device, command)
-	}
-}
-
+// 材质效果的预览：借用 bank 的 GPU 绑定组成材质，用 Render2D / Render3D 记录后提交到预览目标，
+// 渲染状态与游戏一致。Pass 启停与“只预览到第 N 个 Pass”在这里逐 Pass 处理。
 material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 	target := &e.targets[0].buffers[0]
 	target_clear(s, target, e.desc.passes[0].target.clear)
-	bindings := make([]mat.Material_Binding, s.shader_count, context.temp_allocator)
-	for &p, i in s.parameters[:s.shader_count] {
+	// 每帧组装：编辑或载入参数时，数值切片会被替换。绑定按 Pass 首次引用参数组的顺序排列。
+	groups := make([dynamic]int, context.temp_allocator)
+	for pass in e.desc.passes {
+		index := bank_index(s.bank, string(pass.params))
+		known := index < 0
+		for g in groups do known = known || g == index
+		if !known do append(&groups, index)
+	}
+	schemas := make([]mat.Schema, len(groups), context.temp_allocator)
+	bindings := make([]mat.Material_Binding, len(groups), context.temp_allocator)
+	for index, i in groups {
+		p := &s.parameters[index]
 		samplers := make([]foster.BoundSampler, mat.texture_count(p.live), context.temp_allocator)
 		j := 0
 		for field in p.live.fields {
@@ -45,54 +33,84 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 			samplers[j] = {p.textures[j].Resource != nil ? &p.textures[j] : &s.texture, mat.field_sampler(field)}
 			j += 1
 		}
-		bindings[i] = {p.live, p.values, &s.materials[i], samplers}
+		schemas[i] = p.live
+		bindings[i] = {p.live, p.values, &s.materials[index], samplers}
 	}
-	host := Material_Preview{s, e}
-	if mat.effect_is_sprite(e.desc) {
-		texture := &s.sprite_texture
-		// 被检查 Pass 的帧字段可选预览图片；业务运行时该字段由 Sprite 当前帧覆盖。
-		for pass, i in e.desc.passes {
-			if i != s.inspect_pass || pass.sprite_texture == "" do continue
-			parameter := &s.parameters[bank_index(s.bank, string(pass.params))]
-			slot := 0
-			for field in parameter.live.fields {
-				if field.kind != .Texture do continue
-				if field.id == string(pass.sprite_texture) && parameter.textures[slot].Resource != nil {
-					texture = &parameter.textures[slot]
-				}
-				slot += 1
-			}
-		}
-		size := f32(min(target.Width, target.Height))*0.7
-		scale := size/f32(max(texture.Width, texture.Height))
-		draw_error := r2d.material_draw(&s.render, e.desc, bindings, {
-			frame = foster.SubtextureFromTexture(texture),
-			origin = {f32(texture.Width)/2, f32(texture.Height)/2},
-			transform = {scale, 0, 0, scale, f32(target.Width)/2, f32(target.Height)/2},
-			view = {target = foster.DrawableTargetFromTarget(target), time = e.time,
-				delta_time = e.last_delta, frame = e.frame,
-				pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height}},
-			color = foster.White, pass_limit = s.preview_pass+1,
-			options = {enabled = e.enabled[:len(e.desc.passes)],
-				user_data = &host, prepare = material_preview_prepare, submit = material_preview_submit},
-		})
-		if draw_error != .None do bank_error(s, fmt.tprintf("Cannot bind sprite material: %s", mat.draw_error_text(draw_error)))
+	effect := mat.Material_Effect{desc = e.desc, schemas = schemas}
+	material, reason := mat.material_from_bindings(&s.library, &effect, bindings)
+	if reason != "" {
+		bank_error(s, fmt.tprintf("Cannot bind material: %s", reason))
 		return foster.TargetAttachment(target)
 	}
-	world.camera3d_set_viewport(&s.camera, target.Width, target.Height)
-	world.camera3d_set_position(&s.camera, {math.sin(s.yaw)*math.cos(s.pitch)*s.distance,
-		math.sin(s.pitch)*s.distance, math.cos(s.yaw)*math.cos(s.pitch)*s.distance})
-	draw_error := r3d.model_material_draw(s.device, e.desc, bindings, {
-		mesh = &s.meshes[s.mode == 3 ? 2 : 1], world_matrix = world.MATRIX4_IDENTITY,
-		view = {target = foster.DrawableTargetFromTarget(target), view_projection = world.camera3d_view_projection(&s.camera),
-			view_matrix = world.camera3d_view(&s.camera), time = e.time, delta_time = e.last_delta, frame = e.frame},
-		pointer = {(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height},
-		pass_limit = s.preview_pass+1,
-		options = {enabled = e.enabled[:len(e.desc.passes)],
-			user_data = &host, prepare = material_preview_prepare, submit = material_preview_submit},
-	})
-	if draw_error != .None do bank_error(s, fmt.tprintf("Cannot bind model material: %s", mat.draw_error_text(draw_error)))
+	drawable := foster.DrawableTargetFromTarget(target)
+	pointer := [2]f32{(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height}
+	limit := s.preview_pass >= 0 ? min(s.preview_pass+1, len(e.desc.passes)) : len(e.desc.passes)
+	sprite := mat.effect_is_sprite(e.desc)
+	draw_error: mat.Draw_Error
+	if sprite {
+		texture := preview_sprite_texture(s, e)
+		size := f32(min(target.Width, target.Height))*0.7
+		scale := size/f32(max(texture.Width, texture.Height))
+		view := r2d.View{target = drawable, time = e.time, delta_time = e.last_delta, frame = e.frame, pointer = pointer}
+		for pass, i in e.desc.passes[:limit] {
+			if !e.enabled[i] do continue
+			// 精灵帧按该 Pass 帧字段声明的采样方式取样。
+			r2d.push_sampler(&s.preview_sprites, preview_frame_sampler(s, pass))
+			draw_error = r2d.image(&s.preview_sprites, foster.SubtextureFromTexture(texture),
+				{scale, 0, 0, scale, f32(target.Width)/2, f32(target.Height)/2},
+				origin = {f32(texture.Width)/2, f32(texture.Height)/2}, material = &material, pass_id = pass.id)
+			if draw_error == .None do draw_error = r2d.submit(&s.preview_sprites, view)
+			if draw_error != .None do break
+		}
+	} else {
+		world.camera3d_set_viewport(&s.camera, target.Width, target.Height)
+		world.camera3d_set_position(&s.camera, {math.sin(s.yaw)*math.cos(s.pitch)*s.distance,
+			math.sin(s.pitch)*s.distance, math.cos(s.yaw)*math.cos(s.pitch)*s.distance})
+		view := r3d.View{target = drawable, view_projection = world.camera3d_view_projection(&s.camera),
+			view_matrix = world.camera3d_view(&s.camera), draw_debug = false,
+			time = e.time, delta_time = e.last_delta, frame = e.frame}
+		r3d.clear(&s.preview_models)
+		draw_error = r3d.model(&s.preview_models, &s.meshes[s.mode == 3 ? 2 : 1], &material, world.MATRIX4_IDENTITY)
+		for pass, i in e.desc.passes[:limit] {
+			if draw_error != .None do break
+			if !e.enabled[i] do continue
+			draw_error = r3d.submit(&s.preview_models, view, pass.id)
+		}
+		r3d.clear(&s.preview_models) // 记录借用本帧组装的材质，不留到下一帧
+	}
+	if draw_error != .None {
+		bank_error(s, fmt.tprintf("Cannot draw %s material: %s", sprite ? "sprite" : "model", mat.draw_error_text(draw_error)))
+	}
 	return foster.TargetAttachment(target)
+}
+
+// 被检查 Pass 的帧字段可选预览图片；业务运行时该字段由 Sprite 当前帧覆盖。
+@(private = "file")
+preview_sprite_texture :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
+	texture := &s.sprite_texture
+	for pass, i in e.desc.passes {
+		if i != s.inspect_pass || pass.sprite_texture == "" do continue
+		parameter := &s.parameters[bank_index(s.bank, string(pass.params))]
+		slot := 0
+		for field in parameter.live.fields {
+			if field.kind != .Texture do continue
+			if field.id == string(pass.sprite_texture) && parameter.textures[slot].Resource != nil {
+				texture = &parameter.textures[slot]
+			}
+			slot += 1
+		}
+	}
+	return texture
+}
+
+@(private = "file")
+preview_frame_sampler :: proc(s: ^Session, pass: mat.Pass_Desc) -> foster.TextureSampler {
+	index := bank_index(s.bank, string(pass.params))
+	if index < 0 || pass.sprite_texture == "" do return foster.TextureSamplerMake(.Linear, .Clamp)
+	for field in s.parameters[index].live.fields {
+		if field.id == string(pass.sprite_texture) do return mat.field_sampler(field)
+	}
+	return foster.TextureSamplerMake(.Linear, .Clamp)
 }
 
 // 保存整个对象效果的参数；临时借用组和数值，文件保存函数内部复制路径。

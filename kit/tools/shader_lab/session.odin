@@ -23,6 +23,9 @@ Session :: struct {
 	// 2D 材质预览：Render2D 借用这个库的设备与默认材质；sprite_mesh 是 BatcherVertex 布局的空网格，供管线探测。
 	library: mat.Material_Library,
 	render: r2d.Render2D,
+	// 材质效果的预览与游戏一样用 Render2D / Render3D 记录后提交，材质借用 bank 的 GPU 绑定（见 material_preview.odin）。
+	preview_sprites: r2d.Render2D,
+	preview_models: r3d.Render3D,
 	sprite_mesh: foster.Mesh,
 	font: ^foster.MsdfFont, // 借用宿主字体，宿主须在 dispose 后释放。
 	icons: ^r2d.Sprite_Atlas,
@@ -135,6 +138,14 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 		fmt.eprintln("Shader Lab:", reason)
 		return false
 	}
+	if reason := r2d.init(&s.preview_sprites, &s.library); reason != "" {
+		fmt.eprintln("Shader Lab:", reason)
+		return false
+	}
+	if reason := r3d.init(&s.preview_models, &s.library); reason != "" {
+		fmt.eprintln("Shader Lab:", reason)
+		return false
+	}
 	sprite_format := foster.BatcherVertexFormat()
 	defer foster.VertexFormatDispose(&sprite_format)
 	foster.MeshInitWithFormat(&s.sprite_mesh, device, sprite_format, .ThirtyTwo, "sprite probe")
@@ -190,6 +201,8 @@ dispose :: proc(s: ^Session) {
 	dev.parameters_dispose(&s.parameter_watch)
 	for &mesh in s.meshes do foster.MeshDispose(&mesh)
 	r2d.dispose(&s.render)
+	r2d.dispose(&s.preview_sprites)
+	r3d.dispose(&s.preview_models)
 	foster.MeshDispose(&s.sprite_mesh)
 	mat.material_library_dispose(&s.library)
 	r2d.dispose(&s.batch)

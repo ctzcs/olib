@@ -101,6 +101,26 @@ material_white_texture :: proc(library: ^Material_Library) -> string {
 	return ""
 }
 
+// 工具用（Shader Lab）：把调用方持有的效果与 GPU 绑定组成 Material，交给 Render2D / Render3D 记录。
+// 不登记、不复制、不拥有资源：effect 与 bindings 借用到调用方释放，返回值不用释放。
+// effect 只需填 desc 与 schemas；bindings 与 schemas 一一对应，数值和采样器在记录时读取。
+material_from_bindings :: proc(library: ^Material_Library, effect: ^Material_Effect,
+	bindings: []Material_Binding) -> (material: Material, reason: string) {
+	if library == nil || library.device == nil do return {}, "Missing graphics device"
+	if effect == nil || !effect_is_material(effect.desc) do return {}, "Expected Model or Sprite material effect"
+	if len(bindings) != len(effect.schemas) do return {}, "Binding count differs from schema count"
+	for binding, i in bindings {
+		if binding.schema.name != effect.schemas[i].name do return {}, "Bindings must follow the effect's schema order"
+		gpu := binding.material
+		if gpu == nil || gpu.Vertex.Shader == nil || gpu.Fragment.Shader == nil do return {}, "Missing compiled shader"
+		if gpu.Vertex.Shader.GraphicsDevice != library.device || gpu.Fragment.Shader.GraphicsDevice != library.device {
+			return {}, "Shader belongs to another graphics device"
+		}
+	}
+	if reason = material_white_texture(library); reason != "" do return
+	return {owner = library, effect = effect, bindings = bindings}, ""
+}
+
 // 为一个参数组解析全部 Texture 字段，返回按字段顺序排列的采样器数量；缺省贴图用白图。
 @(private)
 material_group_samplers :: proc(library: ^Material_Library, source: string, group: Instance_Group,

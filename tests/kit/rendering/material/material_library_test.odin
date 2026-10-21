@@ -127,3 +127,41 @@ material_texture_paths_are_relative_and_canonical :: proc(t: ^testing.T) {
 		testing.expect(t, error != "")
 	}
 }
+
+// 借用调用方的 GPU 绑定组成 Material：拒绝非材质效果、绑定数或顺序不符、缺 Shader、别的设备；成功时能被 material_select 选中。
+@(test)
+material_from_bindings_borrows_tool_bindings :: proc(t: ^testing.T) {
+	device, other: foster.GraphicsDevice
+	library := Material_Library{device = &device}
+	library.white.Resource = cast(type_of(library.white.Resource))uintptr(1) // 仅验证组装；不调用 GPU
+	shader := foster.Shader{GraphicsDevice = &device}
+	shader.Resource = cast(type_of(shader.Resource))uintptr(1)
+	alien := foster.Shader{GraphicsDevice = &other}
+	gpu := foster.Material{Vertex = {Shader = &shader}, Fragment = {Shader = &shader}}
+	schemas := []Schema{{name = "Body", preview = "3d"}}
+	effect := Material_Effect{desc = model_effect(), schemas = schemas}
+	bindings := []Material_Binding{{schema = schemas[0], material = &gpu}}
+
+	material, reason := material_from_bindings(&library, &effect, bindings)
+	testing.expect_value(t, reason, "")
+	testing.expect(t, material.owner == &library && material.effect == &effect && len(material.bindings) == 1)
+	selection: Pass_Selection
+	testing.expect_value(t, material_select(material.effect.desc, material.bindings, Material_Draw{kind = .Model}, &selection), Draw_Error.None)
+	testing.expect_value(t, selection.count, 1) // outline 声明为禁用
+
+	_, missing_device := material_from_bindings(&Material_Library{}, &effect, bindings)
+	testing.expect_value(t, missing_device, "Missing graphics device")
+	fullscreen := Material_Effect{desc = {name = "F", output = "color", passes = []Pass_Desc{{id = "main", params = "Body", output = "color"}}}, schemas = schemas}
+	_, not_material := material_from_bindings(&library, &fullscreen, bindings)
+	testing.expect_value(t, not_material, "Expected Model or Sprite material effect")
+	_, count := material_from_bindings(&library, &effect, nil)
+	testing.expect_value(t, count, "Binding count differs from schema count")
+	_, order := material_from_bindings(&library, &effect, []Material_Binding{{schema = {name = "Other"}, material = &gpu}})
+	testing.expect_value(t, order, "Bindings must follow the effect's schema order")
+	no_shader := foster.Material{}
+	_, missing_shader := material_from_bindings(&library, &effect, []Material_Binding{{schema = schemas[0], material = &no_shader}})
+	testing.expect_value(t, missing_shader, "Missing compiled shader")
+	elsewhere := foster.Material{Vertex = {Shader = &alien}, Fragment = {Shader = &shader}}
+	_, other_device := material_from_bindings(&library, &effect, []Material_Binding{{schema = schemas[0], material = &elsewhere}})
+	testing.expect_value(t, other_device, "Shader belongs to another graphics device")
+}

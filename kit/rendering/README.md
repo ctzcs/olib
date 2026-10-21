@@ -35,7 +35,7 @@ mat.material_library_dispose(&materials)
 
 | 要做什么 | 函数 / 类型 | 文件 |
 | --- | --- | --- |
-| 创建材质库、登记效果 | `Material_Library`、`material_create`、`material_register_directory`、`material_register_manifest`、`material_register`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
+| 创建材质库、登记效果 | `Material_Library`、`material_create`、`material_register_directory`、`material_register_manifest`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
 | 加载材质、改参数、绑运行时贴图 | `material_load`、`material_reload`、`material_set_number`、`material_set_texture` | [material/material.odin](material/material.odin) |
 | 每个实例的值（可合批） | `Instance_Slot`、`instance_slot`、`instance_slot_count`、`Instance_Values`、`instance_values_set`、`instance_array_set`（缓冲用）、`instance_values_from` | [material/instance_values.odin](material/instance_values.odin) |
 | 绘制失败原因 | `Draw_Error`、`draw_error_text` | [material/draw.odin](material/draw.odin) |
@@ -48,8 +48,9 @@ mat.material_library_dispose(&materials)
 | 3D 常驻实例缓冲 | `Model_Buffer`、`model_buffer_init/upload/dispose`、`buffer` | [3d/model_buffer.odin](3d/model_buffer.odin)、[3d/REFERENCE.md](3d/REFERENCE.md) |
 | 3D 随模型提交调试线 | `line/aabb/sphere/frustum/axis/grid/skeleton` | [3d/render3d_debug.odin](3d/render3d_debug.odin) |
 | 3D 网格上传 | `mesh_upload`、`mesh_dispose`、`mesh_static_format`、`mesh_skin_format` | [3d/mesh.odin](3d/mesh.odin) |
-| 3D 排序 / LOD / 调试线 | `Render_Queue`、`queue_*`；`Lod_Selector`、`lod_*`、`Model_Lod`；`Debug_Draw_3D`、`debug_draw_*` | [3d/queue.odin](3d/queue.odin)、[3d/lod.odin](3d/lod.odin)、[3d/debug_draw.odin](3d/debug_draw.odin) |
+| 3D 排序 / LOD | `Render_Queue`、`queue_*`；`Lod_Selector`、`lod_*`、`Model_Lod` | [3d/queue.odin](3d/queue.odin)、[3d/lod.odin](3d/lod.odin) |
 | 解析 `.oshader`、开发期热重载 | `lang.parse`；`dev.*` | [shader/lang/lang.odin](shader/lang/lang.odin)、[shader/dev/](shader/dev/) |
+| 效果 / 参数组描述、HLSL 生成、预设编解码（工具用） | `fx.Effect_Desc`、`fx.Schema`、`fx.hlsl`、`fx.pack`… | [shader/effect](shader/effect/README.md) |
 
 import 别名：`mat "olib:kit/rendering/material"`、`r2d "olib:kit/rendering/2d"`、`r3d "olib:kit/rendering/3d"`。
 
@@ -57,13 +58,14 @@ import 别名：`mat "olib:kit/rendering/material"`、`r2d "olib:kit/rendering/2
 
 | 目录 | 职责 | 推荐 import |
 | --- | --- | --- |
-| [material](material/README.md) | 材质参数、效果描述、序列化、GPU 资源与 Pass 提交 | `mat "olib:kit/rendering/material"` |
+| [material](material/README.md) | 游戏用的材质库、材质加载与修改、每实例的值、登记效果 | `mat "olib:kit/rendering/material"` |
 | [2d](2d/README.md) | 图集、帧动画、精灵绘制与合批 | `r2d "olib:kit/rendering/2d"` |
 | [3d](3d/README.md) | 模型绘制与实例化、Mesh、队列、LOD 与调试线 | `r3d "olib:kit/rendering/3d"` |
+| [shader/effect](shader/effect/README.md) | 效果、Pass、参数组的描述与校验，参数打包、HLSL 生成、材质 / 预设文件编解码 | `fx "olib:kit/rendering/shader/effect"` |
 | [shader/lang](shader/lang/README.md) | .oshader 语法解析与每个 Pass 的 HLSL，解析时不读取文件或执行 GPU 操作 | `lang "olib:kit/rendering/shader/lang"` |
 | [shader/dev](shader/dev/README.md) | 开发期编译、文件监听与热重载 | `dev "olib:kit/rendering/shader/dev"` |
 
 `rendering/` 与 `shader/` 仅组织目录，不提供转发包。2D 和 3D 都使用 material，互不依赖。
-材质参数、效果描述与序列化位于 [kit/rendering/material](material/README.md)，
-供公共渲染资源、Shader 解析和编辑工具共同使用。
+依赖方向：shader/effect ← material ← 2d / 3d；shader/lang、shader/dev 只依赖 shader/effect。
+效果描述与序列化位于 [shader/effect](shader/effect/README.md)，供材质库、Shader 解析和编辑工具共同使用；游戏只用 material。
 Shader Lab 仍位于 [kit/tools/shader_lab](../tools/shader_lab/README.md)。

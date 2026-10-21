@@ -1,5 +1,5 @@
 #+test
-package material
+package effect
 
 import "core:testing"
 import "core:strings"

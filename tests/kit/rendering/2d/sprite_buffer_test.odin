@@ -5,6 +5,7 @@ import "core:testing"
 
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
+import fx "olib:kit/rendering/shader/effect"
 
 @(test)
 sprite_item_matches_gpu_record_layout :: proc(t: ^testing.T) {
@@ -25,8 +26,8 @@ sprite_buffer_guards_and_draw_errors :: proc(t: ^testing.T) {
 	buf: Sprite_Buffer
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
-	plain := mat.Material_Effect{desc = {passes = []mat.Pass_Desc{{draw = .Sprite}}}}
-	instanced := mat.Material_Effect{desc = {instanced = true, passes = []mat.Pass_Desc{{draw = .Sprite}}}}
+	plain := mat.Material_Effect{desc = {passes = []fx.Pass_Desc{{draw = .Sprite}}}}
+	instanced := mat.Material_Effect{desc = {instanced = true, passes = []fx.Pass_Desc{{draw = .Sprite}}}}
 	testing.expect_value(t, sprite_buffer_init(&buf, nil, 10), "Material is not loaded")
 	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{effect = &instanced}, 10), "Material is not loaded")
 	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{owner = &library, effect = &plain}, 10),

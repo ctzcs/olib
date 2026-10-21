@@ -1,4 +1,4 @@
-package material
+package effect
 
 // 材质参数：Schema（参数声明）、Value（实例数值）及其 GPU 布局。
 // 数据布局不依赖 Odin 结构体内存布局；本包不依赖编辑器。
@@ -8,7 +8,7 @@ import "core:math"
 import "core:mem"
 import "core:strings"
 
-import foster "../../../foster"
+import foster "../../../../foster"
 
 // GPU 绑定上限与布局：每个数字参数占一个 float4 槽。
 MAX_TEXTURES :: 16

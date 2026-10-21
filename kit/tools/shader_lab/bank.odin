@@ -8,6 +8,7 @@ import "core:strings"
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
 import dev "olib:kit/rendering/shader/dev"
+import fx "olib:kit/rendering/shader/effect"
 
 Parameter_Bank :: struct {
 	// 按构建结果一次分配，之后不再增长，Material 才能长期指向 shaders 里的着色器。
@@ -64,13 +65,13 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 	for schema, i in build.schemas {
 		p := &b.parameters[i]
 		p.name = strings.clone(schema.name)
-		p.live = mat.schema_clone(schema)
+		p.live = fx.schema_clone(schema)
 		p.available = true
-		p.values = mat.values_make(p.live)
-		p.buffer = make([]u8, mat.uniform_size(p.live))
+		p.values = fx.values_make(p.live)
+		p.buffer = make([]u8, fx.uniform_size(p.live))
 		program := build.programs[i]
 		source, program_text := program.source, program.text
-		// Sprite Pass 的批量变体从顶点 storage buffer 读两条轴和 [Instance] 字段（见 mat.hlsl 的 Sprite_Batch）。
+		// Sprite Pass 的批量变体从顶点 storage buffer 读两条轴和 [Instance] 字段（见 fx.hlsl 的 Sprite_Batch）。
 		// Model Pass 另有顶点 b1 / 片元 b2 视图块（见 mat.VIEW_GLOBALS_SIZE），与材质库的槽数一致。
 		storage := bank_group_draws(build.effects, schema.name, .Sprite) ? 1 : 0
 		view := bank_group_draws(build.effects, schema.name, .Model) ? 1 : 0
@@ -82,14 +83,14 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 			b.last_status[i] = s.last_status[prior]
 		}
 		foster.MaterialInitWithShaders(&b.materials[i], &b.shaders[i].vertex, &b.shaders[i].fragment)
-		dev.configure_parameters(&b.shaders[i], mat.texture_count(schema))
+		dev.configure_parameters(&b.shaders[i], fx.texture_count(schema))
 	}
 	// 参数组只是 Shader 资源；每个 .oshader 创建一个效果及其 Pass 目标。
 	b.effects = make([]Effect_Runtime, len(build.effects))
 	for desc, i in build.effects {
 		e := &b.effects[i]
-		e.desc = mat.effect_clone(desc)
-		e.order, _ = mat.effect_order(e.desc, build.schemas)
+		e.desc = fx.effect_clone(desc)
+		e.order, _ = fx.effect_order(e.desc, build.schemas)
 		e.targets = make([]Pass_Target, len(desc.passes))
 		e.validated_revision = make([]u64, count)
 		e.rejected_revision = make([]u64, count)
@@ -142,7 +143,7 @@ bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates
 				probes := make([dynamic]foster.DrawCommand, context.temp_allocator)
 				for p, j in e.desc.passes {
 					if string(p.params) != b.parameters[i].name do continue
-					target := foster.DrawableTargetFromTarget(&e.targets[mat.effect_is_material(e.desc) ? 0 : j].buffers[0])
+					target := foster.DrawableTargetFromTarget(&e.targets[fx.effect_is_material(e.desc) ? 0 : j].buffers[0])
 					command := pass_command(s, b, i, p.draw, target, string(p.id))
 					mat.pass_state_apply(&command, p.state)
 					append(&probes, command)
@@ -195,13 +196,13 @@ bank_commit :: proc(s: ^Session) {
 		for &texture in p.textures do foster.TextureDispose(&texture)
 		p.textures = {}
 		prior := bank_index(s.bank, p.name)
-		mat.values_dispose(p.values)
+		fx.values_dispose(p.values)
 		if prior >= 0 {
 			old := &s.parameters[prior]
 			p.folder_closed = old.folder_closed
-			p.values = mat.values_make(p.live, old.live, old.values)
+			p.values = fx.values_make(p.live, old.live, old.values)
 		} else {
-			p.values = mat.values_make(p.live)
+			p.values = fx.values_make(p.live)
 		}
 		slot := 0
 		for f, j in p.live.fields {
@@ -273,7 +274,7 @@ bank_commit :: proc(s: ^Session) {
 
 // 参数组是否被某种 Pass（Sprite / Model）使用。
 @(private)
-bank_group_draws :: proc(effects: []mat.Effect_Desc, group: string, draw: mat.Pass_Draw) -> bool {
+bank_group_draws :: proc(effects: []fx.Effect_Desc, group: string, draw: fx.Pass_Draw) -> bool {
 	for effect in effects {
 		for pass in effect.passes {
 			if pass.draw == draw && string(pass.params) == group do return true

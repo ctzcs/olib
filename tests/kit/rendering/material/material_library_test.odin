@@ -4,14 +4,15 @@ package material
 import "core:testing"
 
 import foster "olib:foster"
+import fx "olib:kit/rendering/shader/effect"
 
 // Pass 选择在提交前完成；不存在的 ID 不能退回“全部”。
 @(test)
 material_pass_selection_preserves_order_and_disabled_flags :: proc(t: ^testing.T) {
-	effect := Effect_Desc{passes = {
+	effect := fx.Effect_Desc{passes = {
 		{id = "shadow"}, {id = "body"}, {id = "outline", disabled = true},
 	}}
-	indices: [MAX_PASSES]int
+	indices: [fx.MAX_PASSES]int
 	count, error := material_pass_indices(effect, "", &indices)
 	testing.expect(t, error == .None && count == 2 && indices[0] == 0 && indices[1] == 1)
 	count, error = material_pass_indices(effect, "body", &indices)
@@ -36,11 +37,11 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 	storage := foster.StorageContainer{ZipEntries = &entries}
 	library := Material_Library{storage = &storage}
 	defer material_library_dispose(&library)
-	schemas := []Schema{
+	schemas := []fx.Schema{
 		{name = "Outline", preview = "3d"},
 		{name = "Body", preview = "3d", fields = {{id = "amount", kind = .Scalar, maximum = 1}}},
 	}
-	effect := Effect_Desc{name = "Outlined", output = "color", passes = []Pass_Desc{
+	effect := fx.Effect_Desc{name = "Outlined", output = "color", passes = []fx.Pass_Desc{
 		{id = "body", params = "Body", draw = .Model, output = "color"},
 		{id = "outline", params = "Outline", draw = .Model, output = "color"},
 	}}
@@ -49,9 +50,9 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 	testing.expect(t, material_register(&library, effect, schemas, code) != "")
 	testing.expect_value(t, len(library.effects), 1)
 	a, selected, reason := material_read(&library, "materials/left.json")
-	defer instance_dispose(&a)
+	defer fx.instance_dispose(&a)
 	b, _, second_error := material_read(&library, "materials/left.json")
-	defer instance_dispose(&b)
+	defer fx.instance_dispose(&b)
 	testing.expect(t, reason == "" && second_error == "" && selected == library.effects[0])
 	testing.expect_value(t, a.groups[0].schema.name, "Body")
 	testing.expect_value(t, a.groups[0].values[0].number[0], 0.7)
@@ -81,13 +82,13 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 material_set_texture_binds_runtime_texture_with_field_sampler :: proc(t: ^testing.T) {
 	device, other: foster.GraphicsDevice
 	library := Material_Library{device = &device}
-	schema := Schema{name = "Body", fields = {
+	schema := fx.Schema{name = "Body", fields = {
 		{id = "albedo", kind = .Texture},
 		{id = "amount", kind = .Scalar, maximum = 1},
 		{id = "shadow", kind = .Texture, filter = .Nearest, wrap = .Repeat}}}
-	samplers := make([][MAX_TEXTURES]foster.BoundSampler, 1)
+	samplers := make([][fx.MAX_TEXTURES]foster.BoundSampler, 1)
 	defer delete(samplers)
-	material := Material{owner = &library, instance = {groups = []Instance_Group{{schema = schema}}}, samplers = samplers}
+	material := Material{owner = &library, instance = {groups = []fx.Instance_Group{{schema = schema}}}, samplers = samplers}
 	shadow := foster.Texture{GraphicsDevice = &device}
 	shadow.Resource = cast(type_of(shadow.Resource))uintptr(1) // 仅验证绑定；不调用 GPU
 	testing.expect(t, material_set_texture(&material, "Body", "shadow", &shadow))
@@ -106,7 +107,7 @@ material_set_texture_binds_runtime_texture_with_field_sampler :: proc(t: ^testin
 	testing.expect(t, material_set_texture(&material, "Body", "albedo", nil))
 	testing.expect(t, samplers[0][0].Texture == &library.white)
 	testing.expect(t, samplers[0][0].Sampler == foster.TextureSamplerMake(.Linear, .Clamp)) // 字段零值即默认
-	testing.expect(t, field_sampler({wrap = .Mirror}) == foster.TextureSamplerMake(.Linear, .MirroredRepeat))
+	testing.expect(t, fx.field_sampler({wrap = .Mirror}) == foster.TextureSamplerMake(.Linear, .MirroredRepeat))
 }
 
 @(test)
@@ -131,7 +132,7 @@ material_from_bindings_borrows_tool_bindings :: proc(t: ^testing.T) {
 	shader.Resource = cast(type_of(shader.Resource))uintptr(1)
 	alien := foster.Shader{GraphicsDevice = &other}
 	gpu := foster.Material{Vertex = {Shader = &shader}, Fragment = {Shader = &shader}}
-	schemas := []Schema{{name = "Body", preview = "3d"}}
+	schemas := []fx.Schema{{name = "Body", preview = "3d"}}
 	effect := Material_Effect{desc = model_effect(), schemas = schemas}
 	bindings := []Material_Binding{{schema = schemas[0], material = &gpu}}
 
@@ -144,7 +145,7 @@ material_from_bindings_borrows_tool_bindings :: proc(t: ^testing.T) {
 
 	_, missing_device := material_from_bindings(&Material_Library{}, &effect, bindings)
 	testing.expect_value(t, missing_device, "Missing graphics device")
-	fullscreen := Material_Effect{desc = {name = "F", output = "color", passes = []Pass_Desc{{id = "main", params = "Body", output = "color"}}}, schemas = schemas}
+	fullscreen := Material_Effect{desc = {name = "F", output = "color", passes = []fx.Pass_Desc{{id = "main", params = "Body", output = "color"}}}, schemas = schemas}
 	_, not_material := material_from_bindings(&library, &fullscreen, bindings)
 	testing.expect_value(t, not_material, "Expected Model or Sprite material effect")
 	_, count := material_from_bindings(&library, &effect, nil)

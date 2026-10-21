@@ -6,19 +6,19 @@ import "core:math"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/rendering/material"
+import fx "olib:kit/rendering/shader/effect"
 
 // 兼容现有调用；持久格式现在由运行时可用的 material 包提供。
-Preset_Field :: mat.Resource_Field
-Preset :: mat.Resource
+Preset_Field :: fx.Resource_Field
+Preset :: fx.Resource
 
 // 全部数值与纹理准备成功后一次切换；失败不改变旧值和 GPU 资源。
-values_apply :: proc(s: ^Session, index: int, values: []mat.Value) -> bool {
+values_apply :: proc(s: ^Session, index: int, values: []fx.Value) -> bool {
 	if index < 0 || index >= s.shader_count do return false
 	p := &s.parameters[index]
 	if !p.available || len(values) != len(p.live.fields) do return false
 	for f, i in p.live.fields {
-		for c in 0..<mat.components(f.kind) {
+		for c in 0..<fx.components(f.kind) {
 			if math.is_nan(values[i].number[c]) || math.is_inf(values[i].number[c]) {
 				parameter_error(p, "Preset contains a non-finite value")
 				return false
@@ -48,9 +48,9 @@ values_apply :: proc(s: ^Session, index: int, values: []mat.Value) -> bool {
 		}
 		slot += 1
 	}
-	owned := mat.values_make(p.live, p.live, values)
+	owned := fx.values_make(p.live, p.live, values)
 	color_picker_close(s, false)
-	mat.values_dispose(p.values)
+	fx.values_dispose(p.values)
 	p.values = owned
 	for &texture, j in p.textures {
 		if replaced[j] do parameter_texture_replace(s, &texture, textures[j])
@@ -66,8 +66,8 @@ reset_defaults :: proc(s: ^Session, index: int, field: int = -1) -> bool {
 	p := &s.parameters[index]
 	if !p.available || field < -1 || field >= len(p.live.fields) do return false
 	color_picker_close(s, false)
-	values := mat.values_make(p.live)
-	defer mat.values_dispose(values)
+	values := fx.values_make(p.live)
+	defer fx.values_dispose(values)
 	if field >= 0 {
 		for _, i in p.live.fields {
 			if i == field do continue
@@ -94,7 +94,7 @@ load_preset :: proc(s: ^Session, index: int, path: string) -> bool {
 	p := &s.parameters[index]
 	if !p.available do return false
 	values, reason := preset_file_load(p.live, path)
-	defer mat.values_dispose(values)
+	defer fx.values_dispose(values)
 	if reason != "" {
 		parameter_error(p, reason)
 		return false

@@ -1,4 +1,4 @@
-package material
+package effect
 
 // 对象材质实例拥有参数和贴图路径；Effect 定义与 GPU 资源由资源管理器共享。
 import "core:encoding/json"

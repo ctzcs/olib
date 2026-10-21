@@ -8,6 +8,7 @@ import "core:mem"
 
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
+import fx "olib:kit/rendering/shader/effect"
 
 // ------------------------------------------------------------------------------
 // 实例记录 —— 一个精灵的数据
@@ -46,13 +47,13 @@ sprite_item_make :: proc(frame: foster.Subtexture, origin: foster.Vec2, transfor
 // 实例记录在 GPU 上的字节数：5 个 float4（变换、矩形、UV、tint）加每个字段一个 float4。
 @(private)
 sprite_stride :: proc(slots: int) -> int {
-	return mat.INSTANCE_FIXED_ATTRIBUTES*16 + 16*slots
+	return fx.INSTANCE_FIXED_ATTRIBUTES*16 + 16*slots
 }
 
 // 实例缓冲的顶点格式：每个 float4 一个属性，位置 0..4+slots（角点网格的属性整体后移）。
 @(private)
 sprite_instance_format :: proc(slots: int) -> foster.VertexFormat {
-	elements := make([]foster.VertexElement, mat.INSTANCE_FIXED_ATTRIBUTES+slots, context.temp_allocator)
+	elements := make([]foster.VertexElement, fx.INSTANCE_FIXED_ATTRIBUTES+slots, context.temp_allocator)
 	for i in 0..<len(elements) do elements[i] = {i, .Float4, false}
 	return foster.VertexFormatMake(elements, sprite_stride(slots))
 }
@@ -74,12 +75,12 @@ sprite_buffer_init :: proc(buf: ^Sprite_Buffer, material: ^mat.Material, capacit
 	if material == nil || material.owner == nil || material.owner.device == nil || material.effect == nil {
 		return "Material is not loaded"
 	}
-	if !mat.effect_is_sprite(material.effect.desc) || !material.effect.desc.instanced {
+	if !fx.effect_is_sprite(material.effect.desc) || !material.effect.desc.instanced {
 		return "Sprite buffers require an Instanced sprite effect"
 	}
 	slots := mat.instance_slot_count(material)
 	if slots < 0 do return "Instance field count differs between parameter groups"
-	if slots > mat.MAX_INSTANCE_FIELDS do return "Too many Instance fields"
+	if slots > fx.MAX_INSTANCE_FIELDS do return "Too many Instance fields"
 	if capacity <= 0 do return "Sprite buffer capacity must be positive"
 	format := sprite_instance_format(slots)
 	defer foster.VertexFormatDispose(&format)

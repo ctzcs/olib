@@ -10,7 +10,7 @@ import "core:path/filepath"
 import "core:strings"
 import "core:testing"
 
-import mat "olib:kit/rendering/material"
+import fx "olib:kit/rendering/shader/effect"
 
 @(test)
 preset_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) {
@@ -19,12 +19,12 @@ preset_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) {
 	defer mem.tracking_allocator_destroy(&track)
 	context.allocator = mem.tracking_allocator(&track)
 	defer testing.expect_value(t, len(track.allocation_map), 0)
-	schema := mat.Schema{name = "Surface", fields = {
+	schema := fx.Schema{name = "Surface", fields = {
 		{id = "amount", kind = .Scalar, maximum = 1, initial = {0.7, 0, 0, 0}},
 		{id = "image", kind = .Texture, texture = "edge.png"},
 	}}
-	values := mat.values_make(schema)
-	defer mat.values_dispose(values)
+	values := fx.values_make(schema)
+	defer fx.values_dispose(values)
 	directory, dir_error := os.make_directory_temp("", "olib_shader_lab_", context.allocator)
 	if !testing.expect(t, dir_error == nil) do return
 	defer delete(directory)
@@ -33,7 +33,7 @@ preset_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) {
 	defer _ = os.remove(path)
 	testing.expect_value(t, preset_file_save(schema, values, path, directory), "")
 	loaded, load_error := preset_file_load(schema, path)
-	defer mat.values_dispose(loaded)
+	defer fx.values_dispose(loaded)
 	if !testing.expect(t, load_error == "") do return
 	testing.expect_value(t, loaded[0].number[0], 0.7)
 	testing.expect(t, filepath.is_abs(loaded[1].texture) && strings.contains(loaded[1].texture, directory))
@@ -41,7 +41,7 @@ preset_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) {
 	values[0].number[0] = 5
 	testing.expect(t, preset_file_save(schema, values, path, directory) != "")
 	retained, retained_error := preset_file_load(schema, path)
-	defer mat.values_dispose(retained)
+	defer fx.values_dispose(retained)
 	testing.expect(t, retained_error == "" && retained[0].number[0] == 0.7)
 	missing, missing_error := preset_file_load(schema, fmt.tprintf("%s-missing", path))
 	testing.expect(t, missing == nil && missing_error != "")
@@ -49,16 +49,16 @@ preset_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) {
 
 @(test)
 material_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) {
-	schemas := []mat.Schema{
+	schemas := []fx.Schema{
 		{name = "Body", preview = "3d", fields = {{id = "amount", kind = .Scalar, maximum = 1}}},
 		{name = "Outline", preview = "3d", fields = {{id = "image", kind = .Texture, texture = "edge.png"}}},
 	}
-	effect := mat.Effect_Desc{name = "Outlined", output = "color", passes = {
+	effect := fx.Effect_Desc{name = "Outlined", output = "color", passes = {
 		{id = "body", draw = .Model, output = "color", params = "Body"},
 		{id = "outline", draw = .Model, output = "color", params = "Outline"},
 	}}
-	instance, reason := mat.instance_make(effect, schemas)
-	defer mat.instance_dispose(&instance)
+	instance, reason := fx.instance_make(effect, schemas)
+	defer fx.instance_dispose(&instance)
 	if !testing.expect_value(t, reason, "") do return
 	instance.groups[0].values[0].number[0] = 0.75
 	directory, dir_error := os.make_directory_temp("", "olib_shader_lab_", context.allocator)
@@ -69,7 +69,7 @@ material_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) 
 	defer _ = os.remove(path)
 	testing.expect_value(t, material_file_save(instance, path, directory), "")
 	loaded, load_error := material_file_load(effect, schemas, path)
-	defer mat.instance_dispose(&loaded)
+	defer fx.instance_dispose(&loaded)
 	if !testing.expect(t, load_error == "") do return
 	testing.expect_value(t, loaded.groups[0].values[0].number[0], 0.75)
 	testing.expect(t, filepath.is_abs(loaded.groups[1].values[0].texture) &&
@@ -78,6 +78,6 @@ material_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) 
 	instance.groups[0].values[0].number[0] = 5
 	testing.expect(t, material_file_save(instance, path, directory) != "")
 	retained, retained_error := material_file_load(effect, schemas, path)
-	defer mat.instance_dispose(&retained)
+	defer fx.instance_dispose(&retained)
 	testing.expect(t, retained_error == "" && retained.groups[0].values[0].number[0] == 0.75)
 }

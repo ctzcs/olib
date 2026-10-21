@@ -9,7 +9,7 @@ import "core:reflect"
 import "core:strconv"
 import "core:strings"
 
-import mat "../../material"
+import fx "../effect"
 
 // 标准 include 的根目录：作者写 #include "olib/<Draw>.hlsli"（model / sprite / fullscreen），引擎 b0 块都声明在那里。
 // shadercross 只接受一个 -I，tools/shaders 与 Shader Lab 编译前把 <INCLUDE_DIRECTORY>/olib 复制到各自的临时目录。
@@ -17,8 +17,8 @@ import mat "../../material"
 INCLUDE_DIRECTORY :: #directory + "/include"
 
 Document :: struct {
-	schemas: []mat.Schema,
-	effect: mat.Effect_Desc,
+	schemas: []fx.Schema,
+	effect: fx.Effect_Desc,
 	// 与 schemas 一一对应，已包含参数布局、共享代码和原文件 #line。
 	// Sprite Pass 的 programs 是批量变体（foster BatcherVertex 输入，Render2D 逐个绘制用）；
 	// instanced 效果另有 instanced_programs：缓冲变体（实例记录 + 角点，常驻 Sprite_Buffer 用），只需编译顶点阶段。
@@ -30,10 +30,10 @@ Document :: struct {
 
 dispose :: proc(d: ^Document) {
 	for &s in d.schemas {
-		mat.schema_dispose(&s)
+		fx.schema_dispose(&s)
 	}
 	delete(d.schemas)
-	mat.effect_dispose(&d.effect)
+	fx.effect_dispose(&d.effect)
 	for text in d.programs {
 		delete(text)
 	}
@@ -71,9 +71,9 @@ Code :: struct {
 // 顶层 Shader { ... } 解析出的原始部分；passes 与 codes、previews 一一对应。
 @(private)
 Shader_Source :: struct {
-	effect: mat.Effect_Desc,
-	fields: []mat.Field,
-	passes: [dynamic]mat.Pass_Desc,
+	effect: fx.Effect_Desc,
+	fields: []fx.Field,
+	passes: [dynamic]fx.Pass_Desc,
 	codes: [dynamic]Code,
 	previews: [dynamic]string, // 每个 Pass 显式声明的预览维度，空值由 shader_programs 推断。
 	shared: Code, // HLSLINCLUDE 共享代码。
@@ -97,7 +97,7 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 	source := shader_body(&p, name)
 	schemas, programs, instanced_programs := shader_programs(&source, name, source_path)
 	if p.error == "" {
-		_, error := mat.effect_order(source.effect, schemas)
+		_, error := fx.effect_order(source.effect, schemas)
 		if error != "" {
 			fail(&p, error)
 		}
@@ -107,12 +107,12 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 		result.error = strings.clone(p.error)
 		return
 	}
-	result.effect = mat.effect_clone(source.effect)
-	result.schemas = make([]mat.Schema, len(schemas))
+	result.effect = fx.effect_clone(source.effect)
+	result.schemas = make([]fx.Schema, len(schemas))
 	result.programs = make([]string, len(programs))
 	result.instanced_programs = make([]string, len(programs))
 	for s, i in schemas {
-		result.schemas[i] = mat.schema_clone(s)
+		result.schemas[i] = fx.schema_clone(s)
 		result.programs[i] = strings.clone(programs[i])
 		result.instanced_programs[i] = strings.clone(instanced_programs[i])
 	}
@@ -123,7 +123,7 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 @(private)
 shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 	expect(p, "{")
-	source.effect = mat.Effect_Desc{name = name}
+	source.effect = fx.Effect_Desc{name = name}
 	seen := make(map[string]bool)
 	for p.error == "" && p.token.text != "}" {
 		key := p.token.text
@@ -141,7 +141,7 @@ shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 		case "Preview":
 			source.effect.preview = preview(p)
 		case "Output":
-			source.effect.output = mat.Target_Ref(string_value(p))
+			source.effect.output = fx.Target_Ref(string_value(p))
 		case "Instanced":
 			source.effect.instanced = true
 		case "Properties":
@@ -175,14 +175,14 @@ shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 // 每个 Pass 一份参数组 Schema 和候选 HLSL（参数布局 + 共享代码 + Pass 代码，带原文件 #line）。
 // 会把 Pass 的 params 指向生成的组名 `<Shader>_<Pass>`。Sprite Pass 生成批量变体，instanced 效果再生成缓冲变体。
 @(private)
-shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (schemas: []mat.Schema,
+shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (schemas: []fx.Schema,
 	programs, instanced_programs: []string) {
-	schemas = make([]mat.Schema, len(source.passes))
+	schemas = make([]fx.Schema, len(source.passes))
 	programs = make([]string, len(source.passes))
 	instanced_programs = make([]string, len(source.passes))
 	for &pass, i in source.passes {
 		group := fmt.tprintf("%s_%s", name, pass.id)
-		pass.params = mat.Params_Ref(group)
+		pass.params = fx.Params_Ref(group)
 		dimension := source.previews[i]
 		if dimension == "" {
 			dimension = pass.draw == .Model ? "3d" : "2d"
@@ -198,18 +198,18 @@ shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (s
 				instanced_programs[i] = shader_program(source, i, schemas[i], .Sprite, source_path)
 			}
 		} else {
-			programs[i] = shader_program(source, i, schemas[i], mat.effect_instancing(source.effect), source_path)
+			programs[i] = shader_program(source, i, schemas[i], fx.effect_instancing(source.effect), source_path)
 		}
 	}
 	return
 }
 
 @(private)
-shader_program :: proc(source: ^Shader_Source, index: int, schema: mat.Schema, mode: mat.Instancing,
+shader_program :: proc(source: ^Shader_Source, index: int, schema: fx.Schema, mode: fx.Instancing,
 	source_path: string) -> string {
 	b: strings.Builder
 	strings.builder_init(&b)
-	strings.write_string(&b, mat.hlsl(schema, mode))
+	strings.write_string(&b, fx.hlsl(schema, mode))
 	for block in ([2]Code{source.shared, source.codes[index]}) {
 		if block.text == "" {
 			continue
@@ -225,9 +225,9 @@ shader_program :: proc(source: ^Shader_Source, index: int, schema: mat.Schema, m
 // ==============================================================================
 
 @(private)
-properties :: proc(p: ^Parser) -> []mat.Field {
+properties :: proc(p: ^Parser) -> []fx.Field {
 	expect(p, "{")
-	fields: [dynamic]mat.Field
+	fields: [dynamic]fx.Field
 	textures, instances := 0, 0
 	for p.error == "" && p.token.text != "}" {
 		attributes := property_attributes(p)
@@ -257,7 +257,7 @@ properties :: proc(p: ^Parser) -> []mat.Field {
 // 属性前的 [Id("...")] [Step(n)] [Instance] [Filter(Linear|Nearest)] [Wrap(Clamp|Repeat|Mirror)] 特性，
 // 每种至多一次；Instance 没有参数。结果放在 Field 的 id/step/instance/filter/wrap 与 *_declared。
 @(private)
-property_attributes :: proc(p: ^Parser) -> (result: mat.Field) {
+property_attributes :: proc(p: ^Parser) -> (result: fx.Field) {
 	result.step = 0.01
 	attributes := make(map[string]bool)
 	for p.token.text == "[" && p.error == "" {
@@ -307,8 +307,8 @@ property_attributes :: proc(p: ^Parser) -> (result: mat.Field) {
 
 // 解析 `(标签, 类型[(最小, 最大)]) = 默认值`；向量/颜色可显式指定控件范围，Float 默认 -10000..10000。
 @(private)
-property_declaration :: proc(p: ^Parser, name, id: string, step: f32) -> mat.Field {
-	field := mat.Field{name = name, minimum = 0, maximum = 1, step = step}
+property_declaration :: proc(p: ^Parser, name, id: string, step: f32) -> fx.Field {
+	field := fx.Field{name = name, minimum = 0, maximum = 1, step = step}
 	field.id = id == "" ? field.name : id
 	expect(p, "(")
 	field.label = string_value(p)
@@ -348,24 +348,24 @@ property_declaration :: proc(p: ^Parser, name, id: string, step: f32) -> mat.Fie
 	if field.kind == .Texture {
 		field.texture = string_value(p)
 	} else {
-		field.initial = vector(p, mat.components(field.kind))
+		field.initial = vector(p, fx.components(field.kind))
 	}
 	return field
 }
 
 // 范围、纹理数量、默认值区间，以及与已有属性的重名/采样器冲突。
 @(private)
-property_check :: proc(p: ^Parser, field: mat.Field, prior_fields: []mat.Field, textures, instances: int) {
+property_check :: proc(p: ^Parser, field: fx.Field, prior_fields: []fx.Field, textures, instances: int) {
 	if field.instance && field.kind == .Texture {
 		fail(p, "Texture cannot be Instance")
 	}
-	if instances > mat.MAX_INSTANCE_FIELDS {
+	if instances > fx.MAX_INSTANCE_FIELDS {
 		fail(p, "More than 4 Instance properties")
 	}
-	if field.minimum > field.maximum || field.step <= 0 || textures > mat.MAX_TEXTURES {
+	if field.minimum > field.maximum || field.step <= 0 || textures > fx.MAX_TEXTURES {
 		fail(p, "Invalid property range/step or more than 16 textures")
 	}
-	for c in 0..<mat.components(field.kind) {
+	for c in 0..<fx.components(field.kind) {
 		if field.initial[c] < field.minimum || field.initial[c] > field.maximum {
 			fail(p, "Property default is outside its range")
 		}
@@ -382,16 +382,16 @@ property_check :: proc(p: ^Parser, field: mat.Field, prior_fields: []mat.Field, 
 }
 
 @(private)
-pass_block :: proc(p: ^Parser) -> (pass: mat.Pass_Desc, code: Code, dimension: string) {
-	pass.id = mat.Pass_Id(string_value(p))
+pass_block :: proc(p: ^Parser) -> (pass: fx.Pass_Desc, code: Code, dimension: string) {
+	pass.id = fx.Pass_Id(string_value(p))
 	if !identifier(string(pass.id)) {
 		fail(p, "Pass name must be an identifier")
 	}
 	pass.output = "color"
 	expect(p, "{")
 	seen := make(map[string]bool)
-	inputs: [dynamic]mat.Pass_Input
-	values: [dynamic]mat.Pass_Value
+	inputs: [dynamic]fx.Pass_Input
+	values: [dynamic]fx.Pass_Value
 	for p.error == "" && p.token.text != "}" {
 		key := p.token.text
 		if key != "HLSLPROGRAM" {
@@ -408,32 +408,32 @@ pass_block :: proc(p: ^Parser) -> (pass: mat.Pass_Desc, code: Code, dimension: s
 		case "Preview":
 			dimension = preview(p)
 		case "Draw":
-			pass.draw = enum_value(p, mat.Pass_Draw)
+			pass.draw = enum_value(p, fx.Pass_Draw)
 		case "Cull":
-			pass.state.cull = enum_value(p, mat.Pass_Cull)
+			pass.state.cull = enum_value(p, fx.Pass_Cull)
 		case "Blend":
-			pass.state.blend = enum_value(p, mat.Pass_Blend)
+			pass.state.blend = enum_value(p, fx.Pass_Blend)
 		case "ZTest":
-			pass.state.depth = enum_value(p, mat.Pass_Depth)
+			pass.state.depth = enum_value(p, fx.Pass_Depth)
 		case "ZWrite":
-			pass.state.depth_write = enum_value(p, mat.Pass_Write)
+			pass.state.depth_write = enum_value(p, fx.Pass_Write)
 		case "Disabled":
-			pass.disabled = enum_value(p, mat.Pass_Write) == .On
+			pass.disabled = enum_value(p, fx.Pass_Write) == .On
 		case "Output":
-			pass.output = mat.Target_Ref(string_value(p))
+			pass.output = fx.Target_Ref(string_value(p))
 		case "SpriteTexture":
-			pass.sprite_texture = mat.Field_Ref(field_ref(p))
+			pass.sprite_texture = fx.Field_Ref(field_ref(p))
 		case "Target":
 			pass.target = target_block(p)
 		case "Input":
-			input: mat.Pass_Input
-			input.field = mat.Field_Ref(field_ref(p))
-			input.target = mat.Target_Ref(string_value(p))
-			input.frame = enum_value(p, mat.Pass_Frame)
+			input: fx.Pass_Input
+			input.field = fx.Field_Ref(field_ref(p))
+			input.target = fx.Target_Ref(string_value(p))
+			input.frame = enum_value(p, fx.Pass_Frame)
 			append(&inputs, input)
 		case "Value":
-			value: mat.Pass_Value
-			value.field = mat.Field_Ref(field_ref(p))
+			value: fx.Pass_Value
+			value.field = fx.Field_Ref(field_ref(p))
 			value.number = vector(p, 0)
 			append(&values, value)
 		case "HLSLPROGRAM":
@@ -452,7 +452,7 @@ pass_block :: proc(p: ^Parser) -> (pass: mat.Pass_Desc, code: Code, dimension: s
 }
 
 @(private)
-target_block :: proc(p: ^Parser) -> (target: mat.Target_Desc) {
+target_block :: proc(p: ^Parser) -> (target: fx.Target_Desc) {
 	expect(p, "{")
 	seen := make(map[string]bool)
 	for p.error == "" && p.token.text != "}" {
@@ -466,9 +466,9 @@ target_block :: proc(p: ^Parser) -> (target: mat.Target_Desc) {
 		case "Scale":
 			target.scale = number(p)
 		case "Format":
-			target.format = enum_value(p, mat.Target_Format)
+			target.format = enum_value(p, fx.Target_Format)
 		case "Depth":
-			target.depth = enum_value(p, mat.Pass_Write) == .On
+			target.depth = enum_value(p, fx.Pass_Write) == .On
 		case "Samples":
 			target.samples = integer(p)
 		case "Size":

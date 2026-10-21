@@ -164,7 +164,7 @@ ShaderLab 的 `save_material/load_material` 仍接受桌面路径；预设使用
 读取使用 `foster.ReadAllBytes`，保存使用 `foster.WriteAllBytesAtomic`；同目录临时文件替换由
 Storage 统一实现，ShaderLab 只处理相对贴图路径换算、编解码和将结果应用到会话。
 保存失败不覆盖旧文件；这套安全保存也可直接用于游戏存档和配置。
-公共 `kit/rendering/material` 同时提供参数编解码和基于 Foster StorageContainer 的材质加载；游戏不 import ShaderLab 来读资源。
+参数编解码在 `kit/rendering/shader/effect`，基于 Foster StorageContainer 的材质加载在 `kit/rendering/material`；游戏不 import ShaderLab 来读资源。
 示例的描边颜色可在面板修改；宽度目前是 HLSL 常量，可以修改源码热重载，不是材质数值字段。
 3D 效果可以包含使用 2D 顶点接口的全屏模糊、合成和反馈，它们不会被拆到 2D 工作区；
 显式声明为 2D 的效果不能包含 3D 模型 Pass。`select_workspace(session, 0 / 1)` 可从宿主切换。

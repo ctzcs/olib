@@ -7,6 +7,7 @@ import "core:os"
 import "core:strings"
 
 import mat "../../kit/rendering/material"
+import fx "../../kit/rendering/shader/effect"
 import lang "../../kit/rendering/shader/lang"
 
 read_shader :: proc(path: string) -> lang.Document {
@@ -100,8 +101,8 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 	}
 	manifest := struct {
 		version: int,
-		schemas: []mat.Schema,
-		effect: mat.Effect_Desc,
+		schemas: []fx.Schema,
+		effect: fx.Effect_Desc,
 	}{mat.MANIFEST_VERSION, doc.schemas, doc.effect}
 	data, json_err := json.marshal(manifest)
 	if json_err != nil {

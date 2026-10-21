@@ -9,6 +9,7 @@ import path "core:path/slashpath"
 import "core:strings"
 
 import foster "../../../foster"
+import fx "../shader/effect"
 
 // ------------------------------------------------------------------------------
 // 类型
@@ -20,17 +21,20 @@ import foster "../../../foster"
 Material :: struct {
 	owner: ^Material_Library,
 	effect: ^Material_Effect,
-	instance: Instance,
+	instance: fx.Instance,
 	source: string,
 	bindings: []Material_Binding,
-	samplers: [][MAX_TEXTURES]foster.BoundSampler,
+	samplers: [][fx.MAX_TEXTURES]foster.BoundSampler,
 	// 数值、贴图或重载每次成功修改都递增；绘制器据此判断已记录的参数与贴图快照能否继续合批。
 	revision: u64,
 }
 
+// 记录与提交时选 Pass 用的 ID（r2d.image、r3d.submit 等的 pass_id）；定义在效果描述层，游戏用 mat.Pass_Id 即可。
+Pass_Id :: fx.Pass_Id
+
 @(private)
 material_instance_clear :: proc(material: ^Material) {
-	instance_dispose(&material.instance)
+	fx.instance_dispose(&material.instance)
 	delete(material.source)
 	delete(material.bindings)
 	delete(material.samplers)
@@ -74,17 +78,17 @@ material_path :: proc(file, relative: string) -> (string, string) {
 
 // 读取并解码材质文件：返回实例数值与它所属的 Effect，不创建 GPU 资源。
 @(private)
-material_read :: proc(library: ^Material_Library, source: string) -> (Instance, ^Material_Effect, string) {
+material_read :: proc(library: ^Material_Library, source: string) -> (fx.Instance, ^Material_Effect, string) {
 	if library.storage == nil do return {}, nil, "Missing material storage"
 	bytes := foster.ReadAllBytes(library.storage, source, context.temp_allocator)
-	if len(bytes) == 0 || len(bytes) > MAX_RESOURCE_BYTES do return {}, nil, "Cannot read material or resource exceeds 1 MiB"
+	if len(bytes) == 0 || len(bytes) > fx.MAX_RESOURCE_BYTES do return {}, nil, "Cannot read material or resource exceeds 1 MiB"
 	header: struct {version: int, effect: string}
 	if json.unmarshal(bytes, &header, allocator = context.temp_allocator) != nil || header.version != 2 {
 		return {}, nil, "Invalid material resource"
 	}
 	for effect in library.effects {
 		if effect.desc.name != header.effect do continue
-		instance, reason := instance_decode(effect.desc, effect.schemas, bytes)
+		instance, reason := fx.instance_decode(effect.desc, effect.schemas, bytes)
 		return instance, effect, reason
 	}
 	return {}, nil, fmt.tprintf("Unknown material effect: %s", header.effect)
@@ -107,7 +111,7 @@ material_white_texture :: proc(library: ^Material_Library) -> string {
 material_from_bindings :: proc(library: ^Material_Library, effect: ^Material_Effect,
 	bindings: []Material_Binding) -> (material: Material, reason: string) {
 	if library == nil || library.device == nil do return {}, "Missing graphics device"
-	if effect == nil || !effect_is_material(effect.desc) do return {}, "Expected Model or Sprite material effect"
+	if effect == nil || !fx.effect_is_material(effect.desc) do return {}, "Expected Model or Sprite material effect"
 	if len(bindings) != len(effect.schemas) do return {}, "Binding count differs from schema count"
 	for binding, i in bindings {
 		if binding.schema.name != effect.schemas[i].name do return {}, "Bindings must follow the effect's schema order"
@@ -123,8 +127,8 @@ material_from_bindings :: proc(library: ^Material_Library, effect: ^Material_Eff
 
 // 为一个参数组解析全部 Texture 字段，返回按字段顺序排列的采样器数量；缺省贴图用白图。
 @(private)
-material_group_samplers :: proc(library: ^Material_Library, source: string, group: Instance_Group,
-	samplers: ^[MAX_TEXTURES]foster.BoundSampler) -> (count: int, reason: string) {
+material_group_samplers :: proc(library: ^Material_Library, source: string, group: fx.Instance_Group,
+	samplers: ^[fx.MAX_TEXTURES]foster.BoundSampler) -> (count: int, reason: string) {
 	for field, j in group.schema.fields {
 		if field.kind != .Texture do continue
 		texture := &library.white
@@ -135,7 +139,7 @@ material_group_samplers :: proc(library: ^Material_Library, source: string, grou
 			texture, reason = material_texture(library, resolved)
 			if reason != "" do return 0, reason
 		}
-		samplers[count] = {texture, field_sampler(field)}
+		samplers[count] = {texture, fx.field_sampler(field)}
 		count += 1
 	}
 	return count, ""
@@ -170,7 +174,7 @@ material_create :: proc(library: ^Material_Library, effect_name: string) -> (^Ma
 	if effect == nil do return nil, fmt.tprintf("Unknown material effect: %s", effect_name)
 	next := Material{owner = library, effect = effect}
 	reason: string
-	next.instance, reason = instance_make(effect.desc, effect.schemas)
+	next.instance, reason = fx.instance_make(effect.desc, effect.schemas)
 	if reason == "" do reason = material_bind(library, &next, "")
 	if reason != "" {
 		material_instance_clear(&next)
@@ -189,7 +193,7 @@ material_bind :: proc(library: ^Material_Library, material: ^Material, source: s
 	if reason := material_white_texture(library); reason != "" do return reason
 	material.source = strings.clone(source)
 	material.bindings = make([]Material_Binding, len(material.instance.groups))
-	material.samplers = make([][MAX_TEXTURES]foster.BoundSampler, len(material.instance.groups))
+	material.samplers = make([][fx.MAX_TEXTURES]foster.BoundSampler, len(material.instance.groups))
 	for group, i in material.instance.groups {
 		count, reason := material_group_samplers(library, source, group, &material.samplers[i])
 		if reason != "" do return reason
@@ -210,13 +214,13 @@ material_set_number :: proc(material: ^Material, group, field: string, value: [4
 	if material == nil do return false
 	for &parameters in material.instance.groups {
 		if parameters.schema.name != group do continue
-		i := field_index(parameters.schema, field)
+		i := fx.field_index(parameters.schema, field)
 		if i < 0 || parameters.schema.fields[i].kind == .Texture do return false
 		f := parameters.schema.fields[i]
 		for x in value {
 			if math.is_nan(x) || math.is_inf(x) do return false
 		}
-		for c in 0..<components(f.kind) {
+		for c in 0..<fx.components(f.kind) {
 			if value[c] < f.minimum || value[c] > f.maximum do return false
 		}
 		parameters.values[i].number = value
@@ -238,7 +242,7 @@ material_set_texture :: proc(material: ^Material, group, field: string, texture:
 		for f in parameters.schema.fields {
 			if f.kind != .Texture do continue
 			if f.id == field {
-				material.samplers[g][slot] = {texture != nil ? texture : &material.owner.white, field_sampler(f)}
+				material.samplers[g][slot] = {texture != nil ? texture : &material.owner.white, fx.field_sampler(f)}
 				material.revision += 1
 				return true
 			}

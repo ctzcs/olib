@@ -1,9 +1,11 @@
 #+test
-package material
+package effect
 
 import "core:mem"
 import "core:strings"
 import "core:testing"
+
+import foster "olib:foster"
 
 @(test)
 pass_graph_orders_current_dependencies_and_owns_nested_data :: proc(t: ^testing.T) {
@@ -83,14 +85,12 @@ resource_roundtrip_isolation_and_validation :: proc(t: ^testing.T) {
 	defer mem.tracking_allocator_destroy(&track)
 	context.allocator = mem.tracking_allocator(&track)
 	defer testing.expect_value(t, len(track.allocation_map), 0)
-	Params :: struct {
-		metallic: Scalar,
-		color: Color,
-		image: Texture_Path,
-	}
-	schema, reason := describe("Standard", "surface.hlsl", "3d", Params{color = {1,1,1,1}})
+	schema := schema_clone(Schema{name = "Standard", shader = "surface.hlsl", preview = "3d", fields = []Field{
+		{id = "metallic", name = "metallic", label = "metallic", kind = .Scalar, maximum = 1, step = 0.01},
+		{id = "color", name = "color", label = "color", kind = .Color, maximum = 1, step = 0.01, initial = {1, 1, 1, 1}},
+		{id = "image", name = "image", label = "image", kind = .Texture},
+	}})
 	defer schema_dispose(&schema)
-	testing.expect_value(t, reason, "")
 	base := values_make(schema)
 	defer values_dispose(base)
 	base[0].number[0] = 0.7
@@ -113,4 +113,17 @@ resource_roundtrip_isolation_and_validation :: proc(t: ^testing.T) {
 		invalid, message := resource_decode(schema, transmute([]u8)bad)
 		testing.expect(t, invalid == nil && message != "")
 	}
+}
+
+// 精灵纹理只用显式写了的部分，其余沿用 Render2D 的 push_sampler；普通贴图字段按声明，缺省线性、钳制。
+@(test)
+sprite_sampler_uses_only_declared_parts :: proc(t: ^testing.T) {
+	inherited := foster.TextureSamplerMake(.Nearest, .Clamp)
+	plain := Field{kind = .Texture}
+	testing.expect_value(t, field_sampler(plain), foster.TextureSamplerMake(.Linear, .Clamp))
+	testing.expect_value(t, field_sprite_sampler(plain, inherited), inherited)
+	only_wrap := Field{kind = .Texture, wrap = .Repeat, wrap_declared = true}
+	testing.expect_value(t, field_sprite_sampler(only_wrap, inherited), foster.TextureSamplerMake(.Nearest, .Repeat))
+	only_filter := Field{kind = .Texture, filter = .Linear, filter_declared = true}
+	testing.expect_value(t, field_sprite_sampler(only_filter, inherited), foster.TextureSamplerMake(.Linear, .Clamp))
 }

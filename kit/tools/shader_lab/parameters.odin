@@ -8,15 +8,15 @@ import "core:path/filepath"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/rendering/material"
 import dev "olib:kit/rendering/shader/dev"
+import fx "olib:kit/rendering/shader/effect"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
 Parameter_State :: struct {
 	name: string,
-	live, pending: mat.Schema,
-	values: []mat.Value,
+	live, pending: fx.Schema,
+	values: []fx.Value,
 	textures: [16]foster.Texture,
 	buffer: []u8,
 	has_pending, available: bool,
@@ -28,9 +28,9 @@ Parameter_State :: struct {
 }
 
 parameter_dispose :: proc(p: ^Parameter_State) {
-	mat.schema_dispose(&p.live)
-	mat.schema_dispose(&p.pending)
-	mat.values_dispose(p.values)
+	fx.schema_dispose(&p.live)
+	fx.schema_dispose(&p.pending)
+	fx.values_dispose(p.values)
 	for &texture in p.textures do foster.TextureDispose(&texture)
 	delete(p.name)
 	delete(p.error)
@@ -69,14 +69,14 @@ load_parameter_texture :: proc(s: ^Session, device: ^foster.GraphicsDevice, path
 
 parameters_bind :: proc(s: ^Session, index: int) {
 	p := &s.parameters[index]
-	if !mat.pack(p.live, p.values, p.buffer) do return
+	if !fx.pack(p.live, p.values, p.buffer) do return
 	stage := &s.materials[index].Fragment
 	foster.MaterialStageSetUniformBuffer(stage, p.buffer, 1)
 	slot := 0
 	for f in p.live.fields {
 		if f.kind != .Texture do continue
 		texture := p.textures[slot].Resource != nil ? &p.textures[slot] : &s.texture
-		stage.Samplers[slot] = {texture, mat.field_sampler(f)}
+		stage.Samplers[slot] = {texture, fx.field_sampler(f)}
 		slot += 1
 	}
 }
@@ -102,7 +102,7 @@ parameters_panel :: proc(s: ^Session, index: int) {
 		if clay.UI()(ui.ui_row_decl(4)) {
 			ui.ui_label(&s.ctx, &s.theme, f.label)
 			ui.ui_spacer()
-			if overridden do ui.ui_label_dim(&s.ctx, &s.small_theme, fmt.tprintf("%v", override[:mat.components(f.kind)]))
+			if overridden do ui.ui_label_dim(&s.ctx, &s.small_theme, fmt.tprintf("%v", override[:fx.components(f.kind)]))
 			if f.kind == .Scalar && !overridden do ui.ui_label_ex(&s.ctx, &s.theme,
 				fmt.tprintf("%.2f", overridden ? override[0] : p.values[i].number[0]), s.theme.accent, 14)
 			if !overridden && binding_label == "" {
@@ -155,7 +155,7 @@ parameters_panel :: proc(s: ^Session, index: int) {
 			}
 			continue
 		}
-		count := mat.components(f.kind)
+		count := fx.components(f.kind)
 		for c in 0..<count {
 			id := count == 1 ? fmt.tprintf("%s:%s", p.name, f.id) : fmt.tprintf("%s:%s:%d", p.name, f.id, c)
 			components := [4]string{"X", "Y", "Z", "W"}

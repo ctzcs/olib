@@ -1,4 +1,4 @@
-package material
+package effect
 
 // 效果与多 Pass 的纯数据声明；不依赖编辑器或 GPU。分区：声明 / 校验与拓扑排序 / 所有权。
 import "core:fmt"

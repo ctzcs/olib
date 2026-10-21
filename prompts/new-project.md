@@ -34,7 +34,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 2. olib 以 collection 方式引用：`-collection:olib=<olib 路径>`。游戏自己的源码也作为 collection：`-collection:game=src`，包之间用 `"game:core/data"` 这类路径导入，不用 `../` 相对路径。
 3. olib 分三层，按层选用：
    - `olib:foster` —— **唯一运行时**：App 生命周期、窗口、输入、图形、基础类型（`Color`、`Vec2`、`Rect`……）、存储。直接调用，不要再包一层“引擎类”。
-   - `olib:kit/*` —— foster 没有的扩展能力：`kit/ui`（clay 布局的游戏 UI）、`kit/asset`（资源管线）、`kit/world`（相机/场景）、`kit/rendering/material`（公共材质资源与 Pass 提交）、`kit/rendering/2d`（Sprite/图集）、`kit/rendering/3d`（3D 机制：Mesh 上传/排序队列/字节码选择/std140/调试线；光照与材质由游戏自己写）、`kit/animation`、`kit/audio`、`kit/storage`（默认跨平台资源根与用户存储）、`kit/app`（`has_arg` 与调试控制台）。
+   - `olib:kit/*` —— foster 没有的扩展能力：`kit/ui`（clay 布局的游戏 UI）、`kit/asset`（资源管线）、`kit/world`（相机/场景）、`kit/rendering/material`（材质库、材质加载与每实例的值）、`kit/rendering/2d`（Sprite/图集）、`kit/rendering/3d`（3D 机制：Mesh 上传/排序队列/字节码选择/std140/调试线；光照与材质由游戏自己写）、`kit/animation`、`kit/audio`、`kit/storage`（默认跨平台资源根与用户存储）、`kit/app`（`has_arg` 与调试控制台）。
    - `olib:core/*` —— 纯 Odin 数据结构与格式：`core/handle`（代数句柄池）、`core/messaging`（命令队列/广播）、`core/encoding`（JSON/CSV）、`core/tween` 等。
 4. 先读 olib 根目录的 `README.md`、`docs/CODE_STYLE.md`，以及要用到的包源码和 README（`kit/ui/README.md`、`core/handle/README.md`、`kit/asset/README.md`、`kit/rendering/3d/README.md`（自写着色器的完整流程）），按真实签名写调用代码；不要凭印象编造 API。可运行示例在与 olib 同级的 olib_sample 仓库（`src/game_ui` 是完整的 kit/ui 用法；`src/forward3d` 是参考前向渲染器，3D 游戏可以把它复制进来按画风改写），只作参考，不是新游戏的依赖。
 5. 新游戏默认建在 olib 的同级独立目录。不要因为当前工作目录在 olib 就把游戏业务写进库，也不要复制 olib 源码进游戏。

@@ -6,11 +6,12 @@ import "core:encoding/json"
 import "core:testing"
 
 import foster "olib:foster"
+import fx "olib:kit/rendering/shader/effect"
 
 // 这些用例都在提交任何 Draw 之前返回，不需要真实 GPU：设备/网格只当作非空指针。
 @(private)
-model_effect :: proc() -> Effect_Desc {
-	passes := make([]Pass_Desc, 2, context.temp_allocator)
+model_effect :: proc() -> fx.Effect_Desc {
+	passes := make([]fx.Pass_Desc, 2, context.temp_allocator)
 	passes[0] = {id = "body", params = "Body", draw = .Model, output = "color"}
 	passes[1] = {id = "outline", params = "Body", draw = .Model, output = "color", disabled = true}
 	return {name = "E", output = "color", passes = passes}
@@ -23,7 +24,7 @@ material_select_reports_why_it_refused :: proc(t: ^testing.T) {
 	selection: Pass_Selection
 	testing.expect_value(t, material_select(effect, nil, .Model, "ghost", nil, &selection), Draw_Error.Unknown_Pass)
 	crowded := effect
-	crowded.passes = make([]Pass_Desc, MAX_PASSES+1, context.temp_allocator)
+	crowded.passes = make([]fx.Pass_Desc, fx.MAX_PASSES+1, context.temp_allocator)
 	for &pass in crowded.passes do pass = {id = "p", params = "Body", draw = .Model, output = "color"}
 	testing.expect_value(t, material_select(crowded, nil, .Model, "", nil, &selection), Draw_Error.Too_Many_Passes)
 	testing.expect_value(t, material_select(effect, nil, .Sprite, "", nil, &selection), Draw_Error.Wrong_Pass_Kind)
@@ -48,7 +49,7 @@ view_globals_padding_and_slot_counts :: proc(t: ^testing.T) {
 
 	vertex, fragment := material_uniform_counts(model_effect())
 	testing.expect(t, vertex == 2 && fragment == 3)
-	sprite := Effect_Desc{passes = []Pass_Desc{{draw = .Sprite}}}
+	sprite := fx.Effect_Desc{passes = []fx.Pass_Desc{{draw = .Sprite}}}
 	vertex, fragment = material_uniform_counts(sprite)
 	testing.expect(t, vertex == 2 && fragment == 2)
 	sprite.uniforms = .Foster
@@ -59,11 +60,11 @@ view_globals_padding_and_slot_counts :: proc(t: ^testing.T) {
 // 每种 ZTest 都映射到 foster 的比较；Off 关闭测试，Default 不改调用方状态。
 @(test)
 pass_depth_maps_every_compare :: proc(t: ^testing.T) {
-	expected := [Pass_Depth]foster.DepthCompare{
+	expected := [fx.Pass_Depth]foster.DepthCompare{
 		.Default = .Equal, .Off = .Equal, .Less = .Less, .Less_Equal = .LessOrEqual, .Equal = .Equal,
 		.Always = .Always, .Greater = .Greater, .Greater_Equal = .GreatorOrEqual, .Not_Equal = .NotEqual, .Never = .Never,
 	}
-	for depth in Pass_Depth {
+	for depth in fx.Pass_Depth {
 		// 起始状态用 Equal、测试开启，便于看出 Default 不改、Off 只关测试。
 		command := foster.DrawCommand{DepthTestEnabled = true, DepthCompare = .Equal}
 		pass_state_apply(&command, {depth = depth})
@@ -96,11 +97,11 @@ shader_pick_follows_driver :: proc(t: ^testing.T) {
 
 @(test)
 material_register_manifest_selects_backend_and_validates :: proc(t: ^testing.T) {
-	schemas := []Schema{{name = "Body", preview = "3d"}}
-	effect := Effect_Desc{name = "E", output = "color", passes = []Pass_Desc{
+	schemas := []fx.Schema{{name = "Body", preview = "3d"}}
+	effect := fx.Effect_Desc{name = "E", output = "color", passes = []fx.Pass_Desc{
 		{id = "body", params = "Body", draw = .Model, output = "color"},
 	}}
-	Manifest :: struct {version: int, schemas: []Schema, effect: Effect_Desc}
+	Manifest :: struct {version: int, schemas: []fx.Schema, effect: fx.Effect_Desc}
 	manifest, err := json.marshal(Manifest{MANIFEST_VERSION, schemas, effect})
 	defer delete(manifest)
 	testing.expect_value(t, err, nil)
@@ -134,7 +135,7 @@ material_register_manifest_selects_backend_and_validates :: proc(t: ^testing.T) 
 
 // tools/shaders 写出的清单 JSON；借用 temp_allocator。
 @(private)
-compiled_manifest_json :: proc(effect: Effect_Desc, schemas: []Schema, version := MANIFEST_VERSION) -> []u8 {
+compiled_manifest_json :: proc(effect: fx.Effect_Desc, schemas: []fx.Schema, version := MANIFEST_VERSION) -> []u8 {
 	data, _ := json.marshal(Compiled_Manifest{version, schemas, effect}, allocator = context.temp_allocator)
 	return data
 }
@@ -142,13 +143,13 @@ compiled_manifest_json :: proc(effect: Effect_Desc, schemas: []Schema, version :
 // 内存里的 #load_directory 结果：Model 效果、instanced Sprite 效果、只供预览的 Fullscreen 效果和无关文件。
 @(test)
 material_register_directory_finds_compiled_files :: proc(t: ^testing.T) {
-	hero := Effect_Desc{name = "Hero", output = "color", passes = []Pass_Desc{
+	hero := fx.Effect_Desc{name = "Hero", output = "color", passes = []fx.Pass_Desc{
 		{id = "body", params = "Hero_body", draw = .Model, output = "color"},
 	}}
-	spark := Effect_Desc{name = "Spark", output = "color", instanced = true, passes = []Pass_Desc{
+	spark := fx.Effect_Desc{name = "Spark", output = "color", instanced = true, passes = []fx.Pass_Desc{
 		{id = "main", params = "Spark_main", draw = .Sprite, output = "color"},
 	}}
-	trail := Effect_Desc{name = "Trail", output = "color", passes = []Pass_Desc{
+	trail := fx.Effect_Desc{name = "Trail", output = "color", passes = []fx.Pass_Desc{
 		{id = "blur", params = "Trail_blur", draw = .Fullscreen, output = "color"},
 	}}
 	files := []runtime.Load_Directory_File{
@@ -185,10 +186,10 @@ material_register_directory_finds_compiled_files :: proc(t: ^testing.T) {
 
 @(test)
 material_register_directory_names_what_is_missing :: proc(t: ^testing.T) {
-	hero := Effect_Desc{name = "Hero", output = "color", passes = []Pass_Desc{
+	hero := fx.Effect_Desc{name = "Hero", output = "color", passes = []fx.Pass_Desc{
 		{id = "body", params = "Hero_body", draw = .Model, output = "color"},
 	}}
-	spark := Effect_Desc{name = "Spark", output = "color", instanced = true, passes = []Pass_Desc{
+	spark := fx.Effect_Desc{name = "Spark", output = "color", instanced = true, passes = []fx.Pass_Desc{
 		{id = "main", params = "Spark_main", draw = .Sprite, output = "color"},
 	}}
 	hero_manifest := compiled_manifest_json(hero, {{name = "Hero_body", preview = "3d"}})

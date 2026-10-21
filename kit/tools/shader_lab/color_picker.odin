@@ -8,7 +8,7 @@ import "core:math"
 import "core:strings"
 
 import foster "olib:foster"
-import mat "olib:kit/rendering/material"
+import fx "olib:kit/rendering/shader/effect"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -80,7 +80,7 @@ color_picker_value :: proc(p: ^Color_Picker) -> [4]f32 {
 // 会话与纹理：不跨帧借用参数切片内的指针
 // ==============================================================================
 
-color_picker_target :: proc(s: ^Session) -> ^mat.Value {
+color_picker_target :: proc(s: ^Session) -> ^fx.Value {
 	p := &s.color_picker
 	for &group in s.parameters[:s.shader_count] {
 		if !group.available || group.name != p.group do continue

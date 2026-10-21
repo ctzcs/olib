@@ -3,7 +3,7 @@ package shader_lab
 // 效果选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 .oshader 文件。
 import "core:fmt"
 import foster "olib:foster"
-import mat "olib:kit/rendering/material"
+import fx "olib:kit/rendering/shader/effect"
 import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
@@ -12,7 +12,7 @@ preview_size_label :: proc(s: ^Session) -> string {
 		e := &s.effects[s.selected_effect]
 		for p, i in e.desc.passes {
 			if i == s.preview_pass || (s.preview_pass < 0 && p.output == e.desc.output) {
-				t := &e.targets[mat.effect_is_material(e.desc) ? 0 : i].buffers[0]
+				t := &e.targets[fx.effect_is_material(e.desc) ? 0 : i].buffers[0]
 				if len(t.Attachments) == 0 do break
 				x := foster.TargetAttachment(t).SampleCount == .One ? 1 : 4
 				return fmt.tprintf("RT %d x %d / MSAA %dx", t.Width, t.Height, x)
@@ -88,7 +88,7 @@ shader_folder :: proc(s: ^Session, index: int, id: string) {
 		}
 		if p.folder_closed do return
 		ui.ui_label_dim(&s.ctx, &s.small_theme, p.live.shader)
-		if s.file_dialogs && s.selected_effect >= 0 && mat.effect_is_material(s.effects[s.selected_effect].desc) {
+		if s.file_dialogs && s.selected_effect >= 0 && fx.effect_is_material(s.effects[s.selected_effect].desc) {
 			ui.ui_label_dim(&s.ctx, &s.small_theme, "保存 / 载入整个材质")
 		}
 		if clay.UI()(ui.ui_row_decl(4)) {

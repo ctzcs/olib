@@ -59,8 +59,8 @@ model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity:
 	return ""
 }
 
-// 按槽数创建缓冲；参数由调用方校验。Render3D 的临时实例缓冲按槽数共用，不绑定某个材质。
-@(private)
+// 按槽数创建缓冲，不经材质；参数由调用方校验。Render3D 的临时实例缓冲按槽数共用，
+// Shader Lab 建 instanced 模型的管线时也用它（只需格式，不上传实例）。
 model_buffer_create :: proc(buf: ^Model_Buffer, device: ^foster.GraphicsDevice, slots, capacity: int, name: string) {
 	elements := make([]foster.VertexElement, fx.INSTANCE_FIXED_ATTRIBUTES+slots, context.temp_allocator)
 	for i in 0..<len(elements) do elements[i] = {i, .Float4, false}
@@ -69,6 +69,16 @@ model_buffer_create :: proc(buf: ^Model_Buffer, device: ^foster.GraphicsDevice, 
 	buf^ = {slots = slots, capacity = capacity}
 	foster.VertexBufferInit(&buf.buffer, device, format, name)
 	foster.VertexBufferReserve(&buf.buffer, capacity)
+}
+
+// 把网格的绘制命令改成实例化：网格属性排在实例属性之后（Shader 里 OlibInstanceInput 是 Input 的第一个成员），
+// 再追加实例缓冲。shifted 是改了属性位置的顶点缓冲副本，须保持到绘制或建管线结束，之后 VertexFormatDispose(&shifted.Format)。
+model_instanced_command :: proc(command: ^foster.DrawCommand, mesh: ^foster.Mesh, buf: ^Model_Buffer, shifted: ^foster.VertexBuffer) {
+	shifted^ = mesh.VertexData
+	shifted.Format = foster.VertexFormatClone(mesh.VertexData.Format)
+	for &element in shifted.Format.Elements do element.Index += fx.INSTANCE_FIXED_ATTRIBUTES + buf.slots
+	command.VertexBuffers[0].Buffer = shifted
+	append(&command.VertexBuffers, foster.VertexBufferBinding{Buffer = &buf.buffer, InstanceInputRate = true})
 }
 
 model_buffer_dispose :: proc(buf: ^Model_Buffer) {

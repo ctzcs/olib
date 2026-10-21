@@ -184,9 +184,10 @@ step :: proc(s: ^Session) {
 	s.step_requested = true
 }
 
-// 非材质效果的绘制命令与热重载的管线探测都用内置几何；最后一个参数是 Pass ID，调用方用它标识探测。
+// 非材质效果的绘制命令与热重载的管线探测都用内置几何。instanced 模型的探测与 Render3D 一样把网格属性
+// 排在实例属性之后并绑定实例缓冲；改了属性位置的网格副本分配在临时内存里，探测在本帧内用完。
 pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: fx.Pass_Draw,
-	target: foster.DrawableTarget, _: string = "") -> foster.DrawCommand {
+	target: foster.DrawableTarget, instanced := false) -> foster.DrawCommand {
 	preview3d := draw != .Fullscreen && bank.parameters[index].live.preview == "3d"
 	mesh := preview3d ? (s.mode == 3 ? 2 : 1) : 0
 	command: foster.DrawCommand
@@ -194,6 +195,13 @@ pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: fx.Pa
 	// 精灵 Pass 只用于管线探测（材质预览走 Render2D），需要的是 BatcherVertex 布局。
 	if draw == .Sprite do geometry = &s.sprite_mesh
 	foster.DrawCommandFromMesh(&command, target, geometry, &bank.materials[index])
+	if draw == .Model && instanced {
+		slots := fx.instance_count(bank.parameters[index].live)
+		buf := &s.probe_instances[slots]
+		if buf.capacity == 0 do r3d.model_buffer_create(buf, s.device, slots, 1, "shader lab instance probe")
+		context.allocator = context.temp_allocator
+		r3d.model_instanced_command(&command, geometry, buf, new(foster.VertexBuffer))
+	}
 	command.DepthTestEnabled = preview3d
 	command.DepthWriteEnabled = preview3d
 	command.CullMode = preview3d ? .Back : .None
@@ -267,7 +275,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 			continue
 		}
 		drawable := foster.DrawableTargetFromTarget(target)
-		command := pass_command(s, s.bank, index, p.draw, drawable, string(p.id))
+		command := pass_command(s, s.bank, index, p.draw, drawable)
 		mat.pass_state_apply(&command, p.state)
 		pass_uniforms(s, index, p.draw, drawable, e.time, dt, e.frame)
 		parameters_bind(s, index)

@@ -144,7 +144,7 @@ bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates
 				for p, j in e.desc.passes {
 					if string(p.params) != b.parameters[i].name do continue
 					target := foster.DrawableTargetFromTarget(&e.targets[fx.effect_is_material(e.desc) ? 0 : j].buffers[0])
-					command := pass_command(s, b, i, p.draw, target, string(p.id))
+					command := pass_command(s, b, i, p.draw, target, e.desc.instanced)
 					mat.pass_state_apply(&command, p.state)
 					append(&probes, command)
 				}

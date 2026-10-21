@@ -14,6 +14,7 @@ import r2d "olib:kit/rendering/2d"
 import mat "olib:kit/rendering/material"
 import r3d "olib:kit/rendering/3d"
 import dev "olib:kit/rendering/shader/dev"
+import fx "olib:kit/rendering/shader/effect"
 import ui "olib:kit/ui"
 import world "olib:kit/world"
 import clay "olib:thirdparty/clay-odin"
@@ -27,6 +28,8 @@ Session :: struct {
 	preview_sprites: r2d.Render2D,
 	preview_models: r3d.Render3D,
 	sprite_mesh: foster.Mesh,
+	// instanced 模型的管线探测按 [Instance] 字段数各用一个实例缓冲（只用格式），首次需要时创建。
+	probe_instances: [fx.MAX_INSTANCE_FIELDS + 1]r3d.Model_Buffer,
 	font: ^foster.MsdfFont, // 借用宿主字体，宿主须在 dispose 后释放。
 	icons: ^r2d.Sprite_Atlas,
 	owned_icons: r2d.Sprite_Atlas,
@@ -204,6 +207,7 @@ dispose :: proc(s: ^Session) {
 	r2d.dispose(&s.preview_sprites)
 	r3d.dispose(&s.preview_models)
 	foster.MeshDispose(&s.sprite_mesh)
+	for &buf in s.probe_instances do r3d.model_buffer_dispose(&buf)
 	mat.material_library_dispose(&s.library)
 	r2d.dispose(&s.batch)
 	ui.ui_dispose(&s.ctx)

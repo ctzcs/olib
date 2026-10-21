@@ -507,11 +507,7 @@ render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_
 	defer foster.DrawCommandDispose(&command)
 	shifted: foster.VertexBuffer
 	if buf != nil {
-		shifted = record.mesh.VertexData
-		shifted.Format = foster.VertexFormatClone(record.mesh.VertexData.Format)
-		for &element in shifted.Format.Elements do element.Index += fx.INSTANCE_FIXED_ATTRIBUTES + buf.slots
-		command.VertexBuffers[0].Buffer = &shifted
-		append(&command.VertexBuffers, foster.VertexBufferBinding{Buffer = &buf.buffer, InstanceInputRate = true})
+		model_instanced_command(&command, record.mesh, buf, &shifted)
 		command.InstanceCount = count
 		command.InstanceOffset = first
 	}

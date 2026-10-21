@@ -213,39 +213,36 @@ pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: mat.P
 	return command
 }
 
-pass_uniforms :: proc(s: ^Session, index: int, draw: mat.Pass_Draw, w, h: int,
+pass_uniforms :: proc(s: ^Session, index: int, draw: mat.Pass_Draw, target: foster.DrawableTarget,
 	time, dt: f32, frame: u64) {
 	material := &s.materials[index]
-	sprite := draw == .Preview_Model && s.mode == 1
-	// 与 Render3D 的片元帧块一致：Clock、Pointer、Tint，3D 预览再接 CameraPosition。
+	w, h := target.WidthInPixels, target.HeightInPixels
+	pointer := [2]f32{(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height}
 	block: [r3d.MATERIAL_FRAME_BLOCK_SIZE]u8
-	mat.std140_write_vec4(block[:], 0, {time, dt, f32(frame), sprite ? 1 : 0})
-	mat.std140_write_vec4(block[:], 16, {(s.pointer.x-s.viewport.X)/s.viewport.Width,
-		(s.pointer.y-s.viewport.Y)/s.viewport.Height, f32(w), f32(h)})
-	mat.std140_write_vec4(block[:], 32, {1, 1, 1, 1})
-	model := draw != .Fullscreen && s.parameters[index].live.preview == "3d"
-	camera: [4]f32
-	if model {
+	if draw != .Fullscreen && s.parameters[index].live.preview == "3d" {
+		// 3D 预览（model.hlsli 布局）与 Render3D 用同一个打包函数。
 		world.camera3d_set_viewport(&s.camera, w, h)
 		world.camera3d_set_position(&s.camera, {math.sin(s.yaw)*math.cos(s.pitch)*s.distance,
 			math.sin(s.pitch)*s.distance, math.cos(s.yaw)*math.cos(s.pitch)*s.distance})
-		camera = r3d.camera_position(world.camera3d_view(&s.camera))
-		mat.std140_write_vec4(block[:], 48, camera)
-	}
-	foster.MaterialStageSetUniformBuffer(&material.Fragment, block[:])
-	if !model {
-		view: [16]u8
-		scale: f32 = sprite ? 0.7 : 1
-		xscale := sprite ? scale*f32(h)/f32(w) : scale
-		mat.std140_write_vec4(view[:], 0, {xscale, scale, 0, 0})
-		foster.MaterialStageSetUniformBuffer(&material.Vertex, view[:])
-	} else {
 		matrices: [r3d.MATERIAL_VERTEX_BLOCK_SIZE]u8
-		r3d.pack_vertex_matrix_block(matrices[:], world.camera3d_view_projection(&s.camera), world.MATRIX4_IDENTITY)
-		mat.std140_write_vec4(matrices[:], r3d.VERTEX_MATRIX_BLOCK_SIZE, {time, dt, f32(frame), 0})
-		mat.std140_write_vec4(matrices[:], r3d.VERTEX_MATRIX_BLOCK_SIZE + 16, camera)
+		view := r3d.View{target = target, time = time, delta_time = dt, frame = frame}
+		r3d.pack_material_blocks(matrices[:], block[:], world.camera3d_view_projection(&s.camera), world.MATRIX4_IDENTITY,
+			view, r3d.camera_position(world.camera3d_view(&s.camera)), pointer, {1, 1, 1, 1})
+		foster.MaterialStageSetUniformBuffer(&material.Fragment, block[:])
 		foster.MaterialStageSetUniformBuffer(&material.Vertex, matrices[:])
+		return
 	}
+	// Fullscreen 与 2D 预览（fullscreen.hlsli 布局）只有 Shader Lab 一个宿主：Clock.w 为精灵预览模式标记。
+	sprite := draw == .Preview_Model && s.mode == 1
+	mat.std140_write_vec4(block[:], 0, {time, dt, f32(frame), sprite ? 1 : 0})
+	mat.std140_write_vec4(block[:], 16, {pointer[0], pointer[1], f32(w), f32(h)})
+	mat.std140_write_vec4(block[:], 32, {1, 1, 1, 1})
+	foster.MaterialStageSetUniformBuffer(&material.Fragment, block[:])
+	view: [16]u8
+	scale: f32 = sprite ? 0.7 : 1
+	xscale := sprite ? scale*f32(h)/f32(w) : scale
+	mat.std140_write_vec4(view[:], 0, {xscale, scale, 0, 0})
+	foster.MaterialStageSetUniformBuffer(&material.Vertex, view[:])
 }
 
 // 暂停时重绘当前输出但保持 Previous 不动，因此调参数不会偷偷推进反馈模拟。
@@ -284,7 +281,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 		drawable := foster.DrawableTargetFromTarget(target)
 		command := pass_command(s, s.bank, index, p.draw, drawable, string(p.id), e.time, dt, e.frame)
 		mat.pass_state_apply(&command, p.state)
-		pass_uniforms(s, index, p.draw, target.Width, target.Height, e.time, dt, e.frame)
+		pass_uniforms(s, index, p.draw, drawable, e.time, dt, e.frame)
 		parameters_bind(s, index)
 		parameter := &s.parameters[index]
 		if len(p.values) > 0 {

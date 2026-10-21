@@ -383,7 +383,7 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 	// 顶点 b0：目标像素到裁剪空间的投影，后接 Clock（与片元 Clock 同值）。
 	vertex_uniform := [SPRITE_VERTEX_BLOCK_SIZE/4]f32{2/f32(w), 0, 0, 0, 0, -2/f32(h), 0, 0, 0, 0, 1, 0, -1, 1, 0, 1,
 		view.time, view.delta_time, f32(view.frame), 0}
-	frame := [SPRITE_FRAME_BLOCK_SIZE/4]f32{view.time, view.delta_time, f32(view.frame), 1, view.pointer[0], view.pointer[1],
+	frame := [SPRITE_FRAME_BLOCK_SIZE/4]f32{view.time, view.delta_time, f32(view.frame), 0, view.pointer[0], view.pointer[1],
 		f32(w), f32(h), 1, 1, 1, 1}
 	for &run in r.runs {
 		effect := run.material.effect.desc

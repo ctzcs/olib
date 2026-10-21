@@ -45,8 +45,8 @@ camera_position :: proc(view_matrix: world.Matrix4) -> [4]f32 {
 	return {position[0], position[1], position[2], 1}
 }
 
-// 写材质路径的顶点 b0 与片元 b0；wvp/world_matrix 由调用方按是否实例化决定，camera 每次提交算一次。
-@(private)
+// 写材质路径的顶点 b0 与片元 b0（布局见 olib/model.hlsli），3D 布局只在这里写：Render3D 与 Shader Lab 的 3D 预览共用。
+// wvp/world_matrix 由调用方按是否实例化决定；camera 用 camera_position 求，每次提交算一次；Clock.w 为 0。
 pack_material_blocks :: proc(vertex, frame: []u8, wvp, world_matrix: world.Matrix4, view: View,
 	camera: [4]f32, pointer: [2]f32, tint: [4]f32) {
 	clock := [4]f32{view.time, view.delta_time, f32(view.frame), 0}

@@ -10,7 +10,7 @@ cbuffer OlibVertex : register(b0, space1) {
 };
 
 cbuffer OlibFrame : register(b0, space3) {
-    float4 Clock;    // time, delta_time, frame；w 各宿主不同，不要依赖
+    float4 Clock;    // time, delta_time, frame, 0
     float4 Pointer;  // xy 为 View.pointer，zw 目标像素尺寸
     float4 Tint;     // 固定白色；每个精灵的颜色用 InstanceTint
 };

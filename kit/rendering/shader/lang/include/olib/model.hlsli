@@ -13,8 +13,8 @@ cbuffer OlibVertex : register(b0, space1) {
 };
 
 cbuffer OlibFrame : register(b0, space3) {
-    float4 Clock;           // time, delta_time, frame；w 各宿主不同，不要依赖
-    float4 Pointer;         // xy 指针（Render3D 为 0，Shader Lab 为预览区域内的归一化位置），zw 目标像素尺寸
+    float4 Clock;           // time, delta_time, frame, 0
+    float4 Pointer;         // xy 指针（Render3D 为 0，Shader Lab 的 3D Preview_Model 为预览区域内的归一化位置），zw 目标像素尺寸
     float4 Tint;            // 非 instanced 时是该对象的 tint；instanced 时为白色，逐实例颜色用 InstanceTint
     float4 CameraPosition;  // 相机世界坐标 xyz, 1
 };

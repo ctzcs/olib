@@ -601,3 +601,22 @@ camera_position_and_material_blocks :: proc(t: ^testing.T) {
 	testing.expect_value(t, read_vec4(frame[:], 32), [4]f32{1, 0.5, 0, 1})
 	testing.expect_value(t, read_vec4(frame[:], 48), [4]f32{1, 2, 3, 1})
 }
+
+// 3D 材质块只在 pack_material_blocks 写：顶点 WVP、World、Clock、CameraPosition，片元 Clock、Pointer、Tint、CameraPosition。
+@(test)
+material_blocks_follow_model_include_layout :: proc(t: ^testing.T) {
+	vertex: [MATERIAL_VERTEX_BLOCK_SIZE]u8
+	frame: [MATERIAL_FRAME_BLOCK_SIZE]u8
+	wvp := world.matrix4_translation(1, 2, 3)
+	view := View{target = {WidthInPixels = 640, HeightInPixels = 360}, time = 1.5, delta_time = 0.25, frame = 7}
+	pack_material_blocks(vertex[:], frame[:], wvp, world.MATRIX4_IDENTITY, view, {4, 5, 6, 1}, {0.25, 0.75}, {0.5, 0.5, 0.5, 1})
+	floats :: proc(bytes: []u8, offset: int) -> [4]f32 {
+		return (cast(^[4]f32)&bytes[offset])^
+	}
+	testing.expect_value(t, floats(vertex[:], VERTEX_MATRIX_BLOCK_SIZE), [4]f32{1.5, 0.25, 7, 0})
+	testing.expect_value(t, floats(vertex[:], VERTEX_MATRIX_BLOCK_SIZE + 16), [4]f32{4, 5, 6, 1})
+	testing.expect_value(t, floats(frame[:], 0), [4]f32{1.5, 0.25, 7, 0})
+	testing.expect_value(t, floats(frame[:], 16), [4]f32{0.25, 0.75, 640, 360})
+	testing.expect_value(t, floats(frame[:], 32), [4]f32{0.5, 0.5, 0.5, 1})
+	testing.expect_value(t, floats(frame[:], 48), [4]f32{4, 5, 6, 1})
+}

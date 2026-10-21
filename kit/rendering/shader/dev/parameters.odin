@@ -12,7 +12,7 @@ import sh "olib:kit/rendering/shader"
 
 Parameter_Build :: struct {
 	schemas: []sh.Schema,
-	effects: []sh.Shader_Desc,
+	shaders: []sh.Shader_Desc,
 	programs: []Parameter_Program,
 	error: string,
 }
@@ -21,8 +21,8 @@ parameter_build_dispose :: proc(b: ^Parameter_Build) {
 	context.allocator = runtime.heap_allocator()
 	for &s in b.schemas do sh.schema_dispose(&s)
 	delete(b.schemas)
-	for &e in b.effects do sh.shader_dispose(&e)
-	delete(b.effects)
+	for &e in b.shaders do sh.shader_dispose(&e)
+	delete(b.shaders)
 	for program in b.programs {
 		delete(program.group)
 		delete(program.source)

@@ -9,24 +9,24 @@ import sh "olib:kit/rendering/shader"
 // Pass 选择在提交前完成；不存在的 ID 不能退回“全部”。
 @(test)
 material_pass_selection_preserves_order_and_disabled_flags :: proc(t: ^testing.T) {
-	effect := sh.Shader_Desc{passes = {
+	shader := sh.Shader_Desc{passes = {
 		{id = "shadow"}, {id = "body"}, {id = "outline", disabled = true},
 	}}
 	indices: [sh.MAX_PASSES]int
-	count, error := material_pass_indices(effect, "", &indices)
+	count, error := material_pass_indices(shader, "", &indices)
 	testing.expect(t, error == .None && count == 2 && indices[0] == 0 && indices[1] == 1)
-	count, error = material_pass_indices(effect, "body", &indices)
+	count, error = material_pass_indices(shader, "body", &indices)
 	testing.expect(t, error == .None && count == 1 && indices[0] == 1)
-	count, error = material_pass_indices(effect, "missing", &indices)
+	count, error = material_pass_indices(shader, "missing", &indices)
 	testing.expect(t, error == .Unknown_Pass && count == 0)
 	// 声明为 disabled 的 Pass 按 ID 选中也不画。
-	count, error = material_pass_indices(effect, "outline", &indices)
+	count, error = material_pass_indices(shader, "outline", &indices)
 	testing.expect(t, error == .None && count == 0)
 }
 
 // 用真实 StorageContainer 内存条目验证文件 -> 效果解析，不创建窗口或伪造 GPU。
 @(test)
-material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing.T) {
+material_library_resolves_shader_and_preserves_failed_reload :: proc(t: ^testing.T) {
 	entries := make(map[string][dynamic]u8)
 	defer delete(entries)
 	json := `{"version":2,"effect":"Outlined","groups":[{"version":1,"group":"Body","fields":[{"id":"amount","kind":"Scalar","number":[0.7,0,0,0]}]}]}`
@@ -41,23 +41,23 @@ material_library_resolves_effect_and_preserves_failed_reload :: proc(t: ^testing
 		{name = "Outline", preview = "3d"},
 		{name = "Body", preview = "3d", fields = {{id = "amount", kind = .Scalar, maximum = 1}}},
 	}
-	effect := sh.Shader_Desc{name = "Outlined", output = "color", passes = []sh.Pass_Desc{
+	shader := sh.Shader_Desc{name = "Outlined", output = "color", passes = []sh.Pass_Desc{
 		{id = "body", params = "Body", draw = .Model, output = "color"},
 		{id = "outline", params = "Outline", draw = .Model, output = "color"},
 	}}
-	code := []Material_Shader_Code{{vertex = []u8{1}, fragment = []u8{2}}, {vertex = []u8{3}, fragment = []u8{4}}}
-	testing.expect_value(t, material_register(&library, effect, schemas, code), "")
-	testing.expect(t, material_register(&library, effect, schemas, code) != "")
-	testing.expect_value(t, len(library.effects), 1)
+	code := []Material_Program_Code{{vertex = []u8{1}, fragment = []u8{2}}, {vertex = []u8{3}, fragment = []u8{4}}}
+	testing.expect_value(t, material_register(&library, shader, schemas, code), "")
+	testing.expect(t, material_register(&library, shader, schemas, code) != "")
+	testing.expect_value(t, len(library.shaders), 1)
 	a, selected, reason := material_read(&library, "materials/left.json")
 	defer sh.instance_dispose(&a)
 	b, _, second_error := material_read(&library, "materials/left.json")
 	defer sh.instance_dispose(&b)
-	testing.expect(t, reason == "" && second_error == "" && selected == library.effects[0])
+	testing.expect(t, reason == "" && second_error == "" && selected == library.shaders[0])
 	testing.expect_value(t, a.groups[0].schema.name, "Body")
 	testing.expect_value(t, a.groups[0].values[0].number[0], 0.7)
 	// 借用实例只用于无 GPU 的参数/失败测试，清理由 a 的所有者完成。
-	material := Material{owner = &library, effect = selected, instance = a}
+	material := Material{owner = &library, shader = selected, instance = a}
 	testing.expect(t, material_set_number(&material, "Body", "amount", {0.2, 0, 0, 0}))
 	testing.expect_value(t, material.revision, 1) // 成功修改才递增，绘制器据此让快照过期
 	testing.expect_value(t, b.groups[0].values[0].number[0], 0.7)
@@ -128,34 +128,34 @@ material_from_bindings_borrows_tool_bindings :: proc(t: ^testing.T) {
 	device, other: foster.GraphicsDevice
 	library := Material_Library{device = &device}
 	library.white.Resource = cast(type_of(library.white.Resource))uintptr(1) // 仅验证组装；不调用 GPU
-	shader := foster.Shader{GraphicsDevice = &device}
-	shader.Resource = cast(type_of(shader.Resource))uintptr(1)
+	program := foster.Shader{GraphicsDevice = &device}
+	program.Resource = cast(type_of(program.Resource))uintptr(1)
 	alien := foster.Shader{GraphicsDevice = &other}
-	gpu := foster.Material{Vertex = {Shader = &shader}, Fragment = {Shader = &shader}}
+	gpu := foster.Material{Vertex = {Shader = &program}, Fragment = {Shader = &program}}
 	schemas := []sh.Schema{{name = "Body", preview = "3d"}}
-	effect := Material_Effect{desc = model_effect(), schemas = schemas}
+	shader := Material_Shader{desc = model_shader(), schemas = schemas}
 	bindings := []Material_Binding{{schema = schemas[0], material = &gpu}}
 
-	material, reason := material_from_bindings(&library, &effect, bindings)
+	material, reason := material_from_bindings(&library, &shader, bindings)
 	testing.expect_value(t, reason, "")
-	testing.expect(t, material.owner == &library && material.effect == &effect && len(material.bindings) == 1)
+	testing.expect(t, material.owner == &library && material.shader == &shader && len(material.bindings) == 1)
 	selection: Pass_Selection
-	testing.expect_value(t, material_select(material.effect.desc, material.bindings, .Model, "", nil, &selection), Draw_Error.None)
+	testing.expect_value(t, material_select(material.shader.desc, material.bindings, .Model, "", nil, &selection), Draw_Error.None)
 	testing.expect_value(t, selection.count, 1) // outline 声明为禁用
 
-	_, missing_device := material_from_bindings(&Material_Library{}, &effect, bindings)
+	_, missing_device := material_from_bindings(&Material_Library{}, &shader, bindings)
 	testing.expect_value(t, missing_device, "Missing graphics device")
-	fullscreen := Material_Effect{desc = {name = "F", output = "color", passes = []sh.Pass_Desc{{id = "main", params = "Body", output = "color"}}}, schemas = schemas}
+	fullscreen := Material_Shader{desc = {name = "F", output = "color", passes = []sh.Pass_Desc{{id = "main", params = "Body", output = "color"}}}, schemas = schemas}
 	_, not_material := material_from_bindings(&library, &fullscreen, bindings)
-	testing.expect_value(t, not_material, "Expected Model or Sprite material effect")
-	_, count := material_from_bindings(&library, &effect, nil)
+	testing.expect_value(t, not_material, "Expected Model or Sprite material shader")
+	_, count := material_from_bindings(&library, &shader, nil)
 	testing.expect_value(t, count, "Binding count differs from schema count")
-	_, order := material_from_bindings(&library, &effect, []Material_Binding{{schema = {name = "Other"}, material = &gpu}})
-	testing.expect_value(t, order, "Bindings must follow the effect's schema order")
+	_, order := material_from_bindings(&library, &shader, []Material_Binding{{schema = {name = "Other"}, material = &gpu}})
+	testing.expect_value(t, order, "Bindings must follow the shader's schema order")
 	no_shader := foster.Material{}
-	_, missing_shader := material_from_bindings(&library, &effect, []Material_Binding{{schema = schemas[0], material = &no_shader}})
+	_, missing_shader := material_from_bindings(&library, &shader, []Material_Binding{{schema = schemas[0], material = &no_shader}})
 	testing.expect_value(t, missing_shader, "Missing compiled shader")
-	elsewhere := foster.Material{Vertex = {Shader = &alien}, Fragment = {Shader = &shader}}
-	_, other_device := material_from_bindings(&library, &effect, []Material_Binding{{schema = schemas[0], material = &elsewhere}})
+	elsewhere := foster.Material{Vertex = {Shader = &alien}, Fragment = {Shader = &program}}
+	_, other_device := material_from_bindings(&library, &shader, []Material_Binding{{schema = schemas[0], material = &elsewhere}})
 	testing.expect_value(t, other_device, "Shader belongs to another graphics device")
 }

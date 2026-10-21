@@ -72,11 +72,11 @@ Sprite_Buffer :: struct {
 // 设备与槽数（效果的 [Instance] 字段数）都取自材质。返回 "" 表示成功，否则是失败原因。
 // 每个精灵 80 + 16×slots 字节，100 万个精灵（1 个字段）约 96 MB。
 sprite_buffer_init :: proc(buf: ^Sprite_Buffer, material: ^mat.Material, capacity: int, name := "") -> string {
-	if material == nil || material.owner == nil || material.owner.device == nil || material.effect == nil {
+	if material == nil || material.owner == nil || material.owner.device == nil || material.shader == nil {
 		return "Material is not loaded"
 	}
-	if !sh.shader_is_sprite(material.effect.desc) || !material.effect.desc.instanced {
-		return "Sprite buffers require an Instanced sprite effect"
+	if !sh.shader_is_sprite(material.shader.desc) || !material.shader.desc.instanced {
+		return "Sprite buffers require an Instanced sprite shader"
 	}
 	slots := mat.instance_slot_count(material)
 	if slots < 0 do return "Instance field count differs between parameter groups"

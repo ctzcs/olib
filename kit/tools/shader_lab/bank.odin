@@ -73,8 +73,8 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		source, program_text := program.source, program.text
 		// Sprite Pass 的批量变体从顶点 storage buffer 读两条轴和 [Instance] 字段（见 sh.hlsl 的 Sprite_Batch）。
 		// Model Pass 另有顶点 b1 / 片元 b2 视图块（见 mat.VIEW_GLOBALS_SIZE），与材质库的槽数一致。
-		storage := bank_group_draws(build.effects, schema.name, .Sprite) ? 1 : 0
-		view := bank_group_draws(build.effects, schema.name, .Model) ? 1 : 0
+		storage := bank_group_draws(build.shaders, schema.name, .Sprite) ? 1 : 0
+		view := bank_group_draws(build.shaders, schema.name, .Model) ? 1 : 0
 		_ = dev.init(&b.shaders[i], source, s.device.Driver,
 			{uniform_buffers = 1 + storage + view, storage_buffers = storage}, {uniform_buffers = 2 + view})
 		b.shaders[i].source_text = strings.clone(program_text)
@@ -86,8 +86,8 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		dev.configure_parameters(&b.shaders[i], sh.texture_count(schema))
 	}
 	// 参数组只是 Shader 资源；每个 .oshader 创建一个效果及其 Pass 目标。
-	b.effects = make([]Effect_Runtime, len(build.effects))
-	for desc, i in build.effects {
+	b.effects = make([]Effect_Runtime, len(build.shaders))
+	for desc, i in build.shaders {
 		e := &b.effects[i]
 		e.desc = sh.shader_clone(desc)
 		e.order, _ = sh.shader_order(e.desc, build.schemas)

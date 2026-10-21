@@ -380,7 +380,7 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 	frame := [SPRITE_FRAME_BLOCK_SIZE/4]f32{view.time, view.delta_time, f32(view.frame), 0, view.pointer[0], view.pointer[1],
 		f32(w), f32(h), 1, 1, 1, 1}
 	for &run in r.runs {
-		effect := run.material.effect.desc
+		shader := run.material.shader.desc
 		for i in 0..<run.selection.count {
 			snapshot := &r.snapshots[run.snapshot + i]
 			storage := run.storage
@@ -396,7 +396,7 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 				foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(stack[:]), 1)
 			}
 			foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, mem.slice_to_bytes(vertex_uniform[:]), 0)
-			if effect.uniforms == .Olib {
+			if shader.uniforms == .Olib {
 				foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, mem.slice_to_bytes(frame[:]), 0)
 			}
 			command: foster.DrawCommand
@@ -423,7 +423,7 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 			command.DepthWriteEnabled = false
 			command.HasScissor = run.scissor.enabled
 			command.Scissor = run.scissor.rect
-			mat.pass_state_apply(&command, effect.passes[run.selection.passes[i]].state)
+			mat.pass_state_apply(&command, shader.passes[run.selection.passes[i]].state)
 			foster.GraphicsDeviceDraw(r.library.device, &command)
 			foster.DrawCommandDispose(&command)
 			if run.buffer != nil do foster.VertexFormatDispose(&shifted.Format)
@@ -439,17 +439,17 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 buffer :: proc(r: ^Render2D, material: ^mat.Material, buf: ^Sprite_Buffer, count: int,
 	texture: ^foster.Texture, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
 	if r.library == nil || r.library.device == nil do return .Missing_Device
-	if material == nil || material.owner == nil || material.effect == nil do return .Missing_Material
+	if material == nil || material.owner == nil || material.shader == nil do return .Missing_Material
 	if material.owner.device != r.library.device do return .Device_Mismatch
-	effect := material.effect
-	if !sh.shader_is_sprite(effect.desc) || !effect.desc.instanced || effect.instanced_vertex == nil {
-		return .Not_Instanced_Effect
+	shader := material.shader
+	if !sh.shader_is_sprite(shader.desc) || !shader.desc.instanced || shader.instanced_vertex == nil {
+		return .Not_Instanced_Shader
 	}
 	if buf == nil || buf.capacity <= 0 do return .Instance_Buffer_Required
 	if buf.slots != mat.instance_slot_count(material) do return .Instance_Mismatch
 	if texture == nil || texture.Resource == nil do return .Missing_Sprite_Texture
 	selection: mat.Pass_Selection
-	if error := mat.material_select(effect.desc, material.bindings, .Sprite, pass_id, texture, &selection); error != .None do return error
+	if error := mat.material_select(shader.desc, material.bindings, .Sprite, pass_id, texture, &selection); error != .None do return error
 	if selection.count == 0 do return .None
 	if !render2d_corner_mesh(r) do return .Missing_Device
 	render2d_run_begin(r, material, pass_id, texture, selection, nil)
@@ -459,9 +459,9 @@ buffer :: proc(r: ^Render2D, material: ^mat.Material, buf: ^Sprite_Buffer, count
 	// 顶点阶段换成缓冲变体；片元、参数与贴图与批量变体相同。
 	for i in 0..<selection.count {
 		group := material.bindings[selection.bindings[i]].schema.name
-		for schema, j in effect.schemas {
+		for schema, j in shader.schemas {
 			if schema.name == group {
-				foster.MaterialStageSetShader(&r.snapshots[run.snapshot + i].Vertex, &effect.instanced_vertex[j])
+				foster.MaterialStageSetShader(&r.snapshots[run.snapshot + i].Vertex, &shader.instanced_vertex[j])
 			}
 		}
 	}
@@ -517,11 +517,11 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 	values: ^mat.Instance_Values, pass_id: mat.Pass_Id, axes: [4]f32) -> mat.Draw_Error {
 	if r.library == nil || r.library.device == nil do return .Missing_Device
 	m := material != nil ? material : r.default_material
-	if m == nil || m.owner == nil || m.effect == nil do return .Missing_Material
+	if m == nil || m.owner == nil || m.shader == nil do return .Missing_Material
 	if m.owner.device != r.library.device do return .Device_Mismatch
 	last: ^Render2D_Run = len(r.runs) > 0 ? &r.runs[len(r.runs) - 1] : nil
 	frame_texture := texture
-	mode := m.effect.desc.uniforms == .Foster ? r.mode_color : foster.Color{}
+	mode := m.shader.desc.uniforms == .Foster ? r.mode_color : foster.Color{}
 	if texture == nil {
 		if m == r.default_material {
 			// Fill 只用顶点色：沿用当前段的帧贴图即可继续合批。
@@ -532,7 +532,7 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 		}
 	}
 	selection: mat.Pass_Selection
-	if error := mat.material_select(m.effect.desc, m.bindings, .Sprite, pass_id, frame_texture, &selection); error != .None do return error
+	if error := mat.material_select(m.shader.desc, m.bindings, .Sprite, pass_id, frame_texture, &selection); error != .None do return error
 	if selection.count == 0 do return .None
 	if !render2d_run_matches(r, last, m, pass_id, frame_texture, selection) {
 		render2d_run_begin(r, m, pass_id, frame_texture, selection, values)
@@ -562,7 +562,7 @@ render2d_record_instances :: proc(r: ^Render2D, m: ^mat.Material, selection: mat
 	offset := len(r.instance_values)
 	append(&r.instance_values, axes)
 	for i in 0..<selection.count {
-		p := m.effect.desc.passes[selection.passes[i]]
+		p := m.shader.desc.passes[selection.passes[i]]
 		instance := mat.material_pass_instance(p, m.bindings[selection.bindings[i]], values)
 		append(&r.instance_values, ..instance.numbers[:instance.count])
 	}
@@ -586,8 +586,8 @@ render2d_transform :: proc(r: ^Render2D, p: foster.Vec2) -> foster.Vec2 {
 
 // 参数 uniform 所在的片元槽：内置效果（Foster 布局）在槽 0，.oshader 效果在槽 1（槽 0 是 Clock 帧块）。
 @(private)
-render2d_param_slot :: proc(effect: sh.Shader_Desc) -> int {
-	return effect.uniforms == .Foster ? 0 : 1
+render2d_param_slot :: proc(shader: sh.Shader_Desc) -> int {
+	return shader.uniforms == .Foster ? 0 : 1
 }
 
 @(private)
@@ -607,13 +607,13 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 	run := Render2D_Run{material = m, revision = m.revision, pass_id = pass_id, selection = selection, snapshot = r.snapshot_count,
 		texture = texture, sampler = r.sampler, blend = r.blend, scissor = {r.scissor, r.has_scissor},
 		quad_start = len(r.vertices) / 4}
-	slot := render2d_param_slot(m.effect.desc)
+	slot := render2d_param_slot(m.shader.desc)
 	offset: u32
 	for i in 0..<selection.count {
-		p := m.effect.desc.passes[selection.passes[i]]
+		p := m.shader.desc.passes[selection.passes[i]]
 		binding := m.bindings[selection.bindings[i]]
 		run.pass_offsets[i] = offset
-		if m.effect.desc.uniforms == .Olib do offset += u32(sh.instance_count(binding.schema))
+		if m.shader.desc.uniforms == .Olib do offset += u32(sh.instance_count(binding.schema))
 		if r.snapshot_count == len(r.snapshots) {
 			append(&r.snapshots, foster.Material{})
 			foster.MaterialInitWithShaders(&r.snapshots[r.snapshot_count], nil, nil)
@@ -639,7 +639,7 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 			}
 		}
 	}
-	run.storage = m.effect.desc.uniforms == .Olib
+	run.storage = m.shader.desc.uniforms == .Olib
 	append(&r.runs, run)
 }
 

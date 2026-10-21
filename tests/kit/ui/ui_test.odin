@@ -708,7 +708,7 @@ Test_Render2D :: struct {
 	atlas: foster.Texture,
 	fields: [2]sh.Field,
 	passes: [2]sh.Pass_Desc,
-	effects: [2]mat.Material_Effect,
+	shaders: [2]mat.Material_Shader,
 	values: [2][2]sh.Value,
 	samplers: [2][1]foster.BoundSampler,
 	bindings: [2][1]mat.Material_Binding,
@@ -732,12 +732,12 @@ test_render2d_init :: proc(f: ^Test_Render2D) {
 	for i in 0..<2 {
 		fields := f.fields[:i + 1]
 		f.passes[i] = {id = "main", params = sh.Params_Ref(names[i]), output = "color", draw = .Sprite, sprite_texture = "texture"}
-		f.effects[i].desc = {name = names[i], output = "color", preview = "2d", uniforms = .Foster, passes = f.passes[i:i + 1]}
+		f.shaders[i].desc = {name = names[i], output = "color", preview = "2d", uniforms = .Foster, passes = f.passes[i:i + 1]}
 		f.samplers[i][0] = {Texture = &f.library.white}
 		f.bindings[i][0] = {sh.Schema{name = names[i], preview = "2d", fields = fields}, f.values[i][:i + 1], &f.gpu, f.samplers[i][:]}
 	}
-	f.sprite = {owner = &f.library, effect = &f.effects[0], bindings = f.bindings[0][:]}
-	f.text = {owner = &f.library, effect = &f.effects[1], bindings = f.bindings[1][:]}
+	f.sprite = {owner = &f.library, shader = &f.shaders[0], bindings = f.bindings[0][:]}
+	f.text = {owner = &f.library, shader = &f.shaders[1], bindings = f.bindings[1][:]}
 	f.render = {library = &f.library, default_material = &f.sprite}
 	r2d.reset(&f.render)
 }

@@ -42,9 +42,9 @@ parameters_compile :: proc(source_directory: string) -> (result: Parameter_Build
 			result.error = strings.clone(doc.error)
 			return
 		}
-		for old in result.effects {
-			if old.name == doc.effect.name {
-				result.error = fmt.aprintf("%s: duplicate effect %s", path, old.name)
+		for old in result.shaders {
+			if old.name == doc.shader.name {
+				result.error = fmt.aprintf("%s: duplicate shader %s", path, old.name)
 				return
 			}
 		}
@@ -68,11 +68,11 @@ parameters_compile :: proc(source_directory: string) -> (result: Parameter_Build
 		}
 		delete(result.schemas)
 		result.schemas = schemas
-		effects := make([]sh.Shader_Desc, len(result.effects)+1)
-		copy(effects, result.effects)
-		effects[len(result.effects)] = sh.shader_clone(doc.effect)
-		delete(result.effects)
-		result.effects = effects
+		shaders := make([]sh.Shader_Desc, len(result.shaders)+1)
+		copy(shaders, result.shaders)
+		shaders[len(result.shaders)] = sh.shader_clone(doc.shader)
+		delete(result.shaders)
+		result.shaders = shaders
 		programs := make([]Parameter_Program, len(result.programs)+len(doc.programs))
 		copy(programs, result.programs)
 		for program, i in doc.programs {

@@ -13,7 +13,7 @@ import sh "../shader"
 // ------------------------------------------------------------------------------
 
 // 使用当前设备后端的预编译代码；借用字节至 material_library_dispose，通常来自 #load。
-Material_Shader_Code :: struct {
+Material_Program_Code :: struct {
 	vertex, fragment: []u8,
 	instanced_vertex: []u8, // instanced 精灵效果的缓冲变体顶点，供常驻 Sprite_Buffer；其余效果为空
 }
@@ -22,16 +22,16 @@ Material_Library :: struct {
 	device: ^foster.GraphicsDevice,
 	storage: ^foster.StorageContainer,
 	// 以下缓存由库维护；库地址、device/storage 须在存活期间保持稳定。
-	effects: [dynamic]^Material_Effect,
+	shaders: [dynamic]^Material_Shader,
 	textures: [dynamic]^Material_Texture,
 	instances: [dynamic]^Material,
 	white: foster.Texture,
 }
 
-Material_Effect :: struct {
+Material_Shader :: struct {
 	desc: sh.Shader_Desc,
 	schemas: []sh.Schema,
-	code: []Material_Shader_Code,
+	code: []Material_Program_Code,
 	vertex, fragment: []foster.Shader,
 	instanced_vertex: []foster.Shader, // 只有 instanced 精灵效果有，与 gpu 同序
 	gpu: []foster.Material,
@@ -47,13 +47,13 @@ material_library_dispose :: proc(library: ^Material_Library) {
 		material_instance_clear(instance)
 		free(instance)
 	}
-	for effect in library.effects {
-		material_effect_gpu_clear(effect)
-		for &schema in effect.schemas do sh.schema_dispose(&schema)
-		sh.shader_dispose(&effect.desc)
-		delete(effect.schemas)
-		delete(effect.code)
-		free(effect)
+	for shader in library.shaders {
+		material_shader_gpu_clear(shader)
+		for &schema in shader.schemas do sh.schema_dispose(&schema)
+		sh.shader_dispose(&shader.desc)
+		delete(shader.schemas)
+		delete(shader.code)
+		free(shader)
 	}
 	for texture in library.textures {
 		foster.TextureDispose(&texture.texture)
@@ -62,23 +62,23 @@ material_library_dispose :: proc(library: ^Material_Library) {
 	}
 	foster.TextureDispose(&library.white)
 	delete(library.instances)
-	delete(library.effects)
+	delete(library.shaders)
 	delete(library.textures)
 	library^ = {}
 }
 
 @(private)
-material_effect_gpu_clear :: proc(effect: ^Material_Effect) {
-	for &gpu in effect.gpu do foster.MaterialDispose(&gpu)
-	for &shader in effect.vertex do foster.ShaderDispose(&shader)
-	for &shader in effect.fragment do foster.ShaderDispose(&shader)
-	for &shader in effect.instanced_vertex do foster.ShaderDispose(&shader)
-	delete(effect.gpu)
-	delete(effect.vertex)
-	delete(effect.fragment)
-	delete(effect.instanced_vertex)
-	effect.gpu, effect.vertex, effect.fragment, effect.instanced_vertex = nil, nil, nil, nil
-	effect.ready = false
+material_shader_gpu_clear :: proc(shader: ^Material_Shader) {
+	for &gpu in shader.gpu do foster.MaterialDispose(&gpu)
+	for &program in shader.vertex do foster.ShaderDispose(&program)
+	for &program in shader.fragment do foster.ShaderDispose(&program)
+	for &program in shader.instanced_vertex do foster.ShaderDispose(&program)
+	delete(shader.gpu)
+	delete(shader.vertex)
+	delete(shader.fragment)
+	delete(shader.instanced_vertex)
+	shader.gpu, shader.vertex, shader.fragment, shader.instanced_vertex = nil, nil, nil, nil
+	shader.ready = false
 }
 
 // ------------------------------------------------------------------------------
@@ -86,48 +86,48 @@ material_effect_gpu_clear :: proc(effect: ^Material_Effect) {
 // ------------------------------------------------------------------------------
 
 @(private)
-material_register :: proc(library: ^Material_Library, effect: sh.Shader_Desc,
-	schemas: []sh.Schema, code: []Material_Shader_Code) -> string {
+material_register :: proc(library: ^Material_Library, shader: sh.Shader_Desc,
+	schemas: []sh.Schema, code: []Material_Program_Code) -> string {
 	when ODIN_OS == .JS {
-		if reason := material_web_check(effect, schemas); reason != "" do return reason
+		if reason := material_web_check(shader, schemas); reason != "" do return reason
 	}
-	if !sh.shader_is_material(effect) do return "Expected Model or Sprite material effect"
+	if !sh.shader_is_material(shader) do return "Expected Model or Sprite material shader"
 	if len(schemas) != len(code) do return "Shader code count differs from schema count"
-	for prior in library.effects {
-		if prior.desc.name == effect.name do return "Effect already registered"
+	for prior in library.shaders {
+		if prior.desc.name == shader.name do return "Shader already registered"
 	}
 	for schema, i in schemas {
 		for prior in schemas[:i] {
 			if prior.name == schema.name do return "Duplicate shader group"
 		}
 		if len(code[i].vertex) == 0 || len(code[i].fragment) == 0 do return "Missing compiled shader code"
-		if effect.instanced && sh.shader_is_sprite(effect) && len(code[i].instanced_vertex) == 0 {
+		if shader.instanced && sh.shader_is_sprite(shader) && len(code[i].instanced_vertex) == 0 {
 			return "Missing instanced sprite vertex code"
 		}
 		if sh.texture_count(schema) > sh.MAX_TEXTURES do return "Too many texture bindings"
 	}
-	order, reason := sh.shader_order(effect, schemas)
+	order, reason := sh.shader_order(shader, schemas)
 	defer delete(order)
 	if reason != "" do return reason
-	entry := new(Material_Effect)
-	entry.desc = sh.shader_clone(effect)
+	entry := new(Material_Shader)
+	entry.desc = sh.shader_clone(shader)
 	entry.schemas = make([]sh.Schema, len(schemas))
-	entry.code = make([]Material_Shader_Code, len(code))
+	entry.code = make([]Material_Program_Code, len(code))
 	copy(entry.code, code)
 	for schema, i in schemas do entry.schemas[i] = sh.schema_clone(schema)
-	append(&library.effects, entry)
+	append(&library.shaders, entry)
 	return ""
 }
 
 // Web 后端只支持 foster 的 uniform 布局（矩阵与一个片元 float），没有 storage buffer 与实例缓冲。
 // 只在 Web 构建时调用；独立成函数以便在桌面上测试。
 @(private)
-material_web_check :: proc(effect: sh.Shader_Desc, schemas: []sh.Schema) -> string {
+material_web_check :: proc(shader: sh.Shader_Desc, schemas: []sh.Schema) -> string {
 	for schema in schemas {
 		if sh.instance_count(schema) > 0 do return "Web does not support Instance storage buffers"
 	}
-	if effect.instanced do return "Web does not support instanced materials"
-	if effect.uniforms != .Foster do return "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported"
+	if shader.instanced do return "Web does not support instanced materials"
+	if shader.uniforms != .Foster do return "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported"
 	return ""
 }
 
@@ -143,44 +143,44 @@ material_uniform_counts :: proc(desc: sh.Shader_Desc) -> (vertex, fragment: int)
 }
 
 @(private)
-material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Effect) -> bool {
-	if effect.ready do return true
+material_shader_prepare :: proc(library: ^Material_Library, shader: ^Material_Shader) -> bool {
+	if shader.ready do return true
 	if library.device == nil do return false
-	effect.vertex = make([]foster.Shader, len(effect.code))
-	effect.fragment = make([]foster.Shader, len(effect.code))
-	effect.gpu = make([]foster.Material, len(effect.code))
-	sprite := sh.shader_is_sprite(effect.desc)
-	if sprite && effect.desc.instanced do effect.instanced_vertex = make([]foster.Shader, len(effect.code))
-	vertex_uniforms, fragment_uniforms := material_uniform_counts(effect.desc)
-	for code, i in effect.code {
+	shader.vertex = make([]foster.Shader, len(shader.code))
+	shader.fragment = make([]foster.Shader, len(shader.code))
+	shader.gpu = make([]foster.Material, len(shader.code))
+	sprite := sh.shader_is_sprite(shader.desc)
+	if sprite && shader.desc.instanced do shader.instanced_vertex = make([]foster.Shader, len(shader.code))
+	vertex_uniforms, fragment_uniforms := material_uniform_counts(shader.desc)
+	for code, i in shader.code {
 		// 精灵批量变体从顶点 storage buffer 读两条轴和 [Instance] 字段（见 hlsl 的 Sprite_Batch）。
-		storage := sprite && effect.desc.uniforms == .Olib ? 1 : 0
-		foster.ShaderInit(&effect.vertex[i], library.device, {
+		storage := sprite && shader.desc.uniforms == .Olib ? 1 : 0
+		foster.ShaderInit(&shader.vertex[i], library.device, {
 			Stage = .Vertex, Code = code.vertex, UniformBufferCount = vertex_uniforms, StorageBufferCount = storage,
 			EntryPoint = "vertex_main",
-		}, effect.schemas[i].name)
-		if effect.instanced_vertex != nil {
+		}, shader.schemas[i].name)
+		if shader.instanced_vertex != nil {
 			// 缓冲变体：b0 投影与 Clock，b1 变换栈（见 hlsl 的 Sprite）。
-			foster.ShaderInit(&effect.instanced_vertex[i], library.device, {
+			foster.ShaderInit(&shader.instanced_vertex[i], library.device, {
 				Stage = .Vertex, Code = code.instanced_vertex, UniformBufferCount = 2,
 				EntryPoint = "vertex_main",
-			}, effect.schemas[i].name)
-			if effect.instanced_vertex[i].Resource == nil {
-				material_effect_gpu_clear(effect)
+			}, shader.schemas[i].name)
+			if shader.instanced_vertex[i].Resource == nil {
+				material_shader_gpu_clear(shader)
 				return false
 			}
 		}
-		foster.ShaderInit(&effect.fragment[i], library.device, {
+		foster.ShaderInit(&shader.fragment[i], library.device, {
 			Stage = .Fragment, Code = code.fragment, UniformBufferCount = fragment_uniforms,
-			SamplerCount = sh.texture_count(effect.schemas[i]), EntryPoint = "fragment_main",
-		}, effect.schemas[i].name)
-		if effect.vertex[i].Resource == nil || effect.fragment[i].Resource == nil {
-			material_effect_gpu_clear(effect)
+			SamplerCount = sh.texture_count(shader.schemas[i]), EntryPoint = "fragment_main",
+		}, shader.schemas[i].name)
+		if shader.vertex[i].Resource == nil || shader.fragment[i].Resource == nil {
+			material_shader_gpu_clear(shader)
 			return false
 		}
-		foster.MaterialInitWithShaders(&effect.gpu[i], &effect.vertex[i], &effect.fragment[i])
+		foster.MaterialInitWithShaders(&shader.gpu[i], &shader.vertex[i], &shader.fragment[i])
 	}
-	effect.ready = true
+	shader.ready = true
 	return true
 }
 

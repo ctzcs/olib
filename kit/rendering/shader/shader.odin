@@ -4,7 +4,7 @@ package shader
 import "core:fmt"
 import "core:math"
 
-// 单个 Effect 的 Pass 数与目标尺寸上限；声明校验和绘制选择共用。
+// 单个 Shader 的 Pass 数与目标尺寸上限；声明校验和绘制选择共用。
 MAX_PASSES :: 32
 MAX_TARGET_SIZE :: 8192
 
@@ -114,16 +114,16 @@ shader_order :: proc(e: Shader_Desc, schemas: []Schema) -> (order: []int, error:
 
 // 只检查声明本身是否自洽，不分配结果。错误文本借用至 temp_allocator 重置。
 shader_validate :: proc(e: Shader_Desc, schemas: []Schema) -> string {
-	if e.preview != "" && e.preview != "2d" && e.preview != "3d" do return "Effect Preview must be 2d or 3d"
+	if e.preview != "" && e.preview != "2d" && e.preview != "3d" do return "Shader Preview must be 2d or 3d"
 	if e.name == "" || len(e.passes) == 0 || len(e.passes) > MAX_PASSES {
-		return "Effect requires a name and 1..32 passes"
+		return "Shader requires a name and 1..32 passes"
 	}
 	output_found := false
 	for p, i in e.passes {
 		if reason := pass_validate(e, i, schemas); reason != "" do return reason
 		output_found = output_found || p.output == e.output
 	}
-	if !output_found do return "Effect output must name a pass target"
+	if !output_found do return "Shader output must name a pass target"
 	return ""
 }
 
@@ -162,8 +162,8 @@ pass_validate :: proc(e: Shader_Desc, index: int, schemas: []Schema) -> string {
 	if sprite && (schema.preview != "2d" || e.preview == "3d") {
 		return "Sprite material requires 2d schemas and preview"
 	}
-	if e.instanced && !object do return "Instanced effects require Sprite or Model passes"
-	if instance_count(schema^) > 0 && !e.instanced do return "Instance fields require an Instanced effect"
+	if e.instanced && !object do return "Instanced shaders require Sprite or Model passes"
+	if instance_count(schema^) > 0 && !e.instanced do return "Instance fields require an Instanced shader"
 	if instance_count(schema^) > MAX_INSTANCE_FIELDS {
 		return fmt.tprintf("%s: more than %d Instance fields", p.id, MAX_INSTANCE_FIELDS)
 	}
@@ -177,7 +177,7 @@ pass_validate :: proc(e: Shader_Desc, index: int, schemas: []Schema) -> string {
 		}
 	}
 	if e.preview == "2d" && p.draw == .Preview_Model && schema.preview == "3d" {
-		return "2d effect cannot contain a 3d model pass"
+		return "2d shader cannot contain a 3d model pass"
 	}
 	if p.draw == .Fullscreen && schema.preview != "2d" {
 		return fmt.tprintf("%s: Fullscreen requires a 2d vertex interface", p.id)

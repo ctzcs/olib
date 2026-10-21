@@ -18,7 +18,7 @@ INCLUDE_DIRECTORY :: #directory + "/include"
 
 Document :: struct {
 	schemas: []sh.Schema,
-	effect: sh.Shader_Desc,
+	shader: sh.Shader_Desc,
 	// 与 schemas 一一对应，已包含参数布局、共享代码和原文件 #line。
 	// Sprite Pass 的 programs 是批量变体（foster BatcherVertex 输入，Render2D 逐个绘制用）；
 	// instanced 效果另有 instanced_programs：缓冲变体（实例记录 + 角点，常驻 Sprite_Buffer 用），只需编译顶点阶段。
@@ -33,7 +33,7 @@ dispose :: proc(d: ^Document) {
 		sh.schema_dispose(&s)
 	}
 	delete(d.schemas)
-	sh.shader_dispose(&d.effect)
+	sh.shader_dispose(&d.shader)
 	for text in d.programs {
 		delete(text)
 	}
@@ -71,7 +71,7 @@ Code :: struct {
 // 顶层 Shader { ... } 解析出的原始部分；passes 与 codes、previews 一一对应。
 @(private)
 Shader_Source :: struct {
-	effect: sh.Shader_Desc,
+	shader: sh.Shader_Desc,
 	fields: []sh.Field,
 	passes: [dynamic]sh.Pass_Desc,
 	codes: [dynamic]Code,
@@ -96,11 +96,11 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 	}
 	source := shader_body(&p, name)
 	for pass, i in source.passes {
-		hlsl_rules_check(&p, pass, source.effect.instanced, source.shared, source.codes[i])
+		hlsl_rules_check(&p, pass, source.shader.instanced, source.shared, source.codes[i])
 	}
 	schemas, programs, instanced_programs := shader_programs(&source, name, source_path)
 	if p.error == "" {
-		_, error := sh.shader_order(source.effect, schemas)
+		_, error := sh.shader_order(source.shader, schemas)
 		if error != "" {
 			fail(&p, error)
 		}
@@ -110,7 +110,7 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 		result.error = strings.clone(p.error)
 		return
 	}
-	result.effect = sh.shader_clone(source.effect)
+	result.shader = sh.shader_clone(source.shader)
 	result.schemas = make([]sh.Schema, len(schemas))
 	result.programs = make([]string, len(programs))
 	result.instanced_programs = make([]string, len(programs))
@@ -126,7 +126,7 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 @(private)
 shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 	expect(p, "{")
-	source.effect = sh.Shader_Desc{name = name}
+	source.shader = sh.Shader_Desc{name = name}
 	seen := make(map[string]bool)
 	for p.error == "" && p.token.text != "}" {
 		key := p.token.text
@@ -140,13 +140,13 @@ shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 		seen[key] = true
 		switch key {
 		case "Label":
-			source.effect.label = string_value(p)
+			source.shader.label = string_value(p)
 		case "Preview":
-			source.effect.preview = preview(p)
+			source.shader.preview = preview(p)
 		case "Output":
-			source.effect.output = sh.Target_Ref(string_value(p))
+			source.shader.output = sh.Target_Ref(string_value(p))
 		case "Instanced":
-			source.effect.instanced = true
+			source.shader.instanced = true
 		case "Properties":
 			source.fields = properties(p)
 		case "HLSLINCLUDE":
@@ -167,11 +167,11 @@ shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 	if len(source.passes) == 0 {
 		fail(p, "Shader requires at least one Pass")
 	}
-	if source.effect.output == "" && len(source.passes) > 0 {
-		source.effect.output = source.passes[len(source.passes)-1].output
+	if source.shader.output == "" && len(source.passes) > 0 {
+		source.shader.output = source.passes[len(source.passes)-1].output
 	}
-	for field in source.fields do source.effect.instanced = source.effect.instanced || field.instance
-	source.effect.passes = source.passes[:]
+	for field in source.fields do source.shader.instanced = source.shader.instanced || field.instance
+	source.shader.passes = source.passes[:]
 	return
 }
 
@@ -189,19 +189,19 @@ shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (s
 		dimension := source.previews[i]
 		if dimension == "" {
 			dimension = pass.draw == .Model ? "3d" : "2d"
-			if pass.draw == .Preview_Model && source.effect.preview != "" {
-				dimension = source.effect.preview
+			if pass.draw == .Preview_Model && source.shader.preview != "" {
+				dimension = source.shader.preview
 			}
 		}
 		schemas[i] = {name = group, shader = source_path, preview = dimension,
 			label = pass.label, fields = source.fields}
 		if pass.draw == .Sprite {
 			programs[i] = shader_program(source, i, schemas[i], .Sprite_Batch, source_path)
-			if source.effect.instanced {
+			if source.shader.instanced {
 				instanced_programs[i] = shader_program(source, i, schemas[i], .Sprite, source_path)
 			}
 		} else {
-			programs[i] = shader_program(source, i, schemas[i], sh.shader_instancing(source.effect), source_path)
+			programs[i] = shader_program(source, i, schemas[i], sh.shader_instancing(source.shader), source_path)
 		}
 	}
 	return

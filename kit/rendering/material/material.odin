@@ -20,7 +20,7 @@ import sh "../shader"
 // 资源变更通过 material_reload。
 Material :: struct {
 	owner: ^Material_Library,
-	effect: ^Material_Effect,
+	shader: ^Material_Shader,
 	instance: sh.Instance,
 	source: string,
 	bindings: []Material_Binding,
@@ -76,22 +76,22 @@ material_path :: proc(file, relative: string) -> (string, string) {
 	return path.join({directory, normalized}, context.temp_allocator), ""
 }
 
-// 读取并解码材质文件：返回实例数值与它所属的 Effect，不创建 GPU 资源。
+// 读取并解码材质文件：返回实例数值与它所属的 Shader，不创建 GPU 资源。
 @(private)
-material_read :: proc(library: ^Material_Library, source: string) -> (sh.Instance, ^Material_Effect, string) {
+material_read :: proc(library: ^Material_Library, source: string) -> (sh.Instance, ^Material_Shader, string) {
 	if library.storage == nil do return {}, nil, "Missing material storage"
 	bytes := foster.ReadAllBytes(library.storage, source, context.temp_allocator)
 	if len(bytes) == 0 || len(bytes) > sh.MAX_RESOURCE_BYTES do return {}, nil, "Cannot read material or resource exceeds 1 MiB"
-	header: struct {version: int, effect: string}
+	header: struct {version: int, shader: string `json:"effect"`} // 文件里的键沿用 effect
 	if json.unmarshal(bytes, &header, allocator = context.temp_allocator) != nil || header.version != 2 {
 		return {}, nil, "Invalid material resource"
 	}
-	for effect in library.effects {
-		if effect.desc.name != header.effect do continue
-		instance, reason := sh.instance_decode(effect.desc, effect.schemas, bytes)
-		return instance, effect, reason
+	for shader in library.shaders {
+		if shader.desc.name != header.shader do continue
+		instance, reason := sh.instance_decode(shader.desc, shader.schemas, bytes)
+		return instance, shader, reason
 	}
-	return {}, nil, fmt.tprintf("Unknown material effect: %s", header.effect)
+	return {}, nil, fmt.tprintf("Unknown material shader: %s", header.shader)
 }
 
 // 确保库内有 1x1 白色默认贴图，供没有指定图片的 Texture 字段使用。
@@ -106,15 +106,15 @@ material_white_texture :: proc(library: ^Material_Library) -> string {
 }
 
 // 工具用（Shader Lab）：把调用方持有的效果与 GPU 绑定组成 Material，交给 Render2D / Render3D 记录。
-// 不登记、不复制、不拥有资源：effect 与 bindings 借用到调用方释放，返回值不用释放。
-// effect 只需填 desc 与 schemas；bindings 与 schemas 一一对应，数值和采样器在记录时读取。
-material_from_bindings :: proc(library: ^Material_Library, effect: ^Material_Effect,
+// 不登记、不复制、不拥有资源：shader 与 bindings 借用到调用方释放，返回值不用释放。
+// shader 只需填 desc 与 schemas；bindings 与 schemas 一一对应，数值和采样器在记录时读取。
+material_from_bindings :: proc(library: ^Material_Library, shader: ^Material_Shader,
 	bindings: []Material_Binding) -> (material: Material, reason: string) {
 	if library == nil || library.device == nil do return {}, "Missing graphics device"
-	if effect == nil || !sh.shader_is_material(effect.desc) do return {}, "Expected Model or Sprite material effect"
-	if len(bindings) != len(effect.schemas) do return {}, "Binding count differs from schema count"
+	if shader == nil || !sh.shader_is_material(shader.desc) do return {}, "Expected Model or Sprite material shader"
+	if len(bindings) != len(shader.schemas) do return {}, "Binding count differs from schema count"
 	for binding, i in bindings {
-		if binding.schema.name != effect.schemas[i].name do return {}, "Bindings must follow the effect's schema order"
+		if binding.schema.name != shader.schemas[i].name do return {}, "Bindings must follow the shader's schema order"
 		gpu := binding.material
 		if gpu == nil || gpu.Vertex.Shader == nil || gpu.Fragment.Shader == nil do return {}, "Missing compiled shader"
 		if gpu.Vertex.Shader.GraphicsDevice != library.device || gpu.Fragment.Shader.GraphicsDevice != library.device {
@@ -122,7 +122,7 @@ material_from_bindings :: proc(library: ^Material_Library, effect: ^Material_Eff
 		}
 	}
 	if reason = material_white_texture(library); reason != "" do return
-	return {owner = library, effect = effect, bindings = bindings}, ""
+	return {owner = library, shader = shader, bindings = bindings}, ""
 }
 
 // 为一个参数组解析全部 Texture 字段，返回按字段顺序排列的采样器数量；缺省贴图用白图。
@@ -150,7 +150,7 @@ material_replace :: proc(library: ^Material_Library, material: ^Material, file: 
 	source, reason := material_path("", file == "" ? material.source : file)
 	if reason != "" do return reason
 	next := Material{owner = library}
-	next.instance, next.effect, reason = material_read(library, source)
+	next.instance, next.shader, reason = material_read(library, source)
 	defer material_instance_clear(&next)
 	if reason != "" do return reason
 	if reason = material_bind(library, &next, source); reason != "" do return reason
@@ -162,19 +162,19 @@ material_replace :: proc(library: ^Material_Library, material: ^Material, file: 
 
 // 用默认参数值在代码里创建材质实例，不读材质文件；内置效果（BUILTIN_SPRITE / BUILTIN_TEXT）首次使用时自动登记。
 // 数值用 material_set_number 修改；没有来源文件，material_reload 会返回错误。指针借用至 material_library_dispose。
-material_create :: proc(library: ^Material_Library, effect_name: string) -> (^Material, string) {
+material_create :: proc(library: ^Material_Library, shader_name: string) -> (^Material, string) {
 	if library == nil do return nil, "Missing material library"
-	if builtin_is(effect_name) {
-		if reason := builtin_register(library, effect_name); reason != "" do return nil, reason
+	if builtin_is(shader_name) {
+		if reason := builtin_register(library, shader_name); reason != "" do return nil, reason
 	}
-	effect: ^Material_Effect
-	for candidate in library.effects {
-		if candidate.desc.name == effect_name do effect = candidate
+	shader: ^Material_Shader
+	for candidate in library.shaders {
+		if candidate.desc.name == shader_name do shader = candidate
 	}
-	if effect == nil do return nil, fmt.tprintf("Unknown material effect: %s", effect_name)
-	next := Material{owner = library, effect = effect}
+	if shader == nil do return nil, fmt.tprintf("Unknown material shader: %s", shader_name)
+	next := Material{owner = library, shader = shader}
 	reason: string
-	next.instance, reason = sh.instance_make(effect.desc, effect.schemas)
+	next.instance, reason = sh.instance_make(shader.desc, shader.schemas)
 	if reason == "" do reason = material_bind(library, &next, "")
 	if reason != "" {
 		material_instance_clear(&next)
@@ -189,7 +189,7 @@ material_create :: proc(library: ^Material_Library, effect_name: string) -> (^Ma
 // 准备效果的 GPU 资源并按参数组建立绑定；贴图路径相对于 source（为空时相对于容器根）。
 @(private)
 material_bind :: proc(library: ^Material_Library, material: ^Material, source: string) -> string {
-	if !material_effect_prepare(library, material.effect) do return "Cannot prepare material shaders"
+	if !material_shader_prepare(library, material.shader) do return "Cannot prepare material shaders"
 	if reason := material_white_texture(library); reason != "" do return reason
 	material.source = strings.clone(source)
 	material.bindings = make([]Material_Binding, len(material.instance.groups))
@@ -197,9 +197,9 @@ material_bind :: proc(library: ^Material_Library, material: ^Material, source: s
 	for group, i in material.instance.groups {
 		count, reason := material_group_samplers(library, source, group, &material.samplers[i])
 		if reason != "" do return reason
-		for schema, j in material.effect.schemas {
+		for schema, j in material.shader.schemas {
 			if schema.name != group.schema.name do continue
-			material.bindings[i] = {group.schema, group.values, &material.effect.gpu[j], material.samplers[i][:count]}
+			material.bindings[i] = {group.schema, group.values, &material.shader.gpu[j], material.samplers[i][:count]}
 		}
 	}
 	return ""

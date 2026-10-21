@@ -37,7 +37,7 @@ single_file_build_snapshot_and_stale_watch_result :: proc(t: ^testing.T) {
 	if !testing.expectf(t, build.error == "", "%s", build.error) {
 		return
 	}
-	testing.expect(t, len(build.schemas) == 1 && len(build.effects) == 1 && len(build.programs) == 1)
+	testing.expect(t, len(build.schemas) == 1 && len(build.shaders) == 1 && len(build.programs) == 1)
 	testing.expect(t, build.programs[0].group == "Single_main")
 	testing.expect(t, build.schemas[0].shader == "single.oshader")
 	changed, _ := strings.replace_all(SINGLE_FILE, "0.2", "0.3", context.temp_allocator)
@@ -67,12 +67,12 @@ single_file_build_snapshot_and_stale_watch_result :: proc(t: ^testing.T) {
 	testing.expect(t, os.write_entire_file(fmt.tprintf("%s/duplicate.oshader", root), SINGLE_FILE) == nil)
 	duplicate := parameters_compile(root)
 	defer parameter_build_dispose(&duplicate)
-	testing.expect(t, strings.contains(duplicate.error, "duplicate effect"))
+	testing.expect(t, strings.contains(duplicate.error, "duplicate shader"))
 	testing.expect(t, os.remove(path) == nil)
 	testing.expect(t, os.remove(fmt.tprintf("%s/duplicate.oshader", root)) == nil)
 	empty := parameters_compile(root)
 	defer parameter_build_dispose(&empty)
-	testing.expect(t, empty.error == "" && len(empty.schemas) == 0 && len(empty.effects) == 0)
+	testing.expect(t, empty.error == "" && len(empty.schemas) == 0 && len(empty.shaders) == 0)
 }
 
 // 编译目录里要有 olib 标准 include，且 olib/ 子目录能随临时目录一起删掉。

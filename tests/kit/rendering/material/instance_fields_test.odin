@@ -62,25 +62,25 @@ instance_fields_leave_uniform_layout_and_define_olib_instance :: proc(t: ^testin
 }
 
 @(test)
-instanced_effect_rules :: proc(t: ^testing.T) {
+instanced_shader_rules :: proc(t: ^testing.T) {
 	schemas := make([]sh.Schema, 1, context.temp_allocator)
 	schemas[0] = instance_schema()
 	schemas[0].fields = schemas[0].fields[:3] // 去掉第二个 instance 字段，保留一个
 	pass := sh.Pass_Desc{id = "body", params = "Body", draw = .Sprite, output = "color"}
 	passes := []sh.Pass_Desc{pass}
-	effect := sh.Shader_Desc{name = "E", output = "color", passes = passes}
+	shader := sh.Shader_Desc{name = "E", output = "color", passes = passes}
 	// 有 instance 字段但效果没声明 instanced。
-	testing.expect(t, strings.contains(sh.shader_validate(effect, schemas), "Instanced effect"))
-	effect.instanced = true
-	testing.expect_value(t, sh.shader_validate(effect, schemas), "")
+	testing.expect(t, strings.contains(sh.shader_validate(shader, schemas), "Instanced shader"))
+	shader.instanced = true
+	testing.expect_value(t, sh.shader_validate(shader, schemas), "")
 	// instanced 支持 Sprite 和 Model；图像（全屏）效果不支持。
 	model_passes := []sh.Pass_Desc{{id = "body", params = "Body", draw = .Model, output = "color"}}
 	model_schemas := []sh.Schema{instance_schema()}
 	model_schemas[0].preview = "3d"
-	model_effect := sh.Shader_Desc{name = "E", output = "color", passes = model_passes, instanced = true}
-	testing.expect_value(t, sh.shader_validate(model_effect, model_schemas), "")
-	testing.expect_value(t, sh.shader_instancing(model_effect), sh.Instancing.Model)
-	testing.expect_value(t, sh.shader_instancing(effect), sh.Instancing.Sprite)
+	model_shader := sh.Shader_Desc{name = "E", output = "color", passes = model_passes, instanced = true}
+	testing.expect_value(t, sh.shader_validate(model_shader, model_schemas), "")
+	testing.expect_value(t, sh.shader_instancing(model_shader), sh.Instancing.Model)
+	testing.expect_value(t, sh.shader_instancing(shader), sh.Instancing.Sprite)
 	testing.expect_value(t, sh.shader_instancing(sh.Shader_Desc{}), sh.Instancing.None)
 	graph := sh.Shader_Desc{name = "E", output = "color", instanced = true,
 		passes = []sh.Pass_Desc{{id = "a", params = "Body", draw = .Fullscreen, output = "color"}}}
@@ -89,7 +89,7 @@ instanced_effect_rules :: proc(t: ^testing.T) {
 	bad := make([]sh.Field, 1, context.temp_allocator)
 	bad[0] = {id = "image", name = "image", kind = .Texture, instance = true}
 	bad_schemas := []sh.Schema{{name = "Body", preview = "2d", fields = bad}}
-	testing.expect(t, strings.contains(sh.shader_validate(effect, bad_schemas), "Texture cannot be Instance"))
+	testing.expect(t, strings.contains(sh.shader_validate(shader, bad_schemas), "Texture cannot be Instance"))
 	many := make([]sh.Field, sh.MAX_INSTANCE_FIELDS+1, context.temp_allocator)
 	for &f, i in many {
 		name := fmt.tprintf("f%d", i)
@@ -97,26 +97,26 @@ instanced_effect_rules :: proc(t: ^testing.T) {
 	}
 	many_schemas := []sh.Schema{{name = "Body", preview = "2d", fields = many}}
 	limit_text := fmt.tprintf("more than %d Instance fields", sh.MAX_INSTANCE_FIELDS)
-	testing.expect(t, strings.contains(sh.shader_validate(effect, many_schemas), limit_text))
+	testing.expect(t, strings.contains(sh.shader_validate(shader, many_schemas), limit_text))
 	// clone 保留 instanced。
-	copy := sh.shader_clone(effect)
+	copy := sh.shader_clone(shader)
 	defer sh.shader_dispose(&copy)
 	testing.expect(t, copy.instanced)
 }
 
 @(private)
-slot_material :: proc(effect: ^Material_Effect) -> Material {
+slot_material :: proc(shader: ^Material_Shader) -> Material {
 	schemas := make([]sh.Schema, 2, context.temp_allocator)
 	schemas[0], schemas[1] = instance_schema(), instance_schema()
 	schemas[1].name = "Other"
-	effect.schemas = schemas
-	return Material{effect = effect}
+	shader.schemas = schemas
+	return Material{shader = shader}
 }
 
 @(test)
 instance_slot_resolves_once_and_rejects_bad_names :: proc(t: ^testing.T) {
-	effect: Material_Effect
-	material := slot_material(&effect)
+	shader: Material_Shader
+	material := slot_material(&shader)
 	hue := instance_slot(&material, "hue")
 	tint := instance_slot(&material, "tint")
 	testing.expect(t, hue.valid && hue.index == 0 && tint.valid && tint.index == 1)
@@ -126,7 +126,7 @@ instance_slot_resolves_once_and_rejects_bad_names :: proc(t: ^testing.T) {
 	testing.expect(t, !instance_slot(nil, "hue").valid)
 	testing.expect(t, !instance_slot(&Material{}, "hue").valid)
 	// 不同参数组里槽位不一致时无法用同一个句柄。
-	effect.schemas[1].fields[0], effect.schemas[1].fields[3] = effect.schemas[1].fields[3], effect.schemas[1].fields[0]
+	shader.schemas[1].fields[0], shader.schemas[1].fields[3] = shader.schemas[1].fields[3], shader.schemas[1].fields[0]
 	testing.expect(t, !instance_slot(&material, "hue").valid)
 }
 
@@ -224,10 +224,10 @@ model_instancing_hlsl_declares_input_world_and_varyings :: proc(t: ^testing.T) {
 @(test)
 instance_slot_count_requires_consistent_groups :: proc(t: ^testing.T) {
 	fields := []sh.Field{{id = "hue", instance = true}, {id = "tint"}, {id = "glow", instance = true}}
-	effect := Material_Effect{schemas = []sh.Schema{{fields = fields}, {fields = fields}}}
-	material := Material{effect = &effect}
+	shader := Material_Shader{schemas = []sh.Schema{{fields = fields}, {fields = fields}}}
+	material := Material{shader = &shader}
 	testing.expect_value(t, instance_slot_count(&material), 2)
-	effect.schemas = []sh.Schema{{fields = fields}, {fields = fields[:1]}}
+	shader.schemas = []sh.Schema{{fields = fields}, {fields = fields[:1]}}
 	testing.expect_value(t, instance_slot_count(&material), -1) // 各组字段数不同，无法共用一个缓冲布局
 	testing.expect_value(t, instance_slot_count(nil), 0)
 	testing.expect_value(t, instance_slot_count(&Material{}), 0)

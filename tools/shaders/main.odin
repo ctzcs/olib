@@ -90,7 +90,7 @@ main :: proc() {
 			for schema in doc.schemas {
 				reserve_output(&outputs, schema.name)
 			}
-			reserve_output(&outputs, fmt.tprintf("%s.shader.json", doc.effect.name))
+			reserve_output(&outputs, fmt.tprintf("%s.shader.json", doc.shader.name))
 			lang.dispose(&doc)
 		}
 	}

@@ -91,7 +91,7 @@ material_file_save :: proc(instance: sh.Instance, path: string, texture_root := 
 	delete(checked)
 	if check_error != "" do return check_error
 	// 临时副本只借用 sh.Schema，独立拥有 sh.Value；不改调用方的路径。
-	copy_instance := sh.Instance{instance.effect, make([]sh.Instance_Group, len(instance.groups))}
+	copy_instance := sh.Instance{instance.shader, make([]sh.Instance_Group, len(instance.groups))}
 	defer delete(copy_instance.groups)
 	defer for group in copy_instance.groups do sh.values_dispose(group.values)
 	directory, _ := filepath.abs(filepath.dir(path), context.temp_allocator)

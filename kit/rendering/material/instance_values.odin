@@ -26,10 +26,10 @@ Instance_Values :: struct {
 // 解析 [Instance] 字段的槽位：在每个参数组里按声明顺序数出它是第几个实例字段。
 // 材质加载后调用一次并保存句柄，大批量赋值时不再查字符串。
 instance_slot :: proc(material: ^Material, field: string) -> Instance_Slot {
-	if material == nil || material.effect == nil do return {}
+	if material == nil || material.shader == nil do return {}
 	found := false
 	index := 0
-	for schema in material.effect.schemas {
+	for schema in material.shader.schemas {
 		rank := 0
 		for f in schema.fields {
 			if !f.instance do continue
@@ -46,9 +46,9 @@ instance_slot :: proc(material: ^Material, field: string) -> Instance_Slot {
 // 材质效果的 [Instance] 字段数，即实例缓冲每个实例的槽数（sprite_buffer_init / model_buffer_init 用它）。
 // 材质未加载返回 0；各参数组的字段数不一致时返回 -1（与 instance_slot 的规则一致，无法共用一个缓冲布局）。
 instance_slot_count :: proc(material: ^Material) -> int {
-	if material == nil || material.effect == nil do return 0
+	if material == nil || material.shader == nil do return 0
 	count := -1
-	for schema in material.effect.schemas {
+	for schema in material.shader.schemas {
 		n := sh.instance_count(schema)
 		if count >= 0 && n != count do return -1
 		count = n

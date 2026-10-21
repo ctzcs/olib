@@ -21,7 +21,7 @@ Shader_Binaries :: struct {
 	spv, dxil, msl: []u8,
 }
 
-// 一个 Pass 的顶点与片元字节码，顺序与 Effect 声明里的 Schema（参数组）一致。
+// 一个 Pass 的顶点与片元字节码，顺序与 Shader 声明里的 Schema（参数组）一致。
 // instanced_vertex 是 instanced 精灵效果的缓冲变体顶点（tools/shaders 产出的 <组名>.instanced.vertex.*），其余效果留空。
 Pass_Binaries :: struct {
 	vertex, fragment: Shader_Binaries,
@@ -98,9 +98,9 @@ material_register_directory :: proc(library: ^Material_Library, files: []runtime
 		if reason := compiled_manifest_parse(file.data, &parsed); reason != "" {
 			return fmt.tprintf("%s: %s", file.name, reason)
 		}
-		if !sh.shader_is_material(parsed.effect) do continue
-		instanced := parsed.effect.instanced && sh.shader_is_sprite(parsed.effect)
-		code := make([]Material_Shader_Code, len(parsed.schemas), context.temp_allocator)
+		if !sh.shader_is_material(parsed.shader) do continue
+		instanced := parsed.shader.instanced && sh.shader_is_sprite(parsed.shader)
+		code := make([]Material_Program_Code, len(parsed.schemas), context.temp_allocator)
 		for schema, i in parsed.schemas {
 			vertex, fragment, instanced_vertex: []u8
 			missing: string
@@ -112,7 +112,7 @@ material_register_directory :: proc(library: ^Material_Library, files: []runtime
 			if missing != "" do return fmt.tprintf("%s: missing compiled shader; re-run tools/shaders", missing)
 			code[i] = {vertex, fragment, instanced_vertex}
 		}
-		if reason := material_register(library, parsed.effect, parsed.schemas, code); reason != "" {
+		if reason := material_register(library, parsed.shader, parsed.schemas, code); reason != "" {
 			return fmt.tprintf("%s: %s", file.name, reason)
 		}
 	}
@@ -120,7 +120,7 @@ material_register_directory :: proc(library: ^Material_Library, files: []runtime
 	return ""
 }
 
-// 清单由 tools/shaders 生成（schemas + effect），passes 与 schemas 一一对应。
+// 清单由 tools/shaders 生成（schemas + shader），passes 与 schemas 一一对应。
 // 内部完成选择后端、解析、material_register 与临时数据释放；库深复制效果，字节码借用至
 // material_library_dispose。返回空串表示成功，诊断文本借用至本帧结束。
 // 字节码就在 tools/shaders 的产物目录里时，用 material_register_directory 一次登记整个目录；
@@ -132,19 +132,19 @@ material_register_manifest :: proc(library: ^Material_Library, manifest: []u8,
 	defer compiled_manifest_dispose(&parsed)
 	if reason := compiled_manifest_parse(manifest, &parsed); reason != "" do return reason
 	driver := library.device.Driver
-	code := make([]Material_Shader_Code, len(passes), context.temp_allocator)
+	code := make([]Material_Program_Code, len(passes), context.temp_allocator)
 	for pass, i in passes {
 		code[i] = {shader_pick(driver, pass.vertex), shader_pick(driver, pass.fragment), shader_pick(driver, pass.instanced_vertex)}
 	}
-	return material_register(library, parsed.effect, parsed.schemas, code)
+	return material_register(library, parsed.shader, parsed.schemas, code)
 }
 
-// tools/shaders 写出的清单：各参数组的 Schema 与 Effect。
+// tools/shaders 写出的清单：各参数组的 Schema 与 Shader。
 @(private)
 Compiled_Manifest :: struct {
 	version: int,
 	schemas: []sh.Schema,
-	effect: sh.Shader_Desc,
+	shader: sh.Shader_Desc `json:"effect"`, // 清单里的键沿用 effect
 }
 
 // 两种登记共用：设备与后端在解析清单之前检查。
@@ -167,7 +167,7 @@ compiled_manifest_parse :: proc(data: []u8, parsed: ^Compiled_Manifest) -> strin
 compiled_manifest_dispose :: proc(parsed: ^Compiled_Manifest) {
 	for &schema in parsed.schemas do sh.schema_dispose(&schema)
 	delete(parsed.schemas)
-	sh.shader_dispose(&parsed.effect)
+	sh.shader_dispose(&parsed.shader)
 }
 
 // 在嵌入的目录里找 <组名>.<阶段>.<格式>；找不到时返回期望的文件名，供诊断使用。

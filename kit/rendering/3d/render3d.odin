@@ -71,7 +71,7 @@ Render3D_Record :: struct {
 @(private)
 Render3D_Source :: struct {
 	material: ^mat.Material,
-	effect: ^mat.Material_Effect,
+	shader: ^mat.Material_Shader,
 	slots: int,
 	selection: mat.Pass_Selection,
 	snapshot, next: int,
@@ -141,12 +141,12 @@ models :: proc(r: ^Render3D, mesh: ^foster.Mesh, material: ^mat.Material,
 render3d_validate :: proc(r: ^Render3D, mesh: ^foster.Mesh,
 	m: ^mat.Material) -> mat.Draw_Error {
 	if r.library == nil || r.library.device == nil do return .Missing_Device
-	if m == nil || m.owner == nil || m.effect == nil do return .Missing_Material
+	if m == nil || m.owner == nil || m.shader == nil do return .Missing_Material
 	if m.owner.device != r.library.device do return .Device_Mismatch
 	if mesh == nil do return .Missing_Mesh
 	if mesh.GraphicsDevice != r.library.device do return .Device_Mismatch
 	if mesh.VertexData.Format.Stride != dasset.DASSET_VERTEX_STRIDE_STATIC do return .Unsupported_Mesh
-	if !sh.shader_is_material(m.effect.desc) do return .Not_Material_Effect
+	if !sh.shader_is_material(m.shader.desc) do return .Not_Material_Shader
 	return .None
 }
 
@@ -159,13 +159,13 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 	if slots < 0 || slots > sh.MAX_INSTANCE_FIELDS do return .Instance_Mismatch
 	if flat != nil && len(flat) != len(items) * slots do return .Instance_Mismatch
 	selection: mat.Pass_Selection
-	if error := mat.material_select(m.effect.desc, m.bindings, .Model, "", nil, &selection);
+	if error := mat.material_select(m.shader.desc, m.bindings, .Model, "", nil, &selection);
 		error != .None do return error
 	if len(items) == 0 do return .None
 	uniforms: [sh.MAX_PASSES][]u8
 	defaults: [sh.MAX_PASSES]mat.Instance_Values
 	for i in 0..<selection.count {
-		p := m.effect.desc.passes[selection.passes[i]]
+		p := m.shader.desc.passes[selection.passes[i]]
 		uniforms[i], defaults[i] = mat.material_pass_values(p, m.bindings[selection.bindings[i]], overrides)
 	}
 	source := render3d_source(r, m, selection, uniforms[:selection.count])
@@ -180,7 +180,7 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 			instance := defaults[i]
 			if flat != nil {
 				input := mat.instance_values_from(flat[item_index*slots:(item_index+1)*slots])
-				p := m.effect.desc.passes[selection.passes[i]]
+				p := m.shader.desc.passes[selection.passes[i]]
 				instance = mat.material_pass_instance(p, m.bindings[selection.bindings[i]], &input)
 			}
 			append(&r.values, ..instance.numbers[:slots])
@@ -193,17 +193,17 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 buffer :: proc(r: ^Render3D, mesh: ^foster.Mesh, material: ^mat.Material,
 	buf: ^Model_Buffer, count: int, bounds: ^dasset.Dasset_Bounds = nil) -> mat.Draw_Error {
 	if error := render3d_validate(r, mesh, material); error != .None do return error
-	if !material.effect.desc.instanced do return .Not_Instanced_Effect
+	if !material.shader.desc.instanced do return .Not_Instanced_Shader
 	if buf == nil || buf.capacity <= 0 do return .Instance_Buffer_Required
 	if buf.buffer.Base.GraphicsDevice != r.library.device do return .Device_Mismatch
 	if buf.slots != mat.instance_slot_count(material) || count < 0 || count > buf.capacity do return .Instance_Mismatch
 	selection: mat.Pass_Selection
-	if error := mat.material_select(material.effect.desc, material.bindings, .Model, "", nil, &selection);
+	if error := mat.material_select(material.shader.desc, material.bindings, .Model, "", nil, &selection);
 		error != .None do return error
 	if count == 0 do return .None
 	uniforms: [sh.MAX_PASSES][]u8
 	for i in 0..<selection.count {
-		p := material.effect.desc.passes[selection.passes[i]]
+		p := material.shader.desc.passes[selection.passes[i]]
 		uniforms[i], _ = mat.material_pass_values(p, material.bindings[selection.bindings[i]], nil)
 	}
 	source := render3d_source(r, material, selection, uniforms[:selection.count])
@@ -224,11 +224,11 @@ render3d_source :: proc(r: ^Render3D, m: ^mat.Material, selection: mat.Pass_Sele
 	uniforms: [][]u8) -> int {
 	hash := u64(uintptr(m))
 	for uniform in uniforms do for byte in uniform do hash = (hash ~ u64(byte)) * 1099511628211
-	slot := m.effect.desc.uniforms == .Foster ? 0 : 1
+	slot := m.shader.desc.uniforms == .Foster ? 0 : 1
 	head := r.source_heads[hash] - 1
 	for index := head; index >= 0; index = r.sources[index].next {
 		source := &r.sources[index]
-		if source.material != m || source.effect != m.effect || source.selection != selection do continue
+		if source.material != m || source.shader != m.shader || source.selection != selection do continue
 		matches := true
 		for i in 0..<selection.count {
 			binding := m.bindings[selection.bindings[i]]
@@ -247,7 +247,7 @@ render3d_source :: proc(r: ^Render3D, m: ^mat.Material, selection: mat.Pass_Sele
 		if matches do return index
 	}
 	index := len(r.sources)
-	append(&r.sources, Render3D_Source{material = m, effect = m.effect, slots = mat.instance_slot_count(m),
+	append(&r.sources, Render3D_Source{material = m, shader = m.shader, slots = mat.instance_slot_count(m),
 		selection = selection, snapshot = r.snapshot_count, next = head})
 	r.source_heads[hash] = index + 1
 	for i in 0..<selection.count {
@@ -299,10 +299,10 @@ render3d_prepare :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id) -> mat.
 	for &source in r.sources {
 		source.count = 0
 		source.transparent = false
-		effect := source.effect.desc
-		for p in effect.passes do if p.id == pass_id do found = true
+		shader := source.shader.desc
+		for p in shader.passes do if p.id == pass_id do found = true
 		for i in 0..<source.selection.count {
-			p := effect.passes[source.selection.passes[i]]
+			p := shader.passes[source.selection.passes[i]]
 			if pass_id != "" && p.id != pass_id do continue
 			source.selected[source.count] = i
 			source.count += 1
@@ -360,7 +360,7 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 			if buf.buffer.Base.Resource == nil || buf.capacity < record.count do return .Instance_Buffer_Required
 			if buf.buffer.Base.GraphicsDevice != r.library.device do return .Device_Mismatch
 			if buf.slots != source.slots do return .Instance_Mismatch
-		} else if source.effect.desc.instanced && !render3d_instance_buffer(r, source.slots) {
+		} else if source.shader.desc.instanced && !render3d_instance_buffer(r, source.slots) {
 			return .Instance_Buffer_Required // 临时实例缓冲创建失败
 		}
 		for i in source.selected[:source.count] {
@@ -393,7 +393,7 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 		n := batch.end - batch.start
 		for pass, k in source.selected[:source.count] {
 			buf, count, first := record.buffer, record.count, 0
-			if buf == nil && source.effect.desc.instanced {
+			if buf == nil && source.shader.desc.instanced {
 				buf, count, first = &r.buffers[source.slots], n, batch.first + k*n
 			}
 			render3d_draw(r, record, source, pass, view, camera, globals[:], buf, count, first)
@@ -408,7 +408,7 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 render3d_batch_end :: proc(r: ^Render3D, start: int) -> int {
 	a := r.records[r.queue.items[start].payload]
 	source := &r.sources[a.source]
-	if a.buffer != nil || !source.effect.desc.instanced ||
+	if a.buffer != nil || !source.shader.desc.instanced ||
 		(source.transparent && source.count > 1) {
 		return start + 1
 	}
@@ -431,7 +431,7 @@ render3d_plan :: proc(r: ^Render3D) -> (counts: [sh.MAX_INSTANCE_FIELDS + 1]int)
 		batch := Render3D_Batch{start = start, end = end}
 		record := &r.records[r.queue.items[start].payload]
 		source := &r.sources[record.source]
-		if record.buffer == nil && source.effect.desc.instanced {
+		if record.buffer == nil && source.shader.desc.instanced {
 			batch.first = counts[source.slots]
 			counts[source.slots] += (end - start) * source.count
 		}
@@ -453,7 +453,7 @@ render3d_pack :: proc(r: ^Render3D, counts: [sh.MAX_INSTANCE_FIELDS + 1]int) -> 
 	for batch in r.batches {
 		record := &r.records[r.queue.items[batch.start].payload]
 		source := &r.sources[record.source]
-		if record.buffer != nil || !source.effect.desc.instanced do continue
+		if record.buffer != nil || !source.shader.desc.instanced do continue
 		slots := source.slots
 		stride := model_stride(slots)
 		n := batch.end - batch.start
@@ -497,7 +497,7 @@ render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_
 			record.item.world, view, camera, {}, record.item.tint)
 	}
 	foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, matrices[:])
-	if source.effect.desc.uniforms == .Olib {
+	if source.shader.desc.uniforms == .Olib {
 		foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, frame[:])
 		foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, globals, mat.MODEL_VIEW_VERTEX_SLOT)
 		foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, globals, mat.MODEL_VIEW_FRAGMENT_SLOT)
@@ -517,7 +517,7 @@ render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_
 	command.DepthTestEnabled = true
 	command.DepthWriteEnabled = true
 	command.DepthCompare = .Less
-	p := source.effect.desc.passes[source.selection.passes[i]]
+	p := source.shader.desc.passes[source.selection.passes[i]]
 	mat.pass_state_apply(&command, p.state)
 	foster.GraphicsDeviceDraw(r.library.device, &command)
 	r.draw_calls += 1

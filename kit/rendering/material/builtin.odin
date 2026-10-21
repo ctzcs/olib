@@ -27,8 +27,8 @@ builtin_is :: proc(name: string) -> bool {
 
 @(private)
 builtin_register :: proc(library: ^Material_Library, name: string) -> string {
-	for effect in library.effects {
-		if effect.desc.name == name do return ""
+	for shader in library.shaders {
+		if shader.desc.name == name do return ""
 	}
 	device := library.device
 	if device == nil do return "Missing graphics device"
@@ -47,7 +47,7 @@ builtin_register :: proc(library: ^Material_Library, name: string) -> string {
 	order, reason := sh.shader_order(desc, schemas)
 	delete(order)
 	if reason != "" do return reason
-	entry := new(Material_Effect)
+	entry := new(Material_Shader)
 	entry.desc = sh.shader_clone(desc)
 	entry.schemas = make([]sh.Schema, 1)
 	entry.schemas[0] = sh.schema_clone(schemas[0])
@@ -59,6 +59,6 @@ builtin_register :: proc(library: ^Material_Library, name: string) -> string {
 		foster.MaterialInitWithShaders(&entry.gpu[0], &device.Defaults.VertexShader, &device.Defaults.FragmentShader)
 	}
 	entry.ready = true
-	append(&library.effects, entry)
+	append(&library.shaders, entry)
 	return ""
 }

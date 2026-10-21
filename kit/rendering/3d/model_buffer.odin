@@ -49,10 +49,10 @@ model_stride :: proc(slots: int) -> int {
 // 属性位置固定为 0..4+slots（世界矩阵 4 列、tint、字段）：HLSL 里 OlibInstanceInput 须是 Input
 // 的第一个成员，绘制时网格的属性整体后移，同一缓冲可用于不同网格。
 model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity: int, name := "") -> string {
-	if material == nil || material.owner == nil || material.effect == nil do return "Missing material"
+	if material == nil || material.owner == nil || material.shader == nil do return "Missing material"
 	if material.owner.device == nil do return "Missing graphics device"
 	slots := mat.instance_slot_count(material)
-	if !material.effect.desc.instanced do return "Material effect is not instanced"
+	if !material.shader.desc.instanced do return "Material shader is not instanced"
 	if capacity <= 0 do return "Instance capacity must be positive"
 	if slots < 0 || slots > sh.MAX_INSTANCE_FIELDS do return "Inconsistent instance field count"
 	model_buffer_create(buf, material.owner.device, slots, capacity, name)

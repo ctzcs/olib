@@ -8,7 +8,7 @@ import sh "olib:kit/rendering/shader"
 
 // 内置效果借用设备默认 Shader：没有 GPU 时用标记为已初始化的空设备检查登记逻辑。
 @(test)
-builtin_effects_register_once_with_foster_uniforms :: proc(t: ^testing.T) {
+builtin_shaders_register_once_with_foster_uniforms :: proc(t: ^testing.T) {
 	library: Material_Library
 	defer material_library_dispose(&library)
 	testing.expect_value(t, builtin_register(&library, BUILTIN_SPRITE), "Missing graphics device")
@@ -25,9 +25,9 @@ builtin_effects_register_once_with_foster_uniforms :: proc(t: ^testing.T) {
 	testing.expect_value(t, builtin_register(&library, BUILTIN_SPRITE), "")
 	testing.expect_value(t, builtin_register(&library, BUILTIN_SPRITE), "") // 幂等
 	testing.expect_value(t, builtin_register(&library, BUILTIN_TEXT), "")
-	testing.expect_value(t, len(library.effects), 2)
+	testing.expect_value(t, len(library.shaders), 2)
 
-	sprite, text := library.effects[0], library.effects[1]
+	sprite, text := library.shaders[0], library.shaders[1]
 	testing.expect(t, sprite.ready && sh.shader_is_sprite(sprite.desc))
 	testing.expect_value(t, sprite.desc.uniforms, sh.Uniform_Layout.Foster)
 	testing.expect(t, sprite.gpu[0].Fragment.Shader == &device.Defaults.FragmentShader)
@@ -38,13 +38,13 @@ builtin_effects_register_once_with_foster_uniforms :: proc(t: ^testing.T) {
 }
 
 @(test)
-material_create_reports_unknown_effects :: proc(t: ^testing.T) {
+material_create_reports_unknown_shaders :: proc(t: ^testing.T) {
 	material, reason := material_create(nil, BUILTIN_SPRITE)
 	testing.expect(t, material == nil && reason == "Missing material library")
 	library: Material_Library
 	defer material_library_dispose(&library)
 	material, reason = material_create(&library, "Nope")
-	testing.expect(t, material == nil && reason == "Unknown material effect: Nope")
+	testing.expect(t, material == nil && reason == "Unknown material shader: Nope")
 	material, reason = material_create(&library, BUILTIN_TEXT)
 	testing.expect(t, material == nil && reason == "Missing graphics device")
 	testing.expect_value(t, len(library.instances), 0)
@@ -52,7 +52,7 @@ material_create_reports_unknown_effects :: proc(t: ^testing.T) {
 
 // Web 构建登记效果时的限制（material_register 只在 ODIN_OS == .JS 时调用它）。
 @(test)
-web_check_rejects_unsupported_effects :: proc(t: ^testing.T) {
+web_check_rejects_unsupported_shaders :: proc(t: ^testing.T) {
 	schemas := []sh.Schema{{fields = []sh.Field{{kind = .Scalar, instance = true}}}}
 	testing.expect_value(t, material_web_check({}, schemas), "Web does not support Instance storage buffers")
 	testing.expect_value(t, material_web_check({instanced = true}, nil), "Web does not support instanced materials")

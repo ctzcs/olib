@@ -37,7 +37,7 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 		schemas[i] = p.live
 		bindings[i] = {p.live, p.values, &s.materials[index], samplers}
 	}
-	effect := mat.Material_Effect{desc = e.desc, schemas = schemas}
+	effect := mat.Material_Shader{desc = e.desc, schemas = schemas}
 	material, reason := mat.material_from_bindings(&s.library, &effect, bindings)
 	if reason != "" {
 		bank_error(s, fmt.tprintf("Cannot bind material: %s", reason))

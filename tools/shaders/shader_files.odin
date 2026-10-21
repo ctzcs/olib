@@ -102,8 +102,8 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 	manifest := struct {
 		version: int,
 		schemas: []sh.Schema,
-		effect: sh.Shader_Desc,
-	}{mat.MANIFEST_VERSION, doc.schemas, doc.effect}
+		shader: sh.Shader_Desc `json:"effect"`, // 清单里的键沿用 effect
+	}{mat.MANIFEST_VERSION, doc.schemas, doc.shader}
 	data, json_err := json.marshal(manifest)
 	if json_err != nil {
 		fmt.eprintln(json_err)
@@ -121,7 +121,7 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 			return false
 		}
 	}
-	if !write_shader_file(path_join(output, fmt.tprintf("%s.shader.json", doc.effect.name)), data) {
+	if !write_shader_file(path_join(output, fmt.tprintf("%s.shader.json", doc.shader.name)), data) {
 		return false
 	}
 	fmt.printfln("compiled %s (%d passes)", source, len(doc.schemas))

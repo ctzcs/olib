@@ -299,17 +299,17 @@ render3d_views_preserve_records :: proc(t: ^testing.T) {
 	library := mat.Material_Library{device = &device}
 	r := Render3D{library = &library}
 	defer dispose(&r)
-	shader: foster.Shader
-	shader.Resource = cast(type_of(shader.Resource))uintptr(1) // 仅验证绑定；不调用 GPU
-	fragment := shader
+	program: foster.Shader
+	program.Resource = cast(type_of(program.Resource))uintptr(1) // 仅验证绑定；不调用 GPU
+	fragment := program
 	fragment.Stage = .Fragment
 	gpu: foster.Material
-	foster.MaterialInitWithShaders(&gpu, &shader, &fragment)
+	foster.MaterialInitWithShaders(&gpu, &program, &fragment)
 	defer foster.MaterialDispose(&gpu)
-	effect := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{
+	shader := mat.Material_Shader{desc = {passes = []sh.Pass_Desc{
 		{id = "body", params = "Body", draw = .Model},
 		{id = "off", params = "Body", draw = .Model, disabled = true}}}}
-	material := mat.Material{owner = &library, effect = &effect,
+	material := mat.Material{owner = &library, shader = &shader,
 		bindings = []mat.Material_Binding{{schema = {name = "Body"}, material = &gpu}}}
 	mesh := foster.Mesh{GraphicsDevice = &device}
 	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
@@ -359,13 +359,13 @@ instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
 	fields := []sh.Field{{id = "hue", instance = true}, {id = "glow", instance = true}}
-	plain := mat.Material_Effect{schemas = []sh.Schema{{fields = fields}}}
-	instanced := mat.Material_Effect{desc = {instanced = true}, schemas = []sh.Schema{{fields = fields}, {fields = fields[:1]}}}
+	plain := mat.Material_Shader{schemas = []sh.Schema{{fields = fields}}}
+	instanced := mat.Material_Shader{desc = {instanced = true}, schemas = []sh.Schema{{fields = fields}, {fields = fields[:1]}}}
 	buffer: Model_Buffer
 	testing.expect(t, model_buffer_init(&buffer, nil, 10) != "")
-	plain_material := mat.Material{owner = &library, effect = &plain}
+	plain_material := mat.Material{owner = &library, shader = &plain}
 	testing.expect(t, model_buffer_init(&buffer, &plain_material, 10) != "")
-	material := mat.Material{owner = &library, effect = &instanced}
+	material := mat.Material{owner = &library, shader = &instanced}
 	testing.expect(t, model_buffer_init(&buffer, &material, 10) != "")
 	instanced.schemas = instanced.schemas[:1]
 	testing.expect(t, model_buffer_init(&buffer, &material, 0) != "")
@@ -398,7 +398,7 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 		{id = "hue", kind = .Scalar, instance = true, maximum = 1},
 		{id = "gain", kind = .Scalar, maximum = 1},
 		{id = "albedo", kind = .Texture}}}
-	effect := mat.Material_Effect{schemas = []sh.Schema{schema}, desc = {
+	shader := mat.Material_Shader{schemas = []sh.Schema{schema}, desc = {
 		instanced = true, passes = []sh.Pass_Desc{
 			{id = "body", params = "Body", draw = .Model},
 			{id = "shadow", params = "Body", draw = .Model,
@@ -409,7 +409,7 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 	other_texture := texture
 	values := []sh.Value{{number = {0.2, 0, 0, 0}}, {number = {0.5, 0, 0, 0}}, {}}
 	samplers := []foster.BoundSampler{{Texture = &texture}}
-	m := mat.Material{owner = &library, effect = &effect,
+	m := mat.Material{owner = &library, shader = &shader,
 		bindings = []mat.Material_Binding{{schema, values, &gpu, samplers}}}
 	mesh := foster.Mesh{GraphicsDevice = &device}
 	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
@@ -457,8 +457,8 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 render3d_reports_errors_before_gpu :: proc(t: ^testing.T) {
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
-	effect := mat.Material_Effect{desc = {instanced = true, passes = []sh.Pass_Desc{{draw = .Model}}}}
-	material := mat.Material{owner = &library, effect = &effect}
+	shader := mat.Material_Shader{desc = {instanced = true, passes = []sh.Pass_Desc{{draw = .Model}}}}
+	material := mat.Material{owner = &library, shader = &shader}
 	r := Render3D{library = &library}
 	defer dispose(&r)
 	testing.expect_value(t, model(&r, nil, nil, world.MATRIX4_IDENTITY), mat.Draw_Error.Missing_Material)
@@ -490,13 +490,13 @@ render3d_plan_packs_every_batch_once :: proc(t: ^testing.T) {
 	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
 	defer foster.MaterialDispose(&gpu)
 	schema := sh.Schema{name = "Body", fields = []sh.Field{{id = "hue", kind = .Scalar, instance = true, maximum = 1}}}
-	effect := mat.Material_Effect{schemas = []sh.Schema{schema}, desc = {instanced = true, passes = []sh.Pass_Desc{
+	shader := mat.Material_Shader{schemas = []sh.Schema{schema}, desc = {instanced = true, passes = []sh.Pass_Desc{
 		{id = "body", params = "Body", draw = .Model},
 		{id = "shadow", params = "Body", draw = .Model, values = []sh.Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}}}}}
-	m := mat.Material{owner = &library, effect = &effect,
+	m := mat.Material{owner = &library, shader = &shader,
 		bindings = []mat.Material_Binding{{schema, []sh.Value{{number = {0.2, 0, 0, 0}}}, &gpu, nil}}}
-	plain_effect := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{{id = "body", params = "Plain", draw = .Model}}}}
-	plain := mat.Material{owner = &library, effect = &plain_effect,
+	plain_shader := mat.Material_Shader{desc = {passes = []sh.Pass_Desc{{id = "body", params = "Plain", draw = .Model}}}}
+	plain := mat.Material{owner = &library, shader = &plain_shader,
 		bindings = []mat.Material_Binding{{schema = {name = "Plain"}, material = &gpu}}}
 	mesh := foster.Mesh{GraphicsDevice = &device}
 	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
@@ -558,16 +558,16 @@ render3d_records_survive_material_reload :: proc(t: ^testing.T) {
 	gpu: foster.Material
 	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
 	defer foster.MaterialDispose(&gpu)
-	two := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{
+	two := mat.Material_Shader{desc = {passes = []sh.Pass_Desc{
 		{id = "body", params = "A", draw = .Model}, {id = "outline", params = "B", draw = .Model}}}}
-	one := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{{id = "body", params = "C", draw = .Model}}}}
-	m := mat.Material{owner = &library, effect = &two, bindings = []mat.Material_Binding{
+	one := mat.Material_Shader{desc = {passes = []sh.Pass_Desc{{id = "body", params = "C", draw = .Model}}}}
+	m := mat.Material{owner = &library, shader = &two, bindings = []mat.Material_Binding{
 		{schema = {name = "A"}, material = &gpu}, {schema = {name = "B"}, material = &gpu}}}
 	mesh := foster.Mesh{GraphicsDevice = &device}
 	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
 	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
 	// 模拟 material_reload：同一指针换成单 Pass 效果和新的参数组。
-	m.effect = &one
+	m.shader = &one
 	m.bindings = []mat.Material_Binding{{schema = {name = "C"}, material = &gpu}}
 	m.revision += 1
 	view := View{view_projection = world.MATRIX4_IDENTITY, view_matrix = world.MATRIX4_IDENTITY}

@@ -22,7 +22,7 @@ Draw_Error :: enum {
 	Device_Mismatch,        // 材质属于另一个设备
 	Missing_Mesh,           // 没有可绘制的网格
 	Invalid_Target,         // 绘制目标尺寸无效
-	Not_Material_Effect,    // 效果不是 Sprite/Model 对象材质
+	Not_Material_Shader,    // 效果不是 Sprite/Model 对象材质
 	Too_Many_Passes,        // 效果没有 Pass 或超过 MAX_PASSES
 	Unknown_Pass,           // 指定的 Pass ID 不存在
 	Wrong_Pass_Kind,        // Pass 种类与本次绘制（Sprite/Model）不符
@@ -30,7 +30,7 @@ Draw_Error :: enum {
 	Invalid_Binding,        // 绑定的 Shader、数值或贴图不完整
 	Missing_Sprite_Texture, // Pass 需要当前帧贴图，但没有提供或字段不是 Texture
 	Instance_Buffer_Required, // r2d/r3d.buffer 传了未创建的缓冲，或自动实例化的缓冲创建失败
-	Not_Instanced_Effect,   // 用实例缓冲绘制，但效果没有声明 instanced
+	Not_Instanced_Shader,   // 用实例缓冲绘制，但效果没有声明 instanced
 	Instance_Mismatch,      // 实例缓冲的字段数与效果的 [Instance] 字段数不一致
 	Unsupported_Mesh,       // 网格顶点格式不是模型材质路径支持的静态格式（例如蒙皮网格）
 	Missing_View_Matrix,    // 3D 视图没有设置视矩阵（view_matrix 为零矩阵）
@@ -45,16 +45,16 @@ draw_error_text :: proc(error: Draw_Error) -> string {
 	case .Device_Mismatch: return "Material belongs to a different graphics device"
 	case .Missing_Mesh: return "No mesh to draw"
 	case .Invalid_Target: return "Draw target has no pixels"
-	case .Not_Material_Effect: return "Effect is not a Sprite or Model material"
-	case .Too_Many_Passes: return "Effect has no passes or too many passes"
+	case .Not_Material_Shader: return "Shader is not a Sprite or Model material"
+	case .Too_Many_Passes: return "Shader has no passes or too many passes"
 	case .Unknown_Pass: return "Unknown pass ID"
 	case .Wrong_Pass_Kind: return "Pass kind does not match this draw call"
 	case .Missing_Binding: return "A pass has no parameter group binding"
 	case .Invalid_Binding: return "A binding has missing shaders, values or textures"
 	case .Missing_Sprite_Texture: return "Pass needs a frame texture that was not provided"
-	case .Instance_Buffer_Required: return "Instanced effects must be drawn with an instance buffer"
-	case .Not_Instanced_Effect: return "Effect is not instanced; it cannot use an instance buffer"
-	case .Instance_Mismatch: return "Instance buffer field count differs from the effect's Instance fields"
+	case .Instance_Buffer_Required: return "Instanced shaders must be drawn with an instance buffer"
+	case .Not_Instanced_Shader: return "Shader is not instanced; it cannot use an instance buffer"
+	case .Instance_Mismatch: return "Instance buffer field count differs from the shader's Instance fields"
 	case .Unsupported_Mesh: return "Model materials only support the static vertex format"
 	case .Missing_View_Matrix: return "3D view needs a view matrix (for example camera3d_view)"
 	case .View_Globals_Too_Large: return "View globals exceed VIEW_GLOBALS_SIZE bytes"
@@ -124,11 +124,11 @@ pass_state_apply :: proc(command: ^foster.DrawCommand, state: sh.Pass_State) {
 
 // 按声明顺序列出要画的 Pass：pass_id 为空选全部，非空只选该 Pass；声明为 disabled 的 Pass 都不画。
 @(private)
-material_pass_indices :: proc(effect: sh.Shader_Desc, pass_id: Pass_Id,
+material_pass_indices :: proc(shader: sh.Shader_Desc, pass_id: Pass_Id,
 	indices: ^[sh.MAX_PASSES]int) -> (count: int, error: Draw_Error) {
-	if len(effect.passes) == 0 || len(effect.passes) > len(indices) do return 0, .Too_Many_Passes
+	if len(shader.passes) == 0 || len(shader.passes) > len(indices) do return 0, .Too_Many_Passes
 	found := pass_id == ""
-	for p, i in effect.passes {
+	for p, i in shader.passes {
 		if pass_id != "" && p.id != pass_id do continue
 		found = true
 		if p.disabled do continue
@@ -216,16 +216,16 @@ Pass_Selection :: struct {
 
 // 解析选择并检查 Pass 种类与绑定，不提交、不改动绑定；渲染器记录绘制时用它提前得到错误。
 // kind 是本次绘制的种类（Sprite / Model），sprite_texture 是精灵的当前帧（Model 传 nil）。
-material_select :: proc(effect: sh.Shader_Desc, bindings: []Material_Binding, kind: sh.Pass_Draw, pass_id: Pass_Id,
+material_select :: proc(shader: sh.Shader_Desc, bindings: []Material_Binding, kind: sh.Pass_Draw, pass_id: Pass_Id,
 	sprite_texture: ^foster.Texture, selection: ^Pass_Selection) -> Draw_Error {
 	selection^ = {}
 	selected: [sh.MAX_PASSES]int
-	count, error := material_pass_indices(effect, pass_id, &selected)
+	count, error := material_pass_indices(shader, pass_id, &selected)
 	if error != .None do return error
 	for i in selected[:count] {
-		if effect.passes[i].draw != kind do return .Wrong_Pass_Kind
+		if shader.passes[i].draw != kind do return .Wrong_Pass_Kind
 		bound: int
-		bound, error = material_binding_find(effect.passes[i], kind, sprite_texture, bindings)
+		bound, error = material_binding_find(shader.passes[i], kind, sprite_texture, bindings)
 		if error != .None do return error
 		selection.passes[selection.count] = i
 		selection.bindings[selection.count] = bound

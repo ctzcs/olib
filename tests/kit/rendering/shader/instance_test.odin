@@ -9,19 +9,19 @@ sprite_material_contract_and_roundtrip :: proc(t: ^testing.T) {
 	schemas := []Schema{{name = "Sprite", preview = "2d", fields = {
 		{id = "mask", kind = .Texture}, {id = "frame", kind = .Texture},
 	}}}
-	effect := Shader_Desc{name = "Sprite", output = "color", passes = []Pass_Desc{
+	shader := Shader_Desc{name = "Sprite", output = "color", passes = []Pass_Desc{
 		{id = "shadow", params = "Sprite", draw = .Sprite, output = "color", sprite_texture = "frame"},
 		{id = "body", params = "Sprite", draw = .Sprite, output = "color", sprite_texture = "frame"},
 	}}
-	instance, reason := instance_make(effect, schemas)
+	instance, reason := instance_make(shader, schemas)
 	defer instance_dispose(&instance)
 	testing.expect(t, reason == "" && len(instance.groups) == 1)
 	bytes, encode_error := instance_encode(instance)
 	defer delete(bytes)
-	loaded, decode_error := instance_decode(effect, schemas, bytes)
+	loaded, decode_error := instance_decode(shader, schemas, bytes)
 	defer instance_dispose(&loaded)
 	testing.expect(t, encode_error == "" && decode_error == "")
-	copy := shader_clone(effect)
+	copy := shader_clone(shader)
 	defer shader_dispose(&copy)
 	testing.expect_value(t, copy.passes[0].sprite_texture, "frame")
 	for invalid in ([]Pass_Desc{
@@ -29,15 +29,15 @@ sprite_material_contract_and_roundtrip :: proc(t: ^testing.T) {
 		{id = "body", params = "Sprite", draw = .Fullscreen, output = "color"},
 		{id = "body", params = "Sprite", draw = .Sprite, output = "color", sprite_texture = "missing"},
 	}) {
-		effect.passes[1] = invalid
-		order, error := shader_order(effect, schemas)
+		shader.passes[1] = invalid
+		order, error := shader_order(shader, schemas)
 		delete(order)
 		testing.expect(t, error != "")
 	}
-	effect.passes[1] = effect.passes[0]
-	effect.passes[1].id = "body"
+	shader.passes[1] = shader.passes[0]
+	shader.passes[1].id = "body"
 	schemas[0].preview = "3d"
-	order, error := shader_order(effect, schemas)
+	order, error := shader_order(shader, schemas)
 	delete(order)
 	testing.expect(t, error != "")
 }

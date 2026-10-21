@@ -26,13 +26,13 @@ sprite_buffer_guards_and_draw_errors :: proc(t: ^testing.T) {
 	buf: Sprite_Buffer
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
-	plain := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{{draw = .Sprite}}}}
-	instanced := mat.Material_Effect{desc = {instanced = true, passes = []sh.Pass_Desc{{draw = .Sprite}}}}
+	plain := mat.Material_Shader{desc = {passes = []sh.Pass_Desc{{draw = .Sprite}}}}
+	instanced := mat.Material_Shader{desc = {instanced = true, passes = []sh.Pass_Desc{{draw = .Sprite}}}}
 	testing.expect_value(t, sprite_buffer_init(&buf, nil, 10), "Material is not loaded")
-	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{effect = &instanced}, 10), "Material is not loaded")
-	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{owner = &library, effect = &plain}, 10),
-		"Sprite buffers require an Instanced sprite effect")
-	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{owner = &library, effect = &instanced}, 0),
+	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{shader = &instanced}, 10), "Material is not loaded")
+	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{owner = &library, shader = &plain}, 10),
+		"Sprite buffers require an Instanced sprite shader")
+	testing.expect_value(t, sprite_buffer_init(&buf, &mat.Material{owner = &library, shader = &instanced}, 0),
 		"Sprite buffer capacity must be positive")
 	items := []Sprite_Item{{}, {}}
 	testing.expect(t, !sprite_buffer_upload(&buf, items)) // 未创建
@@ -48,11 +48,11 @@ sprite_buffer_guards_and_draw_errors :: proc(t: ^testing.T) {
 	render2d_reset_state(&r)
 	atlas: foster.Texture
 	testing.expect_value(t, buffer(&r, nil, &buf, 1, &atlas), mat.Draw_Error.Missing_Material)
-	material := mat.Material{owner = &library, effect = &plain}
-	testing.expect_value(t, buffer(&r, &material, &buf, 1, &atlas), mat.Draw_Error.Not_Instanced_Effect)
+	material := mat.Material{owner = &library, shader = &plain}
+	testing.expect_value(t, buffer(&r, &material, &buf, 1, &atlas), mat.Draw_Error.Not_Instanced_Shader)
 	shaders := make([]foster.Shader, 1, context.temp_allocator)
 	instanced.instanced_vertex = shaders
-	material.effect = &instanced
+	material.shader = &instanced
 	testing.expect_value(t, buffer(&r, &material, nil, 1, &atlas), mat.Draw_Error.Instance_Buffer_Required)
 	testing.expect_value(t, buffer(&r, &material, &buf, 1, &atlas), mat.Draw_Error.Instance_Mismatch) // 材质 0 个字段，缓冲 2 个
 	buf.slots = 0

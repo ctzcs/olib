@@ -53,10 +53,10 @@ properties_passes_and_original_hlsl_locations :: proc(t: ^testing.T) {
 	testing.expect(t, doc.schemas[0].fields[1].filter == .Linear && doc.schemas[0].fields[1].wrap == .Clamp)
 	testing.expect(t, doc.schemas[0].fields[2].filter_declared && doc.schemas[0].fields[2].wrap_declared)
 	testing.expect(t, !doc.schemas[0].fields[1].filter_declared && !doc.schemas[0].fields[1].wrap_declared)
-	testing.expect(t, doc.effect.output == "color")
-	testing.expect(t, doc.effect.passes[0].target.scale == 0.5)
-	testing.expect(t, doc.effect.passes[1].inputs[0].target == "scene")
-	testing.expect(t, doc.effect.passes[1].values[0].field == "velocity")
+	testing.expect(t, doc.shader.output == "color")
+	testing.expect(t, doc.shader.passes[0].target.scale == 0.5)
+	testing.expect(t, doc.shader.passes[1].inputs[0].target == "scene")
+	testing.expect(t, doc.shader.passes[1].values[0].field == "velocity")
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Speed"))
 	testing.expectf(t, strings.contains(doc.programs[0], "#line 8 \"water.oshader\""), "%s", doc.programs[0])
 	testing.expect(t, strings.contains(doc.programs[0], "/*\nENDHLSL\n*/"))
@@ -115,7 +115,7 @@ ENDHLSL
 		doc := parse(text, "depth.oshader")
 		defer dispose(&doc)
 		if testing.expectf(t, doc.error == "", "%s: %s", name, doc.error) {
-			testing.expect_value(t, fmt.tprint(doc.effect.passes[0].state.depth), name)
+			testing.expect_value(t, fmt.tprint(doc.shader.passes[0].state.depth), name)
 		}
 	}
 }
@@ -139,8 +139,8 @@ ENDHLSL
 	defer dispose(&doc)
 	if testing.expectf(t, doc.error == "", "%s", doc.error) {
 		testing.expect(t, doc.schemas[0].preview == "3d")
-		testing.expect(t, doc.effect.passes[1].state.cull == .Front)
-		testing.expect(t, doc.effect.passes[1].state.depth_write == .Off)
+		testing.expect(t, doc.shader.passes[1].state.cull == .Front)
+		testing.expect(t, doc.shader.passes[1].state.depth_write == .Off)
 	}
 	feedback, _ := strings.replace_all(SOURCE, "\"scene\" Current", "\"color\" Previous")
 	defer delete(feedback)
@@ -169,7 +169,7 @@ ENDHLSL
 	doc := parse(source, "glow.oshader")
 	defer dispose(&doc)
 	if !testing.expectf(t, doc.error == "", "%s", doc.error) do return
-	testing.expect(t, doc.effect.instanced)
+	testing.expect(t, doc.shader.instanced)
 	testing.expect(t, doc.schemas[0].fields[0].instance && !doc.schemas[0].fields[1].instance)
 	testing.expect(t, doc.schemas[0].fields[2].instance && doc.schemas[0].fields[2].id == "amount")
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Hue (olib_instance.data0.x)"))
@@ -196,7 +196,7 @@ ENDHLSL
 }`
 	tinted := parse(flag_only, "tinted.oshader")
 	defer dispose(&tinted)
-	testing.expectf(t, tinted.error == "" && tinted.effect.instanced, "%s", tinted.error)
+	testing.expectf(t, tinted.error == "" && tinted.shader.instanced, "%s", tinted.error)
 	// 没有实例字段：槽位为空，批量变体仍 include 精灵接口（从 storage buffer 读两条轴，不读字段）。
 	testing.expect(t, strings.contains(tinted.programs[0], "#define OLIB_INSTANCE_SLOTS 0\n#define OLIB_INSTANCE_DATA(X)\n"))
 	testing.expect(t, strings.contains(tinted.instanced_programs[0], "#define OLIB_INSTANCE_SPRITE\n"))

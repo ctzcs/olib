@@ -61,8 +61,8 @@ render2d_record_reports_errors :: proc(t: ^testing.T) {
 	render2d_reset_state(&r)
 	testing.expect_value(t, rect(&r, {0, 0, 1, 1}, foster.White), mat.Draw_Error.Missing_Material)
 	foreign_library := mat.Material_Library{device = &other}
-	effect: mat.Material_Effect
-	alien := mat.Material{owner = &foreign_library, effect = &effect}
+	shader: mat.Material_Shader
+	alien := mat.Material{owner = &foreign_library, shader = &shader}
 	testing.expect_value(t, rect(&r, {0, 0, 1, 1}, foster.White, &alien), mat.Draw_Error.Device_Mismatch)
 	testing.expect_value(t, texture(&r, nil, {1, 0, 0, 1, 0, 0}), mat.Draw_Error.Missing_Sprite_Texture)
 	testing.expect_value(t, image(&r, {}, {1, 0, 0, 1, 0, 0}), mat.Draw_Error.Missing_Sprite_Texture)
@@ -86,7 +86,7 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 		{id = "strength", name = "strength", kind = .Scalar, maximum = 1},
 		{id = "mask", name = "mask", kind = .Texture}}
 	schema := sh.Schema{name = "Glow", preview = "2d", fields = fields}
-	effect := mat.Material_Effect{desc = {name = "Glow", output = "color", preview = "2d", passes = []sh.Pass_Desc{
+	shader := mat.Material_Shader{desc = {name = "Glow", output = "color", preview = "2d", passes = []sh.Pass_Desc{
 		{id = "main", params = "Glow", output = "color", draw = .Sprite, sprite_texture = "texture"}}}}
 	gpu: foster.Material
 	foster.MaterialInit(&gpu)
@@ -94,7 +94,7 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	values := []sh.Value{{}, {number = {0.5, 0, 0, 0}}, {}} // 参数 strength 为 0.5
 	white, atlas: foster.Texture
 	samplers := []foster.BoundSampler{{Texture = &white}, {Texture = &white}}
-	material := mat.Material{owner = &library, effect = &effect,
+	material := mat.Material{owner = &library, shader = &shader,
 		bindings = []mat.Material_Binding{{schema, values, &gpu, samplers}}}
 	selection := mat.Pass_Selection{count = 1}
 
@@ -132,8 +132,8 @@ render2d_instance_values_preserve_each_pass :: proc(t: ^testing.T) {
 	r: Render2D
 	defer dispose(&r)
 	schema := sh.Schema{fields = []sh.Field{{id = "hue", name = "hue", kind = .Scalar, instance = true, maximum = 1}}}
-	effect := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{{}, {}}}}
-	m := mat.Material{effect = &effect, bindings = []mat.Material_Binding{
+	shader := mat.Material_Shader{desc = {passes = []sh.Pass_Desc{{}, {}}}}
+	m := mat.Material{shader = &shader, bindings = []mat.Material_Binding{
 		{schema = schema, values = []sh.Value{{number = {0.2, 0, 0, 0}}}},
 		{schema = schema, values = []sh.Value{{number = {0.8, 0, 0, 0}}}},
 	}}

@@ -1,4 +1,4 @@
-package effect
+package shader
 
 // 材质资源复用 Schema/Value；字节编解码无编辑器或文件系统依赖。
 // 分区：格式 / 校验与实例覆盖 / 字节编解码。

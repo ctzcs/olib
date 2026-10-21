@@ -1,4 +1,4 @@
-package effect
+package shader
 
 // 对象材质实例拥有参数和贴图路径；Effect 定义与 GPU 资源由资源管理器共享。
 import "core:encoding/json"
@@ -28,11 +28,11 @@ instance_dispose :: proc(instance: ^Instance) {
 	instance^ = {}
 }
 
-instance_make :: proc(effect: Effect_Desc, schemas: []Schema) -> (Instance, string) {
-	order, reason := effect_order(effect, schemas)
+instance_make :: proc(effect: Shader_Desc, schemas: []Schema) -> (Instance, string) {
+	order, reason := shader_order(effect, schemas)
 	defer delete(order)
 	if reason != "" do return {}, reason
-	if !effect_is_material(effect) do return {}, "Material instance requires Model or Sprite passes"
+	if !shader_is_material(effect) do return {}, "Material instance requires Model or Sprite passes"
 	groups := make([dynamic]Instance_Group)
 	for p in effect.passes {
 		found := false
@@ -50,7 +50,7 @@ instance_make :: proc(effect: Effect_Desc, schemas: []Schema) -> (Instance, stri
 }
 
 // Decode 成功才交给调用方替换；缺少的新组/字段保留默认值。
-instance_decode :: proc(effect: Effect_Desc, schemas: []Schema, bytes: []u8) -> (Instance, string) {
+instance_decode :: proc(effect: Shader_Desc, schemas: []Schema, bytes: []u8) -> (Instance, string) {
 	if len(bytes) > MAX_RESOURCE_BYTES do return {}, "Material resource exceeds 1 MiB"
 	resource: Instance_Resource
 	if json.unmarshal(bytes, &resource, allocator = context.temp_allocator) != nil do return {}, "Invalid material JSON"

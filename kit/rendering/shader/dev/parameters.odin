@@ -8,20 +8,20 @@ import "core:path/filepath"
 import "core:strings"
 import "core:thread"
 
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 
 Parameter_Build :: struct {
-	schemas: []fx.Schema,
-	effects: []fx.Effect_Desc,
+	schemas: []sh.Schema,
+	effects: []sh.Shader_Desc,
 	programs: []Parameter_Program,
 	error: string,
 }
 
 parameter_build_dispose :: proc(b: ^Parameter_Build) {
 	context.allocator = runtime.heap_allocator()
-	for &s in b.schemas do fx.schema_dispose(&s)
+	for &s in b.schemas do sh.schema_dispose(&s)
 	delete(b.schemas)
-	for &e in b.effects do fx.effect_dispose(&e)
+	for &e in b.effects do sh.shader_dispose(&e)
 	delete(b.effects)
 	for program in b.programs {
 		delete(program.group)

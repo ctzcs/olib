@@ -7,7 +7,7 @@ import foster "olib:foster"
 import r2d "olib:kit/rendering/2d"
 import r3d "olib:kit/rendering/3d"
 import mat "olib:kit/rendering/material"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 import world "olib:kit/world"
 
 Pass_Target :: struct {
@@ -16,7 +16,7 @@ Pass_Target :: struct {
 }
 
 Effect_Runtime :: struct {
-	desc: fx.Effect_Desc,
+	desc: sh.Shader_Desc,
 	order: []int,
 	targets: []Pass_Target,
 	current: int,
@@ -45,7 +45,7 @@ set_pass_enabled :: proc(s: ^Session, effect, pass: int, enabled: bool) {
 pass_bypass :: proc(s: ^Session, e: ^Effect_Runtime, pass: int, target: ^foster.Target) {
 	p := e.desc.passes[pass]
 	target_clear(s, target, p.target.clear)
-	source_name: fx.Target_Ref
+	source_name: sh.Target_Ref
 	count := 0
 	for input in p.inputs {
 		if input.frame != .Current do continue
@@ -70,7 +70,7 @@ effect_dispose :: proc(e: ^Effect_Runtime) {
 	delete(e.order)
 	delete(e.validated_revision)
 	delete(e.rejected_revision)
-	fx.effect_dispose(&e.desc)
+	sh.shader_dispose(&e.desc)
 	e^ = {}
 }
 
@@ -94,7 +94,7 @@ effect_targets_trim :: proc(bank: ^Parameter_Bank, selected: int) {
 	}
 }
 
-target_size :: proc(t: fx.Target_Desc, w, h: int) -> (int, int) {
+target_size :: proc(t: sh.Target_Desc, w, h: int) -> (int, int) {
 	if t.width > 0 do return t.width, t.height
 	scale := t.scale == 0 ? f32(1) : t.scale
 	return max(1, int(f32(w)*scale)), max(1, int(f32(h)*scale))
@@ -112,7 +112,7 @@ effect_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int
 	for &used in bank.shader_used do used = false
 	for &e, effect_index in bank.effects {
 		if effect_index != selected do continue
-		model := fx.effect_is_material(e.desc)
+		model := sh.shader_is_material(e.desc)
 		changed := false
 		for p, i in e.desc.passes {
 			bank.shader_used[bank_index(bank, string(p.params))] = true
@@ -186,7 +186,7 @@ step :: proc(s: ^Session) {
 
 // 非材质效果的绘制命令与热重载的管线探测都用内置几何。instanced 模型的探测与 Render3D 一样把网格属性
 // 排在实例属性之后并绑定实例缓冲；改了属性位置的网格副本分配在临时内存里，探测在本帧内用完。
-pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: fx.Pass_Draw,
+pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: sh.Pass_Draw,
 	target: foster.DrawableTarget, instanced := false) -> foster.DrawCommand {
 	preview3d := draw != .Fullscreen && bank.parameters[index].live.preview == "3d"
 	mesh := preview3d ? (s.mode == 3 ? 2 : 1) : 0
@@ -196,7 +196,7 @@ pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: fx.Pa
 	if draw == .Sprite do geometry = &s.sprite_mesh
 	foster.DrawCommandFromMesh(&command, target, geometry, &bank.materials[index])
 	if draw == .Model && instanced {
-		slots := fx.instance_count(bank.parameters[index].live)
+		slots := sh.instance_count(bank.parameters[index].live)
 		buf := &s.probe_instances[slots]
 		if buf.capacity == 0 do r3d.model_buffer_create(buf, s.device, slots, 1, "shader lab instance probe")
 		context.allocator = context.temp_allocator
@@ -209,7 +209,7 @@ pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: fx.Pa
 	return command
 }
 
-pass_uniforms :: proc(s: ^Session, index: int, draw: fx.Pass_Draw, target: foster.DrawableTarget,
+pass_uniforms :: proc(s: ^Session, index: int, draw: sh.Pass_Draw, target: foster.DrawableTarget,
 	time, dt: f32, frame: u64) {
 	material := &s.materials[index]
 	w, h := target.WidthInPixels, target.HeightInPixels
@@ -245,7 +245,7 @@ pass_uniforms :: proc(s: ^Session, index: int, draw: fx.Pass_Draw, target: foste
 effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 	if e.clear_pending {
 		for p, i in e.desc.passes {
-			if fx.effect_is_material(e.desc) && i > 0 do continue
+			if sh.shader_is_material(e.desc) && i > 0 do continue
 			for j in 0..<(e.targets[i].history ? 2 : 1) {
 				target_clear(s, &e.targets[i].buffers[j], p.target.clear)
 			}
@@ -264,7 +264,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 	e.last_tick = s.tick_serial
 	e.last_clock = s.clock
 	s.step_requested = false
-	if fx.effect_is_material(e.desc) do return material_effect_render(s, e)
+	if sh.shader_is_material(e.desc) do return material_effect_render(s, e)
 	for i in e.order {
 		p := e.desc.passes[i]
 		index := bank_index(s.bank, string(p.params))
@@ -281,14 +281,14 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 		parameters_bind(s, index)
 		parameter := &s.parameters[index]
 		if len(p.values) > 0 {
-			values := make([]fx.Value, len(parameter.values), context.temp_allocator)
+			values := make([]sh.Value, len(parameter.values), context.temp_allocator)
 			copy(values, parameter.values)
 			for value in p.values {
 				for f, j in parameter.live.fields {
 					if f.id == string(value.field) do values[j].number = value.number
 				}
 			}
-			_ = fx.pack(parameter.live, values, parameter.buffer)
+			_ = sh.pack(parameter.live, values, parameter.buffer)
 			foster.MaterialStageSetUniformBuffer(&s.materials[index].Fragment, parameter.buffer, 1)
 		}
 		for input in p.inputs {

@@ -1,5 +1,5 @@
 #+test
-package effect
+package shader
 
 import "core:mem"
 import "core:strings"
@@ -10,24 +10,24 @@ import foster "olib:foster"
 @(test)
 pass_graph_orders_current_dependencies_and_owns_nested_data :: proc(t: ^testing.T) {
 	schemas := []Schema{{name = "Image", preview = "2d", fields = []Field{{id = "source", kind = .Texture}}}}
-	e := Effect_Desc{name = "Trail", output = "result", passes = []Pass_Desc{
+	e := Shader_Desc{name = "Trail", output = "result", passes = []Pass_Desc{
 		{id = "final", params = "Image", output = "result", inputs = {{field = "source", target = "scene"}}},
 		{id = "seed", params = "Image", output = "scene", inputs = {{field = "source", target = "result", frame = .Previous}}},
 	}}
-	order, error := effect_order(e, schemas)
+	order, error := shader_order(e, schemas)
 	defer delete(order)
 	testing.expect(t, error == "" && len(order) == 2 && order[0] == 1 && order[1] == 0)
-	owned := effect_clone(e)
-	defer effect_dispose(&owned)
+	owned := shader_clone(e)
+	defer shader_dispose(&owned)
 	testing.expect(t, raw_data(owned.passes[0].inputs) != raw_data(e.passes[0].inputs))
 	owned.passes[1].inputs[0].frame = .Current
-	bad, cycle := effect_order(owned, schemas)
+	bad, cycle := shader_order(owned, schemas)
 	defer delete(bad)
 	testing.expect(t, len(bad) == 0 && strings.contains(cycle, "cycle"))
 	owned.passes[1].inputs[0].frame = .Previous
 	delete(string(owned.passes[0].inputs[0].field))
 	owned.passes[0].inputs[0].field = Field_Ref(strings.clone("missing"))
-	missing_order, missing := effect_order(owned, schemas)
+	missing_order, missing := shader_order(owned, schemas)
 	defer delete(missing_order)
 	testing.expect(t, strings.contains(missing, "Texture field"))
 	testing.expect(t, e.passes[0].inputs[0].field == "source" && e.passes[1].inputs[0].frame == .Previous)

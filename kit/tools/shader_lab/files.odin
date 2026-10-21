@@ -7,7 +7,8 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 import "core:time"
-import fx "olib:kit/rendering/shader/effect"
+
+import sh "olib:kit/rendering/shader"
 
 File_Action :: enum { None, Texture, Save_Preset, Load_Preset }
 File_Request :: struct {
@@ -37,7 +38,7 @@ request_file :: proc(s: ^Session, index: int, action: File_Action, field := "") 
 	s.request_serial += 1
 	s.request = {id = s.request_serial, generation = p.generation, action = action,
 		group = strings.clone(p.name), field = strings.clone(field)}
-	if action != .Texture && s.selected_effect >= 0 && fx.effect_is_material(s.effects[s.selected_effect].desc) {
+	if action != .Texture && s.selected_effect >= 0 && sh.shader_is_material(s.effects[s.selected_effect].desc) {
 		s.request.effect = strings.clone(s.effects[s.selected_effect].desc.name)
 	}
 }

@@ -1,14 +1,14 @@
-# 效果描述层（shader/effect）
+# 效果描述层（kit/rendering/shader）
 
 材质下面的一层：效果、Pass、参数组的描述与校验，参数打包、HLSL 生成，以及材质 / 预设文件的编解码。
 全部是纯数据和字节，不碰文件与 GPU 设备（唯一的 Foster 依赖是 Texture 字段的采样器类型）。
 
 谁用它：[material](../../material/README.md) 的材质库、Render2D / Render3D、[shader/lang](../lang/README.md)
 （`.oshader` 解析成这里的类型）、[shader/dev](../dev/README.md)、tools/shaders 与 Shader Lab。
-游戏一般不 import 本包：材质用 `mat`，记录时用的 Pass ID 是 `mat.Pass_Id`（与 `fx.Pass_Id` 同一类型）。
+游戏一般不 import 本包：材质用 `mat`，记录时用的 Pass ID 是 `mat.Pass_Id`（与 `sh.Pass_Id` 同一类型）。
 
 ```odin
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 ```
 
 ## 文件
@@ -17,7 +17,7 @@ import fx "olib:kit/rendering/shader/effect"
 | --- | --- |
 | `declarations.odin` | `Params_Ref / Target_Ref / Field_Ref / Pass_Id` 稳定引用（distinct string），`clone_text / delete_text` |
 | `parameters.odin` | `Schema / Field / Value`：参数声明、实例数值、迁移与 GPU 布局（`hlsl` / `pack`），Texture 字段采样器 |
-| `effect.odin` | `Effect_Desc / Pass_Desc / Target_Desc`：多 Pass 声明，`effect_validate` 校验、`effect_sort` 拓扑排序，clone / dispose |
+| `effect.odin` | `Shader_Desc / Pass_Desc / Target_Desc`：多 Pass 声明，`shader_validate` 校验、`shader_sort` 拓扑排序，clone / dispose |
 | `instance.odin` | `Instance`：完整材质文件（version=2）的创建与编解码 |
 | `resource.odin` | `Resource`：单参数组预设（version=1）的编解码 |
 
@@ -26,7 +26,7 @@ import fx "olib:kit/rendering/shader/effect"
 - 声明、解析和编解码返回 `reason: string`，空串表示成功；文本借用至本帧 `temp_allocator` 重置，需要保留时自行克隆。
 - **上限常量**：`MAX_PASSES`（32）、`MAX_TEXTURES`（16）、`MAX_UNIFORM_BYTES`（16384）、`MAX_INSTANCE_FIELDS`（16）、
   `MAX_TARGET_SIZE`（8192）、`MAX_RESOURCE_BYTES`（1 MiB）、`MAX_RESOURCE_FIELDS`（256）；数值只在对应常量处修改。
-- **字符串所有权**：`Schema` 用 `schema_clone / schema_dispose`，`Effect_Desc` 用 `effect_clone / effect_dispose`
+- **字符串所有权**：`Schema` 用 `schema_clone / schema_dispose`，`Shader_Desc` 用 `shader_clone / shader_dispose`
   （内部通过 `clone_text / delete_text` 统一处理 `distinct string`）。新增拥有字符串或切片的字段时，
   须同步对应的 clone、dispose（Schema 另有 `schema_equal`）。
 
@@ -44,7 +44,7 @@ import fx "olib:kit/rendering/shader/effect"
 须保证字段 ID 唯一、字段名可用于 HLSL、范围有效以及类型/默认值匹配。
 
 引用类型是 `distinct string`：字面量可直接赋值，但不同用途的已命名值不能混用。推荐把重复引用声明为具名常量，
-例如 `Scene_Color :: fx.Target_Ref("scene_color")`，输入和输出都使用它。专用类型不自动发现文件或字段；
+例如 `Scene_Color :: sh.Target_Ref("scene_color")`，输入和输出都使用它。专用类型不自动发现文件或字段；
 参数组/字段/目标是否存在仍由校验报告。
 
 ### 采样器
@@ -80,9 +80,9 @@ import fx "olib:kit/rendering/shader/effect"
 
 ## 多 Pass 声明
 
-`Pass_Desc / Target_Desc / Effect_Desc` 是纯数据类型；
-`effect_order` = `effect_validate`（逐 Pass 检查参数组、目标、纹理输入、覆盖值与输出唯一性）
-+ `effect_sort`（当前帧依赖拓扑排序，检出循环），返回拥有的拓扑顺序。
+`Pass_Desc / Target_Desc / Shader_Desc` 是纯数据类型；
+`shader_order` = `shader_validate`（逐 Pass 检查参数组、目标、纹理输入、覆盖值与输出唯一性）
++ `shader_sort`（当前帧依赖拓扑排序，检出循环），返回拥有的拓扑顺序。
 `Previous` 边跨帧，不参与排序。声明和 GPU 执行示例见
 [Shader Lab](../../../tools/shader_lab/README.md#odin-多-pass-与历史帧)。
 
@@ -93,7 +93,7 @@ import fx "olib:kit/rendering/shader/effect"
 把每个 Pass 声明为 `draw = .Model`，全部 `output` 指向 Effect.output，`target` 描述相同：
 
 ```odin
-passes := []fx.Pass_Desc{
+passes := []sh.Pass_Desc{
     {id = "body", params = "Surface", draw = .Model, output = "color",
         state = {cull = .Back, blend = .Opaque, depth = .Less, depth_write = .On}},
     {id = "outline", params = "Outline", draw = .Model, output = "color",

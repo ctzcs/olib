@@ -9,7 +9,7 @@ import "core:mem"
 import dasset "olib:core/dasset"
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 import world "olib:kit/world"
 
 // ------------------------------------------------------------------------------
@@ -43,7 +43,7 @@ Render3D :: struct {
 	values: [dynamic][4]f32,
 	batches: [dynamic]Render3D_Batch,
 	upload: [dynamic]u8,
-	buffers: [fx.MAX_INSTANCE_FIELDS + 1]Model_Buffer, // 自动实例化的临时缓冲，按 [Instance] 字段数各一个
+	buffers: [sh.MAX_INSTANCE_FIELDS + 1]Model_Buffer, // 自动实例化的临时缓冲，按 [Instance] 字段数各一个
 	debug: Debug_Draw_3D, // 线宽与深度开关；GPU 资源延迟到首次提交线段时创建
 }
 
@@ -76,7 +76,7 @@ Render3D_Source :: struct {
 	selection: mat.Pass_Selection,
 	snapshot, next: int,
 	// 本次 submit 的选择，不改记录的完整 selection。
-	selected: [fx.MAX_PASSES]int,
+	selected: [sh.MAX_PASSES]int,
 	count: int,
 	transparent: bool,
 }
@@ -146,7 +146,7 @@ render3d_validate :: proc(r: ^Render3D, mesh: ^foster.Mesh,
 	if mesh == nil do return .Missing_Mesh
 	if mesh.GraphicsDevice != r.library.device do return .Device_Mismatch
 	if mesh.VertexData.Format.Stride != dasset.DASSET_VERTEX_STRIDE_STATIC do return .Unsupported_Mesh
-	if !fx.effect_is_material(m.effect.desc) do return .Not_Material_Effect
+	if !sh.shader_is_material(m.effect.desc) do return .Not_Material_Effect
 	return .None
 }
 
@@ -156,14 +156,14 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 	overrides: ^mat.Instance_Values) -> mat.Draw_Error {
 	if error := render3d_validate(r, mesh, m); error != .None do return error
 	slots := mat.instance_slot_count(m)
-	if slots < 0 || slots > fx.MAX_INSTANCE_FIELDS do return .Instance_Mismatch
+	if slots < 0 || slots > sh.MAX_INSTANCE_FIELDS do return .Instance_Mismatch
 	if flat != nil && len(flat) != len(items) * slots do return .Instance_Mismatch
 	selection: mat.Pass_Selection
 	if error := mat.material_select(m.effect.desc, m.bindings, .Model, "", nil, &selection);
 		error != .None do return error
 	if len(items) == 0 do return .None
-	uniforms: [fx.MAX_PASSES][]u8
-	defaults: [fx.MAX_PASSES]mat.Instance_Values
+	uniforms: [sh.MAX_PASSES][]u8
+	defaults: [sh.MAX_PASSES]mat.Instance_Values
 	for i in 0..<selection.count {
 		p := m.effect.desc.passes[selection.passes[i]]
 		uniforms[i], defaults[i] = mat.material_pass_values(p, m.bindings[selection.bindings[i]], overrides)
@@ -201,7 +201,7 @@ buffer :: proc(r: ^Render3D, mesh: ^foster.Mesh, material: ^mat.Material,
 	if error := mat.material_select(material.effect.desc, material.bindings, .Model, "", nil, &selection);
 		error != .None do return error
 	if count == 0 do return .None
-	uniforms: [fx.MAX_PASSES][]u8
+	uniforms: [sh.MAX_PASSES][]u8
 	for i in 0..<selection.count {
 		p := material.effect.desc.passes[selection.passes[i]]
 		uniforms[i], _ = mat.material_pass_values(p, material.bindings[selection.bindings[i]], nil)
@@ -424,7 +424,7 @@ render3d_batch_end :: proc(r: ^Render3D, start: int) -> int {
 // 把排序后的队列切成批次；自动实例化批次按槽数排位，返回各槽数需要的实例总数（每个所选 Pass 一份）。
 // 只读记录与队列，不碰 GPU。
 @(private)
-render3d_plan :: proc(r: ^Render3D) -> (counts: [fx.MAX_INSTANCE_FIELDS + 1]int) {
+render3d_plan :: proc(r: ^Render3D) -> (counts: [sh.MAX_INSTANCE_FIELDS + 1]int) {
 	builtin.clear(&r.batches)
 	for start := 0; start < len(r.queue.items); {
 		end := render3d_batch_end(r, start)
@@ -443,7 +443,7 @@ render3d_plan :: proc(r: ^Render3D) -> (counts: [fx.MAX_INSTANCE_FIELDS + 1]int)
 
 // 按槽数分段写入 r.upload：每段对应一个临时缓冲，段内按 plan 的 first 排列，返回各段字节起点。
 @(private)
-render3d_pack :: proc(r: ^Render3D, counts: [fx.MAX_INSTANCE_FIELDS + 1]int) -> (bases: [fx.MAX_INSTANCE_FIELDS + 1]int) {
+render3d_pack :: proc(r: ^Render3D, counts: [sh.MAX_INSTANCE_FIELDS + 1]int) -> (bases: [sh.MAX_INSTANCE_FIELDS + 1]int) {
 	total := 0
 	for count, slots in counts {
 		bases[slots] = total
@@ -475,7 +475,7 @@ render3d_pack :: proc(r: ^Render3D, counts: [fx.MAX_INSTANCE_FIELDS + 1]int) -> 
 // submit 在预检阶段调用，保证发 Draw 之前缓冲已就绪。
 @(private)
 render3d_instance_buffer :: proc(r: ^Render3D, slots: int) -> bool {
-	if slots < 0 || slots > fx.MAX_INSTANCE_FIELDS do return false
+	if slots < 0 || slots > sh.MAX_INSTANCE_FIELDS do return false
 	buf := &r.buffers[slots]
 	if buf.capacity == 0 do model_buffer_create(buf, r.library.device, slots, 64, "render3d instances")
 	return buf.capacity > 0

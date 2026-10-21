@@ -1,4 +1,4 @@
-package effect
+package shader
 
 // 效果声明里的稳定引用；不持有 GPU 资源。
 import "core:strings"
@@ -10,7 +10,7 @@ Field_Ref :: distinct string
 Pass_Id :: distinct string
 
 // 复制 / 释放字符串类声明：普通 string 与上面的 distinct string 通用，免去逐处强制转换。
-// 新增拥有字符串的声明字段时，须同步 effect_clone / effect_dispose（Schema 见 schema_clone / schema_dispose）。
+// 新增拥有字符串的声明字段时，须同步 shader_clone / shader_dispose（Schema 见 schema_clone / schema_dispose）。
 clone_text :: proc(value: $T) -> T {
 	return T(strings.clone(string(value)))
 }

@@ -1,4 +1,4 @@
-package effect
+package shader
 
 // 效果与多 Pass 的纯数据声明；不依赖编辑器或 GPU。分区：声明 / 校验与拓扑排序 / 所有权。
 import "core:fmt"
@@ -65,19 +65,19 @@ Pass_Desc :: struct {
 
 // Model 是可挂在网格上的有序材质 Pass，共享外部颜色/深度目标。
 // 图像效果仍使用 Preview_Model / Fullscreen 和各自独立的图目标。
-effect_is_model :: proc(e: Effect_Desc) -> bool {
+shader_is_model :: proc(e: Shader_Desc) -> bool {
 	return len(e.passes) > 0 && e.passes[0].draw == .Model
 }
 
-effect_is_sprite :: proc(e: Effect_Desc) -> bool {
+shader_is_sprite :: proc(e: Shader_Desc) -> bool {
 	return len(e.passes) > 0 && e.passes[0].draw == .Sprite
 }
 
-effect_is_material :: proc(e: Effect_Desc) -> bool {
-	return effect_is_model(e) || effect_is_sprite(e)
+shader_is_material :: proc(e: Shader_Desc) -> bool {
+	return shader_is_model(e) || shader_is_sprite(e)
 }
 
-Effect_Desc :: struct {
+Shader_Desc :: struct {
 	name: string,
 	output: Target_Ref,
 	label: string,
@@ -94,26 +94,26 @@ Effect_Desc :: struct {
 Uniform_Layout :: enum { Olib, Foster }
 
 // 效果使用的 per-instance 接口种类，供 hlsl 与绘制路径选择。
-effect_instancing :: proc(e: Effect_Desc) -> Instancing {
+shader_instancing :: proc(e: Shader_Desc) -> Instancing {
 	switch {
 	case !e.instanced: return .None
-	case effect_is_model(e): return .Model
+	case shader_is_model(e): return .Model
 	}
 	return .Sprite
 }
 
 // ------------------------------------------------------------------------------
-// 校验与拓扑排序 —— effect_order = effect_validate + effect_sort
+// 校验与拓扑排序 —— shader_order = shader_validate + shader_sort
 // ------------------------------------------------------------------------------
 
 // 拓扑顺序归调用方；错误文本借用至 temp_allocator 重置。Previous 不参与当前帧排序。
-effect_order :: proc(e: Effect_Desc, schemas: []Schema) -> (order: []int, error: string) {
-	if reason := effect_validate(e, schemas); reason != "" do return nil, reason
-	return effect_sort(e)
+shader_order :: proc(e: Shader_Desc, schemas: []Schema) -> (order: []int, error: string) {
+	if reason := shader_validate(e, schemas); reason != "" do return nil, reason
+	return shader_sort(e)
 }
 
 // 只检查声明本身是否自洽，不分配结果。错误文本借用至 temp_allocator 重置。
-effect_validate :: proc(e: Effect_Desc, schemas: []Schema) -> string {
+shader_validate :: proc(e: Shader_Desc, schemas: []Schema) -> string {
 	if e.preview != "" && e.preview != "2d" && e.preview != "3d" do return "Effect Preview must be 2d or 3d"
 	if e.name == "" || len(e.passes) == 0 || len(e.passes) > MAX_PASSES {
 		return "Effect requires a name and 1..32 passes"
@@ -129,10 +129,10 @@ effect_validate :: proc(e: Effect_Desc, schemas: []Schema) -> string {
 
 // 单个 Pass：种类/状态、与效果其余部分的关系、参数组、目标，再检查输入和覆盖值。
 @(private)
-pass_validate :: proc(e: Effect_Desc, index: int, schemas: []Schema) -> string {
+pass_validate :: proc(e: Shader_Desc, index: int, schemas: []Schema) -> string {
 	p := e.passes[index]
-	model := effect_is_model(e)
-	sprite := effect_is_sprite(e)
+	model := shader_is_model(e)
+	sprite := shader_is_sprite(e)
 	object := model || sprite
 	if p.draw < .Fullscreen || p.draw > .Sprite do return "Invalid pass draw kind"
 	if (p.draw == .Model) != model || (p.draw == .Sprite) != sprite {
@@ -205,7 +205,7 @@ target_validate :: proc(p: Pass_Desc) -> string {
 
 // 输入必须是本 Pass 参数组里的 Texture 字段，且目标由某个 Pass 产出。
 @(private)
-pass_inputs_validate :: proc(e: Effect_Desc, p: Pass_Desc, schema: Schema) -> string {
+pass_inputs_validate :: proc(e: Shader_Desc, p: Pass_Desc, schema: Schema) -> string {
 	for input, j in p.inputs {
 		for prior in p.inputs[:j] {
 			if prior.field == input.field do return "Duplicate pass texture binding"
@@ -245,7 +245,7 @@ pass_values_validate :: proc(p: Pass_Desc, schema: Schema) -> string {
 
 // 每轮选第一个所有当前帧输入都已产出的 Pass；Previous 输入不参与依赖。
 // 结果由调用方持有；已校验的声明里出现无法排序的 Pass 即为当前帧环。
-effect_sort :: proc(e: Effect_Desc) -> (order: []int, error: string) {
+shader_sort :: proc(e: Shader_Desc) -> (order: []int, error: string) {
 	result := make([]int, len(e.passes))
 	done: [MAX_PASSES]bool
 	for n in 0..<len(e.passes) {
@@ -278,8 +278,8 @@ effect_sort :: proc(e: Effect_Desc) -> (order: []int, error: string) {
 // 所有权 —— clone / dispose 深复制与释放全部嵌套字符串和切片
 // ------------------------------------------------------------------------------
 
-effect_clone :: proc(e: Effect_Desc) -> Effect_Desc {
-	r := Effect_Desc{
+shader_clone :: proc(e: Shader_Desc) -> Shader_Desc {
+	r := Shader_Desc{
 		name = clone_text(e.name), output = clone_text(e.output), label = clone_text(e.label),
 		preview = clone_text(e.preview), passes = make([]Pass_Desc, len(e.passes)),
 		instanced = e.instanced, uniforms = e.uniforms,
@@ -302,7 +302,7 @@ effect_clone :: proc(e: Effect_Desc) -> Effect_Desc {
 	return r
 }
 
-effect_dispose :: proc(e: ^Effect_Desc) {
+shader_dispose :: proc(e: ^Shader_Desc) {
 	delete_text(e.name)
 	delete_text(e.label)
 	delete_text(e.preview)

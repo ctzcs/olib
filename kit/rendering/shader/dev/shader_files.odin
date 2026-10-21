@@ -9,7 +9,7 @@ import "core:path/filepath"
 import "core:slice"
 import "core:strings"
 
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 import lang "olib:kit/rendering/shader/lang"
 
 Parameter_Program :: struct {
@@ -56,11 +56,11 @@ parameters_compile :: proc(source_directory: string) -> (result: Parameter_Build
 				}
 			}
 		}
-		schemas := make([]fx.Schema, len(result.schemas)+len(doc.schemas))
+		schemas := make([]sh.Schema, len(result.schemas)+len(doc.schemas))
 		copy(schemas, result.schemas)
 		for schema, i in doc.schemas {
 			index := len(result.schemas)+i
-			schemas[index] = fx.schema_clone(schema)
+			schemas[index] = sh.schema_clone(schema)
 			delete(schemas[index].shader)
 			relative, _ := filepath.rel(source_directory, path, context.temp_allocator)
 			normalized, _ := strings.replace_all(relative, "\\", "/", context.temp_allocator)
@@ -68,9 +68,9 @@ parameters_compile :: proc(source_directory: string) -> (result: Parameter_Build
 		}
 		delete(result.schemas)
 		result.schemas = schemas
-		effects := make([]fx.Effect_Desc, len(result.effects)+1)
+		effects := make([]sh.Shader_Desc, len(result.effects)+1)
 		copy(effects, result.effects)
-		effects[len(result.effects)] = fx.effect_clone(doc.effect)
+		effects[len(result.effects)] = sh.shader_clone(doc.effect)
 		delete(result.effects)
 		result.effects = effects
 		programs := make([]Parameter_Program, len(result.programs)+len(doc.programs))

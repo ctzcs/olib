@@ -9,7 +9,7 @@ import "core:fmt"
 import "core:strings"
 
 import foster "../../../foster"
-import fx "../shader/effect"
+import sh "../shader"
 
 // ------------------------------------------------------------------------------
 // 驱动与字节码选择
@@ -98,8 +98,8 @@ material_register_directory :: proc(library: ^Material_Library, files: []runtime
 		if reason := compiled_manifest_parse(file.data, &parsed); reason != "" {
 			return fmt.tprintf("%s: %s", file.name, reason)
 		}
-		if !fx.effect_is_material(parsed.effect) do continue
-		instanced := parsed.effect.instanced && fx.effect_is_sprite(parsed.effect)
+		if !sh.shader_is_material(parsed.effect) do continue
+		instanced := parsed.effect.instanced && sh.shader_is_sprite(parsed.effect)
 		code := make([]Material_Shader_Code, len(parsed.schemas), context.temp_allocator)
 		for schema, i in parsed.schemas {
 			vertex, fragment, instanced_vertex: []u8
@@ -143,8 +143,8 @@ material_register_manifest :: proc(library: ^Material_Library, manifest: []u8,
 @(private)
 Compiled_Manifest :: struct {
 	version: int,
-	schemas: []fx.Schema,
-	effect: fx.Effect_Desc,
+	schemas: []sh.Schema,
+	effect: sh.Shader_Desc,
 }
 
 // 两种登记共用：设备与后端在解析清单之前检查。
@@ -165,9 +165,9 @@ compiled_manifest_parse :: proc(data: []u8, parsed: ^Compiled_Manifest) -> strin
 
 @(private)
 compiled_manifest_dispose :: proc(parsed: ^Compiled_Manifest) {
-	for &schema in parsed.schemas do fx.schema_dispose(&schema)
+	for &schema in parsed.schemas do sh.schema_dispose(&schema)
 	delete(parsed.schemas)
-	fx.effect_dispose(&parsed.effect)
+	sh.shader_dispose(&parsed.effect)
 }
 
 // 在嵌入的目录里找 <组名>.<阶段>.<格式>；找不到时返回期望的文件名，供诊断使用。

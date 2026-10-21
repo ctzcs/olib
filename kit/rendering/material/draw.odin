@@ -4,11 +4,11 @@ package material
 // 因跨包复用保留这些接口；普通业务使用 material_load + r2d.image / r3d.model。
 // 分区：绑定与错误 / 视图块 / Pass 状态 / Pass 选择与参数。
 import foster "../../../foster"
-import fx "../shader/effect"
+import sh "../shader"
 
 Material_Binding :: struct {
-	schema: fx.Schema,
-	values: []fx.Value,
+	schema: sh.Schema,
+	values: []sh.Value,
 	material: ^foster.Material,
 	samplers: []foster.BoundSampler, // 按 Schema 的 Texture 字段顺序，含默认纹理。
 }
@@ -77,7 +77,7 @@ view_globals_pack :: proc(block: ^[VIEW_GLOBALS_SIZE]u8, globals: []u8) -> bool 
 	return true
 }
 
-pass_state_apply :: proc(command: ^foster.DrawCommand, state: fx.Pass_State) {
+pass_state_apply :: proc(command: ^foster.DrawCommand, state: sh.Pass_State) {
 	switch state.cull {
 	case .Default:
 	case .None:
@@ -124,8 +124,8 @@ pass_state_apply :: proc(command: ^foster.DrawCommand, state: fx.Pass_State) {
 
 // 按声明顺序列出要画的 Pass：pass_id 为空选全部，非空只选该 Pass；声明为 disabled 的 Pass 都不画。
 @(private)
-material_pass_indices :: proc(effect: fx.Effect_Desc, pass_id: Pass_Id,
-	indices: ^[fx.MAX_PASSES]int) -> (count: int, error: Draw_Error) {
+material_pass_indices :: proc(effect: sh.Shader_Desc, pass_id: Pass_Id,
+	indices: ^[sh.MAX_PASSES]int) -> (count: int, error: Draw_Error) {
 	if len(effect.passes) == 0 || len(effect.passes) > len(indices) do return 0, .Too_Many_Passes
 	found := pass_id == ""
 	for p, i in effect.passes {
@@ -141,13 +141,13 @@ material_pass_indices :: proc(effect: fx.Effect_Desc, pass_id: Pass_Id,
 
 // 找到 Pass 参数组对应的绑定并检查其可用于提交；多个同名绑定时取最后一个。
 @(private)
-material_binding_find :: proc(p: fx.Pass_Desc, kind: fx.Pass_Draw, sprite_texture: ^foster.Texture,
+material_binding_find :: proc(p: sh.Pass_Desc, kind: sh.Pass_Draw, sprite_texture: ^foster.Texture,
 	bindings: []Material_Binding) -> (index: int, error: Draw_Error) {
 	index = -1
 	for b, j in bindings {
 		if b.schema.name != string(p.params) do continue
 		if b.material == nil || len(b.values) != len(b.schema.fields) ||
-			len(b.samplers) != fx.texture_count(b.schema) || len(b.samplers) > fx.MAX_TEXTURES {
+			len(b.samplers) != sh.texture_count(b.schema) || len(b.samplers) > sh.MAX_TEXTURES {
 			return -1, .Invalid_Binding
 		}
 		if b.material.Vertex.Shader == nil || b.material.Fragment.Shader == nil ||
@@ -165,7 +165,7 @@ material_binding_find :: proc(p: fx.Pass_Desc, kind: fx.Pass_Draw, sprite_textur
 			return -1, .Missing_Sprite_Texture
 		}
 		schema := bindings[index].schema
-		field := fx.field_index(schema, string(p.sprite_texture))
+		field := sh.field_index(schema, string(p.sprite_texture))
 		if field < 0 || schema.fields[field].kind != .Texture do return -1, .Missing_Sprite_Texture
 	}
 	return index, .None
@@ -173,10 +173,10 @@ material_binding_find :: proc(p: fx.Pass_Desc, kind: fx.Pass_Draw, sprite_textur
 
 // 一个 Pass 本次绘制的参数：参数 uniform（按 uniform_size 打包，借用 temp_allocator）与 [Instance] 字段数值。
 // 不分配内存的实例值解析，供批量记录模型逐实例使用；与 material_pass_values 的覆盖顺序相同。
-material_pass_instance :: proc(p: fx.Pass_Desc, b: Material_Binding,
+material_pass_instance :: proc(p: sh.Pass_Desc, b: Material_Binding,
 	overrides: ^Instance_Values) -> (instance: Instance_Values) {
 	for field, i in b.schema.fields {
-		if !field.instance || instance.count >= fx.MAX_INSTANCE_FIELDS do continue
+		if !field.instance || instance.count >= sh.MAX_INSTANCE_FIELDS do continue
 		value := b.values[i]
 		if overrides != nil && overrides.set & (1 << u32(instance.count)) != 0 {
 			value_assign(field, &value, overrides.numbers[instance.count])
@@ -190,18 +190,18 @@ material_pass_instance :: proc(p: fx.Pass_Desc, b: Material_Binding,
 
 // 参数 uniform 借用 temp_allocator，实例值按值返回。
 // 套用顺序：材质实例值 < overrides（instance_values）< Pass 的固定 values。
-material_pass_values :: proc(p: fx.Pass_Desc, b: Material_Binding, overrides: ^Instance_Values) -> (uniform: []u8, instance: Instance_Values) {
-	values := make([]fx.Value, len(b.values), context.temp_allocator)
+material_pass_values :: proc(p: sh.Pass_Desc, b: Material_Binding, overrides: ^Instance_Values) -> (uniform: []u8, instance: Instance_Values) {
+	values := make([]sh.Value, len(b.values), context.temp_allocator)
 	copy(values, b.values)
 	instance_values_apply(overrides, b.schema, values)
 	for value in p.values {
-		j := fx.field_index(b.schema, string(value.field))
+		j := sh.field_index(b.schema, string(value.field))
 		if j >= 0 do values[j].number = value.number
 	}
-	uniform = make([]u8, fx.uniform_size(b.schema), context.temp_allocator)
-	_ = fx.pack(b.schema, values, uniform)
+	uniform = make([]u8, sh.uniform_size(b.schema), context.temp_allocator)
+	_ = sh.pack(b.schema, values, uniform)
 	for f, i in b.schema.fields {
-		if !f.instance || instance.count >= fx.MAX_INSTANCE_FIELDS do continue
+		if !f.instance || instance.count >= sh.MAX_INSTANCE_FIELDS do continue
 		instance.numbers[instance.count] = values[i].number
 		instance.count += 1
 	}
@@ -211,15 +211,15 @@ material_pass_values :: proc(p: fx.Pass_Desc, b: Material_Binding, overrides: ^I
 // 本次绘制要画的 Pass（按声明顺序）及各自的绑定下标。
 Pass_Selection :: struct {
 	count: int,
-	passes, bindings: [fx.MAX_PASSES]int,
+	passes, bindings: [sh.MAX_PASSES]int,
 }
 
 // 解析选择并检查 Pass 种类与绑定，不提交、不改动绑定；渲染器记录绘制时用它提前得到错误。
 // kind 是本次绘制的种类（Sprite / Model），sprite_texture 是精灵的当前帧（Model 传 nil）。
-material_select :: proc(effect: fx.Effect_Desc, bindings: []Material_Binding, kind: fx.Pass_Draw, pass_id: Pass_Id,
+material_select :: proc(effect: sh.Shader_Desc, bindings: []Material_Binding, kind: sh.Pass_Draw, pass_id: Pass_Id,
 	sprite_texture: ^foster.Texture, selection: ^Pass_Selection) -> Draw_Error {
 	selection^ = {}
-	selected: [fx.MAX_PASSES]int
+	selected: [sh.MAX_PASSES]int
 	count, error := material_pass_indices(effect, pass_id, &selected)
 	if error != .None do return error
 	for i in selected[:count] {

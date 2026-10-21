@@ -7,7 +7,7 @@ import foster "olib:foster"
 import r2d "olib:kit/rendering/2d"
 import r3d "olib:kit/rendering/3d"
 import mat "olib:kit/rendering/material"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 import world "olib:kit/world"
 
 // 材质效果的预览：借用 bank 的 GPU 绑定组成材质，用 Render2D / Render3D 记录后提交到预览目标，
@@ -23,15 +23,15 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 		for g in groups do known = known || g == index
 		if !known do append(&groups, index)
 	}
-	schemas := make([]fx.Schema, len(groups), context.temp_allocator)
+	schemas := make([]sh.Schema, len(groups), context.temp_allocator)
 	bindings := make([]mat.Material_Binding, len(groups), context.temp_allocator)
 	for index, i in groups {
 		p := &s.parameters[index]
-		samplers := make([]foster.BoundSampler, fx.texture_count(p.live), context.temp_allocator)
+		samplers := make([]foster.BoundSampler, sh.texture_count(p.live), context.temp_allocator)
 		j := 0
 		for field in p.live.fields {
 			if field.kind != .Texture do continue
-			samplers[j] = {p.textures[j].Resource != nil ? &p.textures[j] : &s.texture, fx.field_sampler(field)}
+			samplers[j] = {p.textures[j].Resource != nil ? &p.textures[j] : &s.texture, sh.field_sampler(field)}
 			j += 1
 		}
 		schemas[i] = p.live
@@ -46,7 +46,7 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 	drawable := foster.DrawableTargetFromTarget(target)
 	pointer := [2]f32{(s.pointer.x-s.viewport.X)/s.viewport.Width, (s.pointer.y-s.viewport.Y)/s.viewport.Height}
 	limit := s.preview_pass >= 0 ? min(s.preview_pass+1, len(e.desc.passes)) : len(e.desc.passes)
-	sprite := fx.effect_is_sprite(e.desc)
+	sprite := sh.shader_is_sprite(e.desc)
 	custom := s.custom_preview && s.preview_hooks.record != nil
 	frame := Preview_Frame{dimension = sprite ? "2d" : "3d", time = e.time, delta_time = e.last_delta,
 		frame_index = e.frame, width = target.Width, height = target.Height}
@@ -114,16 +114,16 @@ preview_sprite_texture :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 
 // 保存整个对象效果的参数；临时借用组和数值，文件保存函数内部复制路径。
 save_material :: proc(s: ^Session, effect: int, path: string) -> bool {
-	if effect < 0 || effect >= len(s.effects) || !fx.effect_is_material(s.effects[effect].desc) do return false
+	if effect < 0 || effect >= len(s.effects) || !sh.shader_is_material(s.effects[effect].desc) do return false
 	color_picker_close(s, true)
 	e := s.effects[effect].desc
-	groups := make([dynamic]fx.Instance_Group, context.temp_allocator)
+	groups := make([dynamic]sh.Instance_Group, context.temp_allocator)
 	for pass in e.passes {
 		found := false
 		for group in groups do found = found || group.schema.name == string(pass.params)
 		if found do continue
 		p := &s.parameters[bank_index(s.bank, string(pass.params))]
-		append(&groups, fx.Instance_Group{p.live, p.values})
+		append(&groups, sh.Instance_Group{p.live, p.values})
 	}
 	reason := material_file_save({e.name, groups[:]}, path, s.source_root)
 	parameter_error(&s.parameters[bank_index(s.bank, string(e.passes[0].params))], reason)
@@ -134,16 +134,16 @@ save_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 load_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 	if effect < 0 || effect >= len(s.effects) do return false
 	e := s.effects[effect].desc
-	schemas := make([]fx.Schema, s.shader_count, context.temp_allocator)
+	schemas := make([]sh.Schema, s.shader_count, context.temp_allocator)
 	for p, i in s.parameters[:s.shader_count] do schemas[i] = p.live
 	next, reason := material_file_load(e, schemas, path)
-	defer fx.instance_dispose(&next)
+	defer sh.instance_dispose(&next)
 	reporter := &s.parameters[bank_index(s.bank, string(e.passes[0].params))]
 	if reason != "" {
 		parameter_error(reporter, reason)
 		return false
 	}
-	textures := make([][fx.MAX_TEXTURES]foster.Texture, len(next.groups), context.temp_allocator)
+	textures := make([][sh.MAX_TEXTURES]foster.Texture, len(next.groups), context.temp_allocator)
 	defer for &group in textures do for &texture in group do foster.TextureDispose(&texture)
 	for group, i in next.groups {
 		slot := 0
@@ -162,7 +162,7 @@ load_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 	color_picker_close(s, false)
 	for &group, i in next.groups {
 		p := &s.parameters[bank_index(s.bank, group.schema.name)]
-		fx.values_dispose(p.values)
+		sh.values_dispose(p.values)
 		p.values, group.values = group.values, nil
 		for &texture, j in p.textures {
 			parameter_texture_replace(s, &texture, textures[i][j])

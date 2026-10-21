@@ -175,7 +175,7 @@ struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibIn
 `Target { Size 640 360 Scale 0.5 Format Float16 Samples 1 Depth Off Clear (0,0,0,0) }`
 对应既有 Target_Desc。Size 与 Scale 通常择一使用；Format 支持 Color/Float16/Float32，
 Samples 为 0/1/4。模型和精灵各 Pass 必须共享同一个目标描述；图像效果保持每目标单个生产者。
-这些约束由 `material.effect_order` 统一验证。
+这些约束由 `sh.shader_order` 统一验证。
 
 ## 接入与发布
 
@@ -201,7 +201,7 @@ Sprite 批量变体总是生成；声明 Instanced 时还输出 `<Shader>_<Pass>
 `version` 是生成代码与宿主的绑定约定版本（`mat.MANIFEST_VERSION`，当前为 2）；约定变化后旧产物登记时返回
 "Compiled shader manifest is outdated; re-run tools/shaders"，重新运行上面的命令即可。
 描述中的 `schema.shader` 是不带后缀的程序资源键，不含开发机路径。
-游戏可将其解码为现有 `material.Schema` / `Effect_Desc`，配合预编译代码登记到
+游戏可将其解码为现有 `material.Schema` / `Shader_Desc`，配合预编译代码登记到
 Material_Library；它与保存参数值的材质实例 JSON 是两种不同数据，不可互换。
 所有 Pass 编译成功才开始写发布文件；多文件写入不是目录级原子事务。
 

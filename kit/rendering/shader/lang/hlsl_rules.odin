@@ -9,10 +9,10 @@ package lang
 import "core:fmt"
 import "core:strings"
 
-import fx "../effect"
+import sh ".."
 
 @(private)
-hlsl_rules_check :: proc(p: ^Parser, pass: fx.Pass_Desc, instanced: bool, shared, code: Code) {
+hlsl_rules_check :: proc(p: ^Parser, pass: sh.Pass_Desc, instanced: bool, shared, code: Code) {
 	if p.error != "" do return
 	blocks := [2]Code{hlsl_strip_comments(shared), hlsl_strip_comments(code)}
 	vertex, vertex_ok := hlsl_entry(blocks[:], "vertex_main")

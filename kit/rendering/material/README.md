@@ -2,7 +2,7 @@
 
 游戏用的材质入口：材质库、材质加载与修改、每实例的值、按驱动选字节码与登记效果。
 效果、参数组和 Pass 的描述，参数打包、HLSL 生成与文件编解码在下层的
-[shader/effect](../shader/effect/README.md)（`fx`），给渲染器、Shader 工具链和 Shader Lab 用，游戏一般不 import。
+[shader](../shader/README.md)（`sh`），给渲染器、Shader 工具链和 Shader Lab 用，游戏一般不 import。
 本包不依赖 UI、编辑器或 Shader 开发工具。
 
 游戏常用的就是下面这些：
@@ -24,13 +24,13 @@
 | `material.odin` | `Material`：`material_load / reload / set_number / set_texture` |
 | `draw.odin` | `Material_Binding / Draw_Error / material_select / pass_state_apply`：Render2D / Render3D 共用的 Pass 选择、绑定检查、参数打包与 Pass 状态 |
 
-包含关系（名字里的 Material 容易混，按这张图读；`fx.` 开头的类型在 shader/effect）：
+包含关系（名字里的 Material 容易混，按这张图读；`sh.` 开头的类型在 shader）：
 
 ```
-Material_Library ─┬─ Material_Effect ─ fx.Effect_Desc（Pass 列表）+ []fx.Schema + 预编译 Shader + []foster.Material（GPU）
+Material_Library ─┬─ Material_Effect ─ sh.Shader_Desc（Pass 列表）+ []sh.Schema + 预编译 Shader + []foster.Material（GPU）
                   ├─ Material_Texture（按路径缓存）
                   └─ Material（一个对象的实例）
-                       ├─ fx.Instance：每个参数组一份 Schema + []Value（数值与贴图路径）
+                       ├─ sh.Instance：每个参数组一份 Schema + []Value（数值与贴图路径）
                        └─ Material_Binding：Schema + Value + 指向 Effect 的 foster.Material + 采样器
 ```
 
@@ -46,7 +46,7 @@ Shader Lab 的材质预览也走这两个渲染器：`material_from_bindings` �
 
 1. **效果里把参数声明成 `[Instance]`**（`Field.instance`）：它不再占 uniform，而是写进每个对象的**实例记录**，
    于是取值不同的对象仍能合成一次 Draw。Sprite 与 Model 效果都支持，最多 `MAX_INSTANCE_FIELDS`（16）个，实际个数由项目决定（见[字段个数](#字段个数由你的项目决定)），
-   2D 的实例字段走顶点 storage buffer；只有常驻缓冲需要 `Effect_Desc.instanced`。3D 仍要求 instanced。着色器写法见
+   2D 的实例字段走顶点 storage buffer；只有常驻缓冲需要 `Shader_Desc.instanced`。3D 仍要求 instanced。着色器写法见
    [lang 的 HLSL 约定](../shader/lang/README.md#2d-效果的-hlsl-约定)。
 2. **按槽位给每个实例设值**：槽位是字段在效果里声明的先后，**名字只解析一次**得到句柄，之后全按槽位赋值，没有字符串比较。
 
@@ -108,7 +108,7 @@ r2d.sprite_buffer_upload(&buffer, items, values = values)
 - **错误返回**：绘制路径返回 `Draw_Error` 枚举（记录失败不加入队列，submit 返回错误并清空本次记录）；声明、解析、加载和登记返回
   `reason: string`，空串表示成功，因为这些错误需要带上 Pass / 字段名等具体信息。文本借用至本帧
   `temp_allocator` 重置，需要保留时自行克隆。`material_load`、`material_register_directory` 等均遵循这一规则。
-- 上限常量（Pass、贴图、参数字节、实例字段数等）与字符串所有权规则见 [shader/effect](../shader/effect/README.md#约定)。
+- 上限常量（Pass、贴图、参数字节、实例字段数等）与字符串所有权规则见 [shader](../shader/README.md#约定)。
 
 ## 公共材质资源
 
@@ -152,7 +152,7 @@ ShaderLab 的本机路径适配属于工具内部实现，底层同样使用 Sto
 不要绕过这些接口直接改 bindings 或数值。
 
 Texture 字段的采样方式由 .oshader 声明：`[Filter(Nearest)] [Wrap(Repeat)] _Albedo ("Albedo", 2D) = ""`，没写时线性、钳制。
-精灵纹理字段例外：只用显式写了的部分，没写的部分跟随 Render2D 的 `push_sampler`（规则见 `fx.field_sprite_sampler`）。
+精灵纹理字段例外：只用显式写了的部分，没写的部分跟随 Render2D 的 `push_sampler`（规则见 `sh.field_sprite_sampler`）。
 Shader Lab 预览与游戏使用同一规则。
 停止绘制后用 `material_library_dispose` 统一释放全部材质、Shader 和贴图；不浅复制资源对象。
 加载和重载在主线程、合法 GPU 生命周期内、提交绘制之外进行。缓存按库统一释放，
@@ -193,6 +193,6 @@ Shader Lab 的材质预览用 `material_from_bindings` 把工具自己持有的�
 
 材质文件只保存效果的稳定名和各参数组的值，不打包 Shader 或 Pass 定义；运行时资源表（材质库）必须能把这个名字
 解析为随游戏发布的同一份定义。Pass、参数组、目标的声明规则、HLSL 布局与编解码格式见
-[shader/effect](../shader/effect/README.md)。完整实例见 `olib_sample/src/material2d`、`src/material3d`，
+[shader](../shader/README.md)。完整实例见 `olib_sample/src/material2d`、`src/material3d`，
 Shader/参数的唯一来源是 `olib_sample/src/shader_lab`。2D 接口见 [精灵绘制](../2d/README.md#最小用法)，
 3D 见 [Render3D](../3d/README.md)。

@@ -6,7 +6,7 @@ import "core:fmt"
 import "core:strings"
 
 import foster "../../../foster"
-import fx "../shader/effect"
+import sh "../shader"
 
 // ------------------------------------------------------------------------------
 // 类型与所有权
@@ -29,8 +29,8 @@ Material_Library :: struct {
 }
 
 Material_Effect :: struct {
-	desc: fx.Effect_Desc,
-	schemas: []fx.Schema,
+	desc: sh.Shader_Desc,
+	schemas: []sh.Schema,
 	code: []Material_Shader_Code,
 	vertex, fragment: []foster.Shader,
 	instanced_vertex: []foster.Shader, // 只有 instanced 精灵效果有，与 gpu 同序
@@ -49,8 +49,8 @@ material_library_dispose :: proc(library: ^Material_Library) {
 	}
 	for effect in library.effects {
 		material_effect_gpu_clear(effect)
-		for &schema in effect.schemas do fx.schema_dispose(&schema)
-		fx.effect_dispose(&effect.desc)
+		for &schema in effect.schemas do sh.schema_dispose(&schema)
+		sh.shader_dispose(&effect.desc)
 		delete(effect.schemas)
 		delete(effect.code)
 		free(effect)
@@ -86,12 +86,12 @@ material_effect_gpu_clear :: proc(effect: ^Material_Effect) {
 // ------------------------------------------------------------------------------
 
 @(private)
-material_register :: proc(library: ^Material_Library, effect: fx.Effect_Desc,
-	schemas: []fx.Schema, code: []Material_Shader_Code) -> string {
+material_register :: proc(library: ^Material_Library, effect: sh.Shader_Desc,
+	schemas: []sh.Schema, code: []Material_Shader_Code) -> string {
 	when ODIN_OS == .JS {
 		if reason := material_web_check(effect, schemas); reason != "" do return reason
 	}
-	if !fx.effect_is_material(effect) do return "Expected Model or Sprite material effect"
+	if !sh.shader_is_material(effect) do return "Expected Model or Sprite material effect"
 	if len(schemas) != len(code) do return "Shader code count differs from schema count"
 	for prior in library.effects {
 		if prior.desc.name == effect.name do return "Effect already registered"
@@ -101,20 +101,20 @@ material_register :: proc(library: ^Material_Library, effect: fx.Effect_Desc,
 			if prior.name == schema.name do return "Duplicate shader group"
 		}
 		if len(code[i].vertex) == 0 || len(code[i].fragment) == 0 do return "Missing compiled shader code"
-		if effect.instanced && fx.effect_is_sprite(effect) && len(code[i].instanced_vertex) == 0 {
+		if effect.instanced && sh.shader_is_sprite(effect) && len(code[i].instanced_vertex) == 0 {
 			return "Missing instanced sprite vertex code"
 		}
-		if fx.texture_count(schema) > fx.MAX_TEXTURES do return "Too many texture bindings"
+		if sh.texture_count(schema) > sh.MAX_TEXTURES do return "Too many texture bindings"
 	}
-	order, reason := fx.effect_order(effect, schemas)
+	order, reason := sh.shader_order(effect, schemas)
 	defer delete(order)
 	if reason != "" do return reason
 	entry := new(Material_Effect)
-	entry.desc = fx.effect_clone(effect)
-	entry.schemas = make([]fx.Schema, len(schemas))
+	entry.desc = sh.shader_clone(effect)
+	entry.schemas = make([]sh.Schema, len(schemas))
 	entry.code = make([]Material_Shader_Code, len(code))
 	copy(entry.code, code)
-	for schema, i in schemas do entry.schemas[i] = fx.schema_clone(schema)
+	for schema, i in schemas do entry.schemas[i] = sh.schema_clone(schema)
 	append(&library.effects, entry)
 	return ""
 }
@@ -122,9 +122,9 @@ material_register :: proc(library: ^Material_Library, effect: fx.Effect_Desc,
 // Web 后端只支持 foster 的 uniform 布局（矩阵与一个片元 float），没有 storage buffer 与实例缓冲。
 // 只在 Web 构建时调用；独立成函数以便在桌面上测试。
 @(private)
-material_web_check :: proc(effect: fx.Effect_Desc, schemas: []fx.Schema) -> string {
+material_web_check :: proc(effect: sh.Shader_Desc, schemas: []sh.Schema) -> string {
 	for schema in schemas {
-		if fx.instance_count(schema) > 0 do return "Web does not support Instance storage buffers"
+		if sh.instance_count(schema) > 0 do return "Web does not support Instance storage buffers"
 	}
 	if effect.instanced do return "Web does not support instanced materials"
 	if effect.uniforms != .Foster do return "Web requires Foster uniform layout; Olib Clock and parameter blocks are unsupported"
@@ -135,10 +135,10 @@ material_web_check :: proc(effect: fx.Effect_Desc, schemas: []fx.Schema) -> stri
 // Olib：顶点 b0 帧块，精灵 b1 Pass 偏移；片元 b0 帧块、b1 参数。Model 另有顶点 b1 / 片元 b2 视图块。
 // Foster 布局只有顶点 b0 与片元 b0 参数。Shader 可以少声明，不能多于这里的槽数。
 @(private)
-material_uniform_counts :: proc(desc: fx.Effect_Desc) -> (vertex, fragment: int) {
+material_uniform_counts :: proc(desc: sh.Shader_Desc) -> (vertex, fragment: int) {
 	if desc.uniforms == .Foster do return 1, 1
-	if fx.effect_is_model(desc) do return 2, 3
-	if fx.effect_is_sprite(desc) do return 2, 2
+	if sh.shader_is_model(desc) do return 2, 3
+	if sh.shader_is_sprite(desc) do return 2, 2
 	return 1, 2
 }
 
@@ -149,7 +149,7 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 	effect.vertex = make([]foster.Shader, len(effect.code))
 	effect.fragment = make([]foster.Shader, len(effect.code))
 	effect.gpu = make([]foster.Material, len(effect.code))
-	sprite := fx.effect_is_sprite(effect.desc)
+	sprite := sh.shader_is_sprite(effect.desc)
 	if sprite && effect.desc.instanced do effect.instanced_vertex = make([]foster.Shader, len(effect.code))
 	vertex_uniforms, fragment_uniforms := material_uniform_counts(effect.desc)
 	for code, i in effect.code {
@@ -172,7 +172,7 @@ material_effect_prepare :: proc(library: ^Material_Library, effect: ^Material_Ef
 		}
 		foster.ShaderInit(&effect.fragment[i], library.device, {
 			Stage = .Fragment, Code = code.fragment, UniformBufferCount = fragment_uniforms,
-			SamplerCount = fx.texture_count(effect.schemas[i]), EntryPoint = "fragment_main",
+			SamplerCount = sh.texture_count(effect.schemas[i]), EntryPoint = "fragment_main",
 		}, effect.schemas[i].name)
 		if effect.vertex[i].Resource == nil || effect.fragment[i].Resource == nil {
 			material_effect_gpu_clear(effect)

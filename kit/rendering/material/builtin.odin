@@ -5,7 +5,7 @@ package material
 // 首次用名字创建材质（material_create）或 2D 渲染器初始化时自动登记，调用方不用手动 register。
 // 分区：名字与参数组 / 登记。
 import foster "../../../foster"
-import fx "../shader/effect"
+import sh "../shader"
 
 // ------------------------------------------------------------------------------
 // 名字与参数组
@@ -34,23 +34,23 @@ builtin_register :: proc(library: ^Material_Library, name: string) -> string {
 	if device == nil do return "Missing graphics device"
 	if !device.Defaults.Initialized do return "Graphics device defaults are not initialized"
 	text := name == BUILTIN_TEXT
-	fields := make([]fx.Field, text ? 2 : 1, context.temp_allocator)
+	fields := make([]sh.Field, text ? 2 : 1, context.temp_allocator)
 	fields[0] = {id = "texture", name = "texture", label = "Texture", kind = .Texture}
 	if text {
 		fields[1] = {id = "distance_range", name = "distance_range", label = "Distance range",
 			kind = .Scalar, minimum = 0, maximum = 64, step = 0.1, initial = {4, 0, 0, 0}}
 	}
-	schemas := []fx.Schema{{name = name, preview = "2d", fields = fields}}
-	passes := []fx.Pass_Desc{{id = "main", params = fx.Params_Ref(name), output = "color", draw = .Sprite,
+	schemas := []sh.Schema{{name = name, preview = "2d", fields = fields}}
+	passes := []sh.Pass_Desc{{id = "main", params = sh.Params_Ref(name), output = "color", draw = .Sprite,
 		sprite_texture = "texture"}}
-	desc := fx.Effect_Desc{name = name, output = "color", passes = passes, preview = "2d", uniforms = .Foster}
-	order, reason := fx.effect_order(desc, schemas)
+	desc := sh.Shader_Desc{name = name, output = "color", passes = passes, preview = "2d", uniforms = .Foster}
+	order, reason := sh.shader_order(desc, schemas)
 	delete(order)
 	if reason != "" do return reason
 	entry := new(Material_Effect)
-	entry.desc = fx.effect_clone(desc)
-	entry.schemas = make([]fx.Schema, 1)
-	entry.schemas[0] = fx.schema_clone(schemas[0])
+	entry.desc = sh.shader_clone(desc)
+	entry.schemas = make([]sh.Schema, 1)
+	entry.schemas[0] = sh.schema_clone(schemas[0])
 	// Shader 归设备所有：vertex/fragment 留空，material_effect_gpu_clear 只释放 gpu 里的 Material。
 	entry.gpu = make([]foster.Material, 1)
 	if text {

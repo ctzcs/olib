@@ -7,7 +7,7 @@ package material
 // 名字只用来解析成句柄（instance_slot），之后全部按槽位赋值，没有字符串比较。
 import "core:math"
 
-import fx "../shader/effect"
+import sh "../shader"
 
 // 字段名解析出的句柄。valid=false 表示材质里没有这个 [Instance] 字段（或各参数组里槽位不一致）。
 Instance_Slot :: struct {
@@ -19,7 +19,7 @@ Instance_Slot :: struct {
 // set 的第 i 位为 1 表示第 i 个槽位被显式设置，没设置的槽位沿用材质里保存的值。
 Instance_Values :: struct {
 	count: int, // 回调里：该 Pass 的 [Instance] 字段数；0 表示没有这类字段
-	numbers: [fx.MAX_INSTANCE_FIELDS][4]f32, // 下标是 Instance_Slot.index，每个槽一个 float4
+	numbers: [sh.MAX_INSTANCE_FIELDS][4]f32, // 下标是 Instance_Slot.index，每个槽一个 float4
 	set: u32,
 }
 
@@ -49,7 +49,7 @@ instance_slot_count :: proc(material: ^Material) -> int {
 	if material == nil || material.effect == nil do return 0
 	count := -1
 	for schema in material.effect.schemas {
-		n := fx.instance_count(schema)
+		n := sh.instance_count(schema)
 		if count >= 0 && n != count do return -1
 		count = n
 	}
@@ -71,7 +71,7 @@ instance_array_set :: proc(values: [][4]f32, slots, index: int, slot: Instance_S
 
 // 设置一个实例字段的值并记入掩码；value 的写法同 instance_array_set。句柄无效或超过 4 个分量返回 false，不写入。
 instance_values_set :: proc(values: ^Instance_Values, slot: Instance_Slot, value: ..f32) -> bool {
-	if values == nil || !slot.valid || slot.index < 0 || slot.index >= fx.MAX_INSTANCE_FIELDS || len(value) > 4 do return false
+	if values == nil || !slot.valid || slot.index < 0 || slot.index >= sh.MAX_INSTANCE_FIELDS || len(value) > 4 do return false
 	values.numbers[slot.index] = {}
 	copy(values.numbers[slot.index][:], value)
 	values.set |= 1 << u32(slot.index)
@@ -82,7 +82,7 @@ instance_values_set :: proc(values: ^Instance_Values, slot: Instance_Slot, value
 // 平铺数组里一个实例的全部字段（该实例的 slots 个 float4，例如 values[i*slots:][:slots]）转成整套覆盖值：
 // 每个槽位都算显式设置。超过 MAX_INSTANCE_FIELDS 的部分忽略。
 instance_values_from :: proc(numbers: [][4]f32) -> (values: Instance_Values) {
-	values.count = min(len(numbers), fx.MAX_INSTANCE_FIELDS)
+	values.count = min(len(numbers), sh.MAX_INSTANCE_FIELDS)
 	copy(values.numbers[:values.count], numbers)
 	values.set = (1 << u32(values.count)) - 1
 	return
@@ -90,12 +90,12 @@ instance_values_from :: proc(numbers: [][4]f32) -> (values: Instance_Values) {
 
 // 把显式设置的槽位写进 values（与 schema.fields 一一对应）：非有限数值忽略，其余按字段范围钳制。
 @(private)
-instance_values_apply :: proc(overrides: ^Instance_Values, schema: fx.Schema, values: []fx.Value) {
+instance_values_apply :: proc(overrides: ^Instance_Values, schema: sh.Schema, values: []sh.Value) {
 	if overrides == nil || overrides.set == 0 || len(values) != len(schema.fields) do return
 	slot := 0
 	for f, i in schema.fields {
 		if !f.instance do continue
-		if slot < fx.MAX_INSTANCE_FIELDS && overrides.set & (1 << u32(slot)) != 0 {
+		if slot < sh.MAX_INSTANCE_FIELDS && overrides.set & (1 << u32(slot)) != 0 {
 			value_assign(f, &values[i], overrides.numbers[slot])
 		}
 		slot += 1
@@ -104,12 +104,12 @@ instance_values_apply :: proc(overrides: ^Instance_Values, schema: fx.Schema, va
 
 // 数值字段的赋值规则：非有限数值整条忽略，其余按字段范围钳制（与 values_make 迁移时一致）。
 @(private)
-value_assign :: proc(f: fx.Field, dst: ^fx.Value, src: [4]f32) {
+value_assign :: proc(f: sh.Field, dst: ^sh.Value, src: [4]f32) {
 	if f.kind == .Texture do return
-	for c in 0..<fx.components(f.kind) {
+	for c in 0..<sh.components(f.kind) {
 		if math.is_nan(src[c]) || math.is_inf(src[c]) do return
 	}
-	for c in 0..<fx.components(f.kind) {
+	for c in 0..<sh.components(f.kind) {
 		dst.number[c] = math.clamp(src[c], f.minimum, f.maximum)
 	}
 }

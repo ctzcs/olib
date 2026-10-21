@@ -5,7 +5,7 @@ import "core:testing"
 
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 
 // 只检查 CPU 侧的状态栈、记录分段与错误码；不创建窗口，也不伪造 GPU 句柄。
 
@@ -82,16 +82,16 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	r.library = &library
 	render2d_reset_state(&r)
 
-	fields := []fx.Field{{id = "texture", name = "texture", kind = .Texture},
+	fields := []sh.Field{{id = "texture", name = "texture", kind = .Texture},
 		{id = "strength", name = "strength", kind = .Scalar, maximum = 1},
 		{id = "mask", name = "mask", kind = .Texture}}
-	schema := fx.Schema{name = "Glow", preview = "2d", fields = fields}
-	effect := mat.Material_Effect{desc = {name = "Glow", output = "color", preview = "2d", passes = []fx.Pass_Desc{
+	schema := sh.Schema{name = "Glow", preview = "2d", fields = fields}
+	effect := mat.Material_Effect{desc = {name = "Glow", output = "color", preview = "2d", passes = []sh.Pass_Desc{
 		{id = "main", params = "Glow", output = "color", draw = .Sprite, sprite_texture = "texture"}}}}
 	gpu: foster.Material
 	foster.MaterialInit(&gpu)
 	defer foster.MaterialDispose(&gpu)
-	values := []fx.Value{{}, {number = {0.5, 0, 0, 0}}, {}} // 参数 strength 为 0.5
+	values := []sh.Value{{}, {number = {0.5, 0, 0, 0}}, {}} // 参数 strength 为 0.5
 	white, atlas: foster.Texture
 	samplers := []foster.BoundSampler{{Texture = &white}, {Texture = &white}}
 	material := mat.Material{owner = &library, effect = &effect,
@@ -131,11 +131,11 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 render2d_instance_values_preserve_each_pass :: proc(t: ^testing.T) {
 	r: Render2D
 	defer dispose(&r)
-	schema := fx.Schema{fields = []fx.Field{{id = "hue", name = "hue", kind = .Scalar, instance = true, maximum = 1}}}
-	effect := mat.Material_Effect{desc = {passes = []fx.Pass_Desc{{}, {}}}}
+	schema := sh.Schema{fields = []sh.Field{{id = "hue", name = "hue", kind = .Scalar, instance = true, maximum = 1}}}
+	effect := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{{}, {}}}}
 	m := mat.Material{effect = &effect, bindings = []mat.Material_Binding{
-		{schema = schema, values = []fx.Value{{number = {0.2, 0, 0, 0}}}},
-		{schema = schema, values = []fx.Value{{number = {0.8, 0, 0, 0}}}},
+		{schema = schema, values = []sh.Value{{number = {0.2, 0, 0, 0}}}},
+		{schema = schema, values = []sh.Value{{number = {0.8, 0, 0, 0}}}},
 	}}
 	selection := mat.Pass_Selection{count = 2}
 	selection.passes[1], selection.bindings[1] = 1, 1

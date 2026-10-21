@@ -29,7 +29,7 @@
 `push_scissor(RectInt)`、`push_blend(BlendMode)`、`push_sampler(TextureSampler)`、
 `push_mode(BatcherMode)` 各自配对 pop。裁剪在最终目标像素坐标中，不随矩阵变换。
 默认最近点/Clamp、预乘 Alpha、无裁剪、Normal mode；Normal/Wash/Fill 仅内置效果使用。
-材质的精灵纹理字段若写了 `[Filter]` / `[Wrap]`，写了的部分优先于采样器栈（`fx.field_sprite_sampler`）。
+材质的精灵纹理字段若写了 `[Filter]` / `[Wrap]`，写了的部分优先于采样器栈（`sh.field_sprite_sampler`）。
 submit/reset 后恢复默认，不应靠状态跨帧保留。
 
 ## Shader 约定

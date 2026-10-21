@@ -10,7 +10,7 @@ import tween "olib:core/tween"
 import foster "olib:foster"
 import r2d "olib:kit/rendering/2d"
 import mat "olib:kit/rendering/material"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 import clay "olib:thirdparty/clay-odin"
 
 // clay 的 context 是进程级全局：ui_init/ui_dispose 并发会段错误，测试串行化。
@@ -706,10 +706,10 @@ Test_Render2D :: struct {
 	vertex, fragment: foster.Shader,
 	gpu: foster.Material,
 	atlas: foster.Texture,
-	fields: [2]fx.Field,
-	passes: [2]fx.Pass_Desc,
+	fields: [2]sh.Field,
+	passes: [2]sh.Pass_Desc,
 	effects: [2]mat.Material_Effect,
-	values: [2][2]fx.Value,
+	values: [2][2]sh.Value,
 	samplers: [2][1]foster.BoundSampler,
 	bindings: [2][1]mat.Material_Binding,
 	sprite, text: mat.Material,
@@ -731,10 +731,10 @@ test_render2d_init :: proc(f: ^Test_Render2D) {
 	names := [2]string{mat.BUILTIN_SPRITE, mat.BUILTIN_TEXT}
 	for i in 0..<2 {
 		fields := f.fields[:i + 1]
-		f.passes[i] = {id = "main", params = fx.Params_Ref(names[i]), output = "color", draw = .Sprite, sprite_texture = "texture"}
+		f.passes[i] = {id = "main", params = sh.Params_Ref(names[i]), output = "color", draw = .Sprite, sprite_texture = "texture"}
 		f.effects[i].desc = {name = names[i], output = "color", preview = "2d", uniforms = .Foster, passes = f.passes[i:i + 1]}
 		f.samplers[i][0] = {Texture = &f.library.white}
-		f.bindings[i][0] = {fx.Schema{name = names[i], preview = "2d", fields = fields}, f.values[i][:i + 1], &f.gpu, f.samplers[i][:]}
+		f.bindings[i][0] = {sh.Schema{name = names[i], preview = "2d", fields = fields}, f.values[i][:i + 1], &f.gpu, f.samplers[i][:]}
 	}
 	f.sprite = {owner = &f.library, effect = &f.effects[0], bindings = f.bindings[0][:]}
 	f.text = {owner = &f.library, effect = &f.effects[1], bindings = f.bindings[1][:]}

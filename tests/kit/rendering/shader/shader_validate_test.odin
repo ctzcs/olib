@@ -1,17 +1,17 @@
 #+test
-package effect
+package shader
 
 import "core:strings"
 import "core:testing"
 
-// 单 Pass 的合法基线；每个用例只改一处，确认 effect_validate 报告对应的错误。
+// 单 Pass 的合法基线；每个用例只改一处，确认 shader_validate 报告对应的错误。
 @(private)
 base_pass :: proc() -> Pass_Desc {
 	return {id = "a", params = "Body", draw = .Fullscreen, output = "color"}
 }
 
 @(private)
-single_pass_effect :: proc(pass: Pass_Desc) -> Effect_Desc {
+single_pass_effect :: proc(pass: Pass_Desc) -> Shader_Desc {
 	passes := make([]Pass_Desc, 1, context.temp_allocator)
 	passes[0] = pass
 	return {name = "E", output = "color", passes = passes}
@@ -28,14 +28,14 @@ validate_schemas :: proc() -> []Schema {
 }
 
 @(private)
-expect_invalid :: proc(t: ^testing.T, effect: Effect_Desc, expected: string, loc := #caller_location) {
-	reason := effect_validate(effect, validate_schemas())
+expect_invalid :: proc(t: ^testing.T, effect: Shader_Desc, expected: string, loc := #caller_location) {
+	reason := shader_validate(effect, validate_schemas())
 	testing.expectf(t, strings.contains(reason, expected), "want %q in %q", expected, reason, loc = loc)
 }
 
 @(test)
 effect_validate_accepts_baseline :: proc(t: ^testing.T) {
-	testing.expect_value(t, effect_validate(single_pass_effect(base_pass()), validate_schemas()), "")
+	testing.expect_value(t, shader_validate(single_pass_effect(base_pass()), validate_schemas()), "")
 }
 
 @(test)
@@ -71,7 +71,7 @@ effect_validate_rejects_bad_pass_declarations :: proc(t: ^testing.T) {
 
 	twice := make([]Pass_Desc, 2, context.temp_allocator)
 	twice[0], twice[1] = base_pass(), base_pass()
-	expect_invalid(t, Effect_Desc{name = "E", output = "color", passes = twice}, "must be unique")
+	expect_invalid(t, Shader_Desc{name = "E", output = "color", passes = twice}, "must be unique")
 }
 
 @(test)
@@ -116,13 +116,13 @@ effect_sort_detects_current_frame_cycle :: proc(t: ^testing.T) {
 		inputs = []Pass_Input{{field = "image", target = "y"}}}
 	passes[1] = {id = "b", params = "Body", draw = .Fullscreen, output = "y",
 		inputs = []Pass_Input{{field = "image", target = "x"}}}
-	effect := Effect_Desc{name = "E", output = "x", passes = passes}
+	effect := Shader_Desc{name = "E", output = "x", passes = passes}
 	// 各 Pass 单独合法：环只有排序才发现。
-	testing.expect_value(t, effect_validate(effect, validate_schemas()), "")
-	order, reason := effect_sort(effect)
+	testing.expect_value(t, shader_validate(effect, validate_schemas()), "")
+	order, reason := shader_sort(effect)
 	testing.expect(t, order == nil && strings.contains(reason, "cycle"))
 	passes[1].inputs[0].frame = .Previous
-	order, reason = effect_sort(effect)
+	order, reason = shader_sort(effect)
 	defer delete(order)
 	testing.expect(t, reason == "" && len(order) == 2 && order[0] == 1 && order[1] == 0)
 }

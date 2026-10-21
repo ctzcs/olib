@@ -7,7 +7,7 @@ import "core:math/linalg"
 import "core:testing"
 
 import dasset "olib:core/dasset"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 import world "olib:kit/world"
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
@@ -306,7 +306,7 @@ render3d_views_preserve_records :: proc(t: ^testing.T) {
 	gpu: foster.Material
 	foster.MaterialInitWithShaders(&gpu, &shader, &fragment)
 	defer foster.MaterialDispose(&gpu)
-	effect := mat.Material_Effect{desc = {passes = []fx.Pass_Desc{
+	effect := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{
 		{id = "body", params = "Body", draw = .Model},
 		{id = "off", params = "Body", draw = .Model, disabled = true}}}}
 	material := mat.Material{owner = &library, effect = &effect,
@@ -358,9 +358,9 @@ instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	// 槽数取自材质：没有材质、不是 instanced 效果、各参数组字段数不一致、容量为 0 都拒绝（不碰 GPU）。
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
-	fields := []fx.Field{{id = "hue", instance = true}, {id = "glow", instance = true}}
-	plain := mat.Material_Effect{schemas = []fx.Schema{{fields = fields}}}
-	instanced := mat.Material_Effect{desc = {instanced = true}, schemas = []fx.Schema{{fields = fields}, {fields = fields[:1]}}}
+	fields := []sh.Field{{id = "hue", instance = true}, {id = "glow", instance = true}}
+	plain := mat.Material_Effect{schemas = []sh.Schema{{fields = fields}}}
+	instanced := mat.Material_Effect{desc = {instanced = true}, schemas = []sh.Schema{{fields = fields}, {fields = fields[:1]}}}
 	buffer: Model_Buffer
 	testing.expect(t, model_buffer_init(&buffer, nil, 10) != "")
 	plain_material := mat.Material{owner = &library, effect = &plain}
@@ -394,20 +394,20 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 	gpu: foster.Material
 	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
 	defer foster.MaterialDispose(&gpu)
-	schema := fx.Schema{name = "Body", fields = []fx.Field{
+	schema := sh.Schema{name = "Body", fields = []sh.Field{
 		{id = "hue", kind = .Scalar, instance = true, maximum = 1},
 		{id = "gain", kind = .Scalar, maximum = 1},
 		{id = "albedo", kind = .Texture}}}
-	effect := mat.Material_Effect{schemas = []fx.Schema{schema}, desc = {
-		instanced = true, passes = []fx.Pass_Desc{
+	effect := mat.Material_Effect{schemas = []sh.Schema{schema}, desc = {
+		instanced = true, passes = []sh.Pass_Desc{
 			{id = "body", params = "Body", draw = .Model},
 			{id = "shadow", params = "Body", draw = .Model,
-				values = []fx.Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}},
+				values = []sh.Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}},
 			{id = "glass", params = "Body", draw = .Model, state = {blend = .Alpha}}}}}
 	texture: foster.Texture
 	texture.Resource = cast(type_of(texture.Resource))uintptr(1)
 	other_texture := texture
-	values := []fx.Value{{number = {0.2, 0, 0, 0}}, {number = {0.5, 0, 0, 0}}, {}}
+	values := []sh.Value{{number = {0.2, 0, 0, 0}}, {number = {0.5, 0, 0, 0}}, {}}
 	samplers := []foster.BoundSampler{{Texture = &texture}}
 	m := mat.Material{owner = &library, effect = &effect,
 		bindings = []mat.Material_Binding{{schema, values, &gpu, samplers}}}
@@ -457,7 +457,7 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 render3d_reports_errors_before_gpu :: proc(t: ^testing.T) {
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
-	effect := mat.Material_Effect{desc = {instanced = true, passes = []fx.Pass_Desc{{draw = .Model}}}}
+	effect := mat.Material_Effect{desc = {instanced = true, passes = []sh.Pass_Desc{{draw = .Model}}}}
 	material := mat.Material{owner = &library, effect = &effect}
 	r := Render3D{library = &library}
 	defer dispose(&r)
@@ -489,13 +489,13 @@ render3d_plan_packs_every_batch_once :: proc(t: ^testing.T) {
 	gpu: foster.Material
 	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
 	defer foster.MaterialDispose(&gpu)
-	schema := fx.Schema{name = "Body", fields = []fx.Field{{id = "hue", kind = .Scalar, instance = true, maximum = 1}}}
-	effect := mat.Material_Effect{schemas = []fx.Schema{schema}, desc = {instanced = true, passes = []fx.Pass_Desc{
+	schema := sh.Schema{name = "Body", fields = []sh.Field{{id = "hue", kind = .Scalar, instance = true, maximum = 1}}}
+	effect := mat.Material_Effect{schemas = []sh.Schema{schema}, desc = {instanced = true, passes = []sh.Pass_Desc{
 		{id = "body", params = "Body", draw = .Model},
-		{id = "shadow", params = "Body", draw = .Model, values = []fx.Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}}}}}
+		{id = "shadow", params = "Body", draw = .Model, values = []sh.Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}}}}}
 	m := mat.Material{owner = &library, effect = &effect,
-		bindings = []mat.Material_Binding{{schema, []fx.Value{{number = {0.2, 0, 0, 0}}}, &gpu, nil}}}
-	plain_effect := mat.Material_Effect{desc = {passes = []fx.Pass_Desc{{id = "body", params = "Plain", draw = .Model}}}}
+		bindings = []mat.Material_Binding{{schema, []sh.Value{{number = {0.2, 0, 0, 0}}}, &gpu, nil}}}
+	plain_effect := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{{id = "body", params = "Plain", draw = .Model}}}}
 	plain := mat.Material{owner = &library, effect = &plain_effect,
 		bindings = []mat.Material_Binding{{schema = {name = "Plain"}, material = &gpu}}}
 	mesh := foster.Mesh{GraphicsDevice = &device}
@@ -558,9 +558,9 @@ render3d_records_survive_material_reload :: proc(t: ^testing.T) {
 	gpu: foster.Material
 	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
 	defer foster.MaterialDispose(&gpu)
-	two := mat.Material_Effect{desc = {passes = []fx.Pass_Desc{
+	two := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{
 		{id = "body", params = "A", draw = .Model}, {id = "outline", params = "B", draw = .Model}}}}
-	one := mat.Material_Effect{desc = {passes = []fx.Pass_Desc{{id = "body", params = "C", draw = .Model}}}}
+	one := mat.Material_Effect{desc = {passes = []sh.Pass_Desc{{id = "body", params = "C", draw = .Model}}}}
 	m := mat.Material{owner = &library, effect = &two, bindings = []mat.Material_Binding{
 		{schema = {name = "A"}, material = &gpu}, {schema = {name = "B"}, material = &gpu}}}
 	mesh := foster.Mesh{GraphicsDevice = &device}

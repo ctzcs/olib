@@ -7,7 +7,7 @@ import "core:mem"
 
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 import world "olib:kit/world"
 
 // ------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity:
 	slots := mat.instance_slot_count(material)
 	if !material.effect.desc.instanced do return "Material effect is not instanced"
 	if capacity <= 0 do return "Instance capacity must be positive"
-	if slots < 0 || slots > fx.MAX_INSTANCE_FIELDS do return "Inconsistent instance field count"
+	if slots < 0 || slots > sh.MAX_INSTANCE_FIELDS do return "Inconsistent instance field count"
 	model_buffer_create(buf, material.owner.device, slots, capacity, name)
 	return ""
 }
@@ -62,7 +62,7 @@ model_buffer_init :: proc(buf: ^Model_Buffer, material: ^mat.Material, capacity:
 // 按槽数创建缓冲，不经材质；参数由调用方校验。Render3D 的临时实例缓冲按槽数共用，
 // Shader Lab 建 instanced 模型的管线时也用它（只需格式，不上传实例）。
 model_buffer_create :: proc(buf: ^Model_Buffer, device: ^foster.GraphicsDevice, slots, capacity: int, name: string) {
-	elements := make([]foster.VertexElement, fx.INSTANCE_FIXED_ATTRIBUTES+slots, context.temp_allocator)
+	elements := make([]foster.VertexElement, sh.INSTANCE_FIXED_ATTRIBUTES+slots, context.temp_allocator)
 	for i in 0..<len(elements) do elements[i] = {i, .Float4, false}
 	format := foster.VertexFormatMake(elements, model_stride(slots))
 	defer foster.VertexFormatDispose(&format)
@@ -76,7 +76,7 @@ model_buffer_create :: proc(buf: ^Model_Buffer, device: ^foster.GraphicsDevice, 
 model_instanced_command :: proc(command: ^foster.DrawCommand, mesh: ^foster.Mesh, buf: ^Model_Buffer, shifted: ^foster.VertexBuffer) {
 	shifted^ = mesh.VertexData
 	shifted.Format = foster.VertexFormatClone(mesh.VertexData.Format)
-	for &element in shifted.Format.Elements do element.Index += fx.INSTANCE_FIXED_ATTRIBUTES + buf.slots
+	for &element in shifted.Format.Elements do element.Index += sh.INSTANCE_FIXED_ATTRIBUTES + buf.slots
 	command.VertexBuffers[0].Buffer = shifted
 	append(&command.VertexBuffers, foster.VertexBufferBinding{Buffer = &buf.buffer, InstanceInputRate = true})
 }

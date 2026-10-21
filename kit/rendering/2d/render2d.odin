@@ -9,7 +9,7 @@ import "core:mem"
 
 import foster "olib:foster"
 import mat "olib:kit/rendering/material"
-import fx "olib:kit/rendering/shader/effect"
+import sh "olib:kit/rendering/shader"
 
 @(private)
 RENDER2D_BATCH_QUADS :: 4096
@@ -84,7 +84,7 @@ Render2D_Run :: struct {
 	scissor: Render2D_Scissor,
 	quad_start, quad_count: int,
 	storage: bool, // 顶点从 instance_values 读两条轴和 [Instance] 字段（.oshader 效果总是）
-	pass_offsets: [fx.MAX_PASSES]u32, // 每个精灵的数值记录内，各 Pass 的 float4 偏移
+	pass_offsets: [sh.MAX_PASSES]u32, // 每个精灵的数值记录内，各 Pass 的 float4 偏移
 	// r2d.buffer 记录的常驻缓冲：不与其他记录合并，用缓冲变体顶点着色器实例化绘制。
 	buffer: ^Sprite_Buffer,
 	instance_count: int,
@@ -406,7 +406,7 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 				foster.DrawCommandFromMesh(&command, view.target, &r.corner_mesh, snapshot)
 				shifted = r.corner_mesh.VertexData
 				shifted.Format = foster.VertexFormatClone(r.corner_mesh.VertexData.Format)
-				for &element in shifted.Format.Elements do element.Index += fx.INSTANCE_FIXED_ATTRIBUTES + run.buffer.slots
+				for &element in shifted.Format.Elements do element.Index += sh.INSTANCE_FIXED_ATTRIBUTES + run.buffer.slots
 				command.VertexBuffers[0].Buffer = &shifted
 				append(&command.VertexBuffers, foster.VertexBufferBinding{Buffer = &run.buffer.buffer, InstanceInputRate = true})
 				command.InstanceCount = run.instance_count
@@ -442,7 +442,7 @@ buffer :: proc(r: ^Render2D, material: ^mat.Material, buf: ^Sprite_Buffer, count
 	if material == nil || material.owner == nil || material.effect == nil do return .Missing_Material
 	if material.owner.device != r.library.device do return .Device_Mismatch
 	effect := material.effect
-	if !fx.effect_is_sprite(effect.desc) || !effect.desc.instanced || effect.instanced_vertex == nil {
+	if !sh.shader_is_sprite(effect.desc) || !effect.desc.instanced || effect.instanced_vertex == nil {
 		return .Not_Instanced_Effect
 	}
 	if buf == nil || buf.capacity <= 0 do return .Instance_Buffer_Required
@@ -586,7 +586,7 @@ render2d_transform :: proc(r: ^Render2D, p: foster.Vec2) -> foster.Vec2 {
 
 // 参数 uniform 所在的片元槽：内置效果（Foster 布局）在槽 0，.oshader 效果在槽 1（槽 0 是 Clock 帧块）。
 @(private)
-render2d_param_slot :: proc(effect: fx.Effect_Desc) -> int {
+render2d_param_slot :: proc(effect: sh.Shader_Desc) -> int {
 	return effect.uniforms == .Foster ? 0 : 1
 }
 
@@ -613,7 +613,7 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 		p := m.effect.desc.passes[selection.passes[i]]
 		binding := m.bindings[selection.bindings[i]]
 		run.pass_offsets[i] = offset
-		if m.effect.desc.uniforms == .Olib do offset += u32(fx.instance_count(binding.schema))
+		if m.effect.desc.uniforms == .Olib do offset += u32(sh.instance_count(binding.schema))
 		if r.snapshot_count == len(r.snapshots) {
 			append(&r.snapshots, foster.Material{})
 			foster.MaterialInitWithShaders(&r.snapshots[r.snapshot_count], nil, nil)
@@ -633,7 +633,7 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 			for field in binding.schema.fields {
 				if field.kind != .Texture do continue
 				if field.id == string(p.sprite_texture) {
-					snapshot.Fragment.Samplers[index] = {texture, fx.field_sprite_sampler(field, r.sampler)}
+					snapshot.Fragment.Samplers[index] = {texture, sh.field_sprite_sampler(field, r.sampler)}
 				}
 				index += 1
 			}

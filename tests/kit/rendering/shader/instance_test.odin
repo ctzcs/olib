@@ -1,5 +1,5 @@
 #+test
-package effect
+package shader
 
 import "core:testing"
 import "core:strings"
@@ -9,7 +9,7 @@ sprite_material_contract_and_roundtrip :: proc(t: ^testing.T) {
 	schemas := []Schema{{name = "Sprite", preview = "2d", fields = {
 		{id = "mask", kind = .Texture}, {id = "frame", kind = .Texture},
 	}}}
-	effect := Effect_Desc{name = "Sprite", output = "color", passes = []Pass_Desc{
+	effect := Shader_Desc{name = "Sprite", output = "color", passes = []Pass_Desc{
 		{id = "shadow", params = "Sprite", draw = .Sprite, output = "color", sprite_texture = "frame"},
 		{id = "body", params = "Sprite", draw = .Sprite, output = "color", sprite_texture = "frame"},
 	}}
@@ -21,8 +21,8 @@ sprite_material_contract_and_roundtrip :: proc(t: ^testing.T) {
 	loaded, decode_error := instance_decode(effect, schemas, bytes)
 	defer instance_dispose(&loaded)
 	testing.expect(t, encode_error == "" && decode_error == "")
-	copy := effect_clone(effect)
-	defer effect_dispose(&copy)
+	copy := shader_clone(effect)
+	defer shader_dispose(&copy)
 	testing.expect_value(t, copy.passes[0].sprite_texture, "frame")
 	for invalid in ([]Pass_Desc{
 		{id = "body", params = "Sprite", draw = .Model, output = "color"},
@@ -30,14 +30,14 @@ sprite_material_contract_and_roundtrip :: proc(t: ^testing.T) {
 		{id = "body", params = "Sprite", draw = .Sprite, output = "color", sprite_texture = "missing"},
 	}) {
 		effect.passes[1] = invalid
-		order, error := effect_order(effect, schemas)
+		order, error := shader_order(effect, schemas)
 		delete(order)
 		testing.expect(t, error != "")
 	}
 	effect.passes[1] = effect.passes[0]
 	effect.passes[1].id = "body"
 	schemas[0].preview = "3d"
-	order, error := effect_order(effect, schemas)
+	order, error := shader_order(effect, schemas)
 	delete(order)
 	testing.expect(t, error != "")
 }
@@ -45,27 +45,27 @@ sprite_material_contract_and_roundtrip :: proc(t: ^testing.T) {
 @(test)
 model_passes_share_depth_target_without_relaxing_image_graph :: proc(t: ^testing.T) {
 	schemas := []Schema{{name = "Surface", preview = "3d"}}
-	e := Effect_Desc{name = "Outline", output = "scene", passes = []Pass_Desc{
+	e := Shader_Desc{name = "Outline", output = "scene", passes = []Pass_Desc{
 		{id = "body", params = "Surface", draw = .Model, output = "scene"},
 		{id = "outline", params = "Surface", draw = .Model, output = "scene", state = {cull = .Front, depth_write = .Off}},
 	}}
-	order, reason := effect_order(e, schemas)
+	order, reason := shader_order(e, schemas)
 	defer delete(order)
 	testing.expect(t, reason == "" && len(order) == 2 && order[0] == 0 && order[1] == 1)
-	copy := effect_clone(e)
-	defer effect_dispose(&copy)
+	copy := shader_clone(e)
+	defer shader_dispose(&copy)
 	testing.expect_value(t, copy.passes[1].state.cull, .Front)
 	copy.passes[1].draw = .Preview_Model
-	bad, mix_error := effect_order(copy, schemas)
+	bad, mix_error := shader_order(copy, schemas)
 	delete(bad)
 	testing.expect(t, mix_error != "")
 	copy.passes[0].draw = .Preview_Model
-	duplicate, duplicate_error := effect_order(copy, schemas)
+	duplicate, duplicate_error := shader_order(copy, schemas)
 	delete(duplicate)
 	testing.expect(t, strings.contains(duplicate_error, "unique"))
 	copy.passes[0].draw, copy.passes[1].draw = .Model, .Model
 	copy.passes[1].target.samples = 4
-	target, target_error := effect_order(copy, schemas)
+	target, target_error := shader_order(copy, schemas)
 	delete(target)
 	testing.expect(t, target_error != "")
 }
@@ -76,7 +76,7 @@ model_instance_roundtrip_groups_and_reject_partial_decode :: proc(t: ^testing.T)
 		{name = "Body", preview = "3d", fields = {{id = "amount", kind = .Scalar, maximum = 1, initial = {0.3,0,0,0}}}},
 		{name = "Outline", preview = "3d", fields = {{id = "image", kind = .Texture, texture = "edge.png"}}},
 	}
-	e := Effect_Desc{name = "Outlined", output = "color", passes = []Pass_Desc{
+	e := Shader_Desc{name = "Outlined", output = "color", passes = []Pass_Desc{
 		{id = "body", draw = .Model, output = "color", params = "Body"},
 		{id = "outline", draw = .Model, output = "color", params = "Outline"},
 	}}

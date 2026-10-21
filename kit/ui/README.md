@@ -134,7 +134,7 @@ ui.ui_register_font(&ctx, &font, texture, .MSDF)
 MSDF 能更好地保留尖角，但不保证任意小字号都清晰，仍须完成下面的最终像素验收。
 
 示例：`run.bat ui_gallery shot msdf`、`run.bat ui_gallery shot msdf scaled`；
-普通 UI 与 Shader Lab 均加载真正的 MSDF，`msdf` 模式单独展示中英文在 14/18/36/72px 下的效果。
+普通 UI 加载真正的 MSDF，`msdf` 模式单独展示中英文在 14/18/36/72px 下的效果（Shader Lab 已改用 ImGui）。
 
 ## 旧项目的位图字体兼容
 

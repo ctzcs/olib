@@ -271,7 +271,7 @@ Odin 没有 GC，所有权必须显式：
 
 玩家 UI 使用 **`kit/ui`**：clay 负责布局，kit/ui 提供控件、交互和 foster Batcher 后端。接入前完整阅读 olib 的 `kit/ui/README.md`，并对照 olib_sample 的 `src/game_ui`。
 
-编辑器、开发面板和调试工具使用 **odin-imgui**（`olib:thirdparty/odin-imgui` 与 `imgui_impl_ofoster`）：直接用它的折叠、滑条、输入框、下拉框、表格、拖放与 Docking，不在 kit/ui 上为工具手写这些控件。接入方式以模板 `core_editor/editor.odin` 为准：上下文归 DLL，按 `WantCaptureMouse` / `WantTextInput` 分配输入，按住输入用 `NoMouse` 屏蔽到松开，默认不开键盘导航。后端限制（没有显示 foster 贴图的 `Image` 帮助函数、没有 IME 候选框定位、默认字体无中文、只带 Windows x64 预编译库）见后端文件头，需要时再补。
+编辑器、开发面板和调试工具使用 **odin-imgui**（`olib:thirdparty/odin-imgui` 与 `imgui_impl_ofoster`）：直接用它的折叠、滑条、输入框、下拉框、表格、拖放与 Docking，不在 kit/ui 上为工具手写这些控件。接入方式以模板 `core_editor/editor.odin` 为准：上下文归 DLL，按 `WantCaptureMouse` / `WantTextInput` 分配输入，按住输入用 `NoMouse` 屏蔽到松开，默认不开键盘导航。后端 Init 默认加载 olib 字体（与 kit/ui 同一 Noto Sans CJK SC，GB2312 子集）和 Olib 样式，`Texture` 显示 foster 纹理，`Icons` / `IconButton` 使用 olib 内置图标（见 olib `assets/icons/README.md`）；可嵌入的 Shader Lab 也按这套方式画进宿主的 ImGui 帧。限制（没有 IME 候选框定位、只带 Windows x64 预编译库）见后端文件头。
 
 **先查 kit/ui 是否已有对应控件，再决定是否自定义。** 自定义控件用 `ui_interact` 复用悬停/按下/焦点/禁用状态，不从零重写交互。
 

@@ -2,7 +2,6 @@ package shader_lab
 
 // Shader 选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 .oshader 文件。
 import "core:fmt"
-import "core:strings"
 import foster "olib:foster"
 import sh "olib:kit/rendering/shader"
 import ui "olib:kit/ui"
@@ -88,7 +87,15 @@ group_folder :: proc(s: ^Session, index: int, id: string) {
 			p.folder_closed = !p.folder_closed
 		}
 		if p.folder_closed do return
-		ui.ui_label_dim(&s.ctx, &s.small_theme, p.live.shader)
+		// 宿主接了 open_file 时，源码文件名就是“用代码编辑器打开”的按钮。
+		if s.open_file != nil {
+			if lab_button(s, fmt.tprintf("open-source:%s", p.name), fmt.tprintf("编辑 %s", p.live.shader), false, true,
+				"media/code") && !s.open_file(texture_path(s, p.live.shader)) {
+				bank_error(s, fmt.tprintf("Cannot open %s", p.live.shader))
+			}
+		} else {
+			ui.ui_label_dim(&s.ctx, &s.small_theme, p.live.shader)
+		}
 		if s.file_dialogs && s.selected_shader >= 0 && sh.shader_is_material(s.shaders[s.selected_shader].desc) {
 			ui.ui_label_dim(&s.ctx, &s.small_theme, "保存 / 载入整个材质")
 		}
@@ -139,9 +146,7 @@ shader_selector :: proc(s: ^Session) {
 		// 新建：按当前工作区写一份能直接编译的模板到源码目录，热重载后自动选中。
 		templates := s.workspace == 1 ? []Shader_Template{.Model, .Model_Instanced} : []Shader_Template{.Sprite, .Post_Process}
 		for template in templates {
-			_, _, label := template_source(template)
-			if lab_button(s, fmt.tprintf("shader-new:%v", template), fmt.tprintf("新建%s", strings.trim_prefix(label, "新")),
-				false, true, "symbols/plus") {
+			if lab_button(s, fmt.tprintf("shader-new:%v", template), template_menu_label(template), false, true, "symbols/plus") {
 				if _, reason := new_shader(s, template); reason != "" do bank_error(s, reason)
 				s.shader_menu = false
 			}

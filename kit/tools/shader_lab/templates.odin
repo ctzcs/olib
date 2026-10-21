@@ -16,12 +16,23 @@ Shader_Template :: enum {
 // 模板文件名（文件里的 Shader 名是 "Template"）、新文件的默认名与显示名。
 template_source :: proc(template: Shader_Template) -> (text, base, label: string) {
 	switch template {
-	case .Sprite: return #load("templates/Sprite.oshader", string), "NewSprite", "新精灵材质"
-	case .Model: return #load("templates/Model.oshader", string), "NewModel", "新模型材质"
-	case .Model_Instanced: return #load("templates/Model_Instanced.oshader", string), "NewInstancedModel", "新实例化模型材质"
-	case .Post_Process: return #load("templates/Post_Process.oshader", string), "NewPostProcess", "新后处理"
+	case .Sprite: return #load("templates/Sprite.oshader", string), "NewSprite", "新 2D 精灵 Shader"
+	case .Model: return #load("templates/Model.oshader", string), "NewModel", "新 3D 模型 Shader"
+	case .Model_Instanced: return #load("templates/Model_Instanced.oshader", string), "NewInstancedModel", "新 3D 实例化模型 Shader"
+	case .Post_Process: return #load("templates/Post_Process.oshader", string), "NewPostProcess", "新后处理 Shader"
 	}
 	return
+}
+
+// Shader 菜单里的文字：新建的是 .oshader 源文件，要在代码编辑器里改。
+template_menu_label :: proc(template: Shader_Template) -> string {
+	switch template {
+	case .Sprite: return "新建 Shader：2D 精灵"
+	case .Model: return "新建 Shader：3D 模型"
+	case .Model_Instanced: return "新建 Shader：3D 实例化模型"
+	case .Post_Process: return "新建 Shader：后处理"
+	}
+	return ""
 }
 
 // 写出模板，返回新文件路径（临时分配）。Shader 名取 base、base2、base3… 中第一个没被文件或已有 Shader 占用的，不覆盖文件。

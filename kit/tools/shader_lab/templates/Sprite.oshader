@@ -3,7 +3,7 @@
 // r2d.image(..., material = m) 绘制。接口与引擎块说明见 olib kit/rendering/shader/lang/README.md。
 Shader "Template"
 {
-    Label "新精灵材质"
+    Label "新 2D 精灵 Shader"
     Preview 2D
     Output "color"
     Properties

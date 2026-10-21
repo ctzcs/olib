@@ -20,6 +20,8 @@ Config :: struct {
 	paused: bool,
 	// 宿主通过 file_request / file_reply 接入自己的文件对话框。
 	file_dialogs: bool,
+	// 可选：用系统默认程序打开源码文件（参数组里的“编辑 <文件>”按钮）；nil 时只显示文件名。path 是绝对路径。
+	open_file: proc(path: string) -> bool,
 	preview: Preview_Hooks,
 }
 

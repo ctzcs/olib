@@ -3,7 +3,7 @@
 // 接口与引擎块说明见 olib kit/rendering/shader/lang/README.md 的 instanced 约定。
 Shader "Template"
 {
-    Label "新实例化模型材质"
+    Label "新 3D 实例化模型 Shader"
     Preview 3D
     Output "color"
     Instanced

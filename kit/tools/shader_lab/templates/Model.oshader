@@ -3,7 +3,7 @@
 // r3d.model(..., material = m) 记录。接口与引擎块说明见 olib kit/rendering/shader/lang/README.md。
 Shader "Template"
 {
-    Label "新模型材质"
+    Label "新 3D 模型 Shader"
     Preview 3D
     Output "color"
     Properties

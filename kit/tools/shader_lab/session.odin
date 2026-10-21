@@ -76,6 +76,7 @@ Session :: struct {
 	initialized: bool,
 	render_serial: int,
 	file_dialogs: bool,
+	open_file: proc(path: string) -> bool,
 	request: File_Request,
 	request_serial, schema_generation: u64,
 	preview_hooks: Preview_Hooks,
@@ -122,6 +123,7 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	s.pitch = 0.25
 	s.paused = config.paused
 	s.file_dialogs = config.file_dialogs
+	s.open_file = config.open_file
 	s.preview_hooks = config.preview
 	s.custom_preview = config.preview.record != nil
 	for &w, i in s.workspaces {

@@ -2,7 +2,7 @@
 // 做法见 olib kit/rendering/material/README.md 的“全屏后处理”。Shader Lab 用内置棋盘格或选中的图片代替场景预览。
 Shader "Template"
 {
-    Label "新后处理"
+    Label "新后处理 Shader"
     Preview 2D
     Output "color"
     Properties

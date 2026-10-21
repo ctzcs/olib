@@ -111,10 +111,14 @@ GPU 纹理、默认值和预设的直接 API 均须在主线程调用。
 
 ## 新建 Shader
 
-Shader 菜单底部按当前工作区列出“新建精灵材质”“新建后处理”（2D）、“新建模型材质”“新建实例化模型材质”（3D）。点击后把
-[templates/](templates/) 里对应的 `.oshader` 写到 `source_root`（名字取 `NewSprite`、`NewSprite2`…，不覆盖已有文件），
-热重载编译后自动选中。模板已写好引擎块 include、统一顶点接口和满足 D3D12 规则的 Input / Output，只需改参数与着色；
-游戏里同样用 tools/shaders 生成产物后 `mat.material_create` 创建。宿主也可调用 `lab.new_shader(session, .Model)`。
+Shader 菜单底部按当前工作区列出“新建 Shader：2D 精灵 / 后处理”（2D）与“新建 Shader：3D 模型 / 3D 实例化模型”（3D）。
+新建的是 `.oshader` 源文件，不是材质：点击后把 [templates/](templates/) 里对应的模板写到 `source_root`
+（名字取 `NewSprite`、`NewSprite2`…，不覆盖已有文件），热重载编译后自动选中。模板已写好引擎块 include、统一顶点接口和
+满足 D3D12 规则的 Input / Output，接着在代码编辑器里改参数与着色，保存即刷新；游戏里用 tools/shaders 生成产物后
+`mat.material_create` 创建材质。宿主也可调用 `lab.new_shader(session, .Model)`。
+
+宿主设置 `Config.open_file`（参数为源码文件的绝对路径，返回是否打开）后，参数组里的源码文件名变成“编辑 <文件>”按钮，
+用系统默认程序打开该 `.oshader`；没设置时只显示文件名。olib_sample 的桥接用 SDL 的 `OpenURL` 实现。
 
 ## 宿主自定义预览
 

@@ -238,3 +238,82 @@ generator_includes_provide_sprite_and_instance_interfaces :: proc(t: ^testing.T)
 		testing.expectf(t, strings.contains(sprite, text), "sprite_vertex.hlsli: %s", text)
 	}
 }
+
+// D3D12 的两条规则在解析时报错并指向源码行：实例输入在前、传给片元的成员都要用到。
+@(test)
+d3d12_rules_point_at_the_offending_line :: proc(t: ^testing.T) {
+	good := `Shader "Swarm" {
+Instanced
+Pass "body" { Draw Model
+HLSLPROGRAM
+struct Input {
+    OlibInstanceInput Instance; // 实例输入在前
+    float3 Position : TEXCOORD0;
+};
+struct Output {
+    float4 Position : SV_Position;
+    float3 Normal : TEXCOORD0;
+    OlibInstance Instance;
+};
+Output vertex_main(Input v)
+{
+    Output o;
+    o.Position = mul(float4(v.Position, 1), olib_world(v.Instance));
+    o.Normal = v.Position;
+    o.Instance = olib_instance_from(v.Instance);
+    return o;
+}
+float4 fragment_main(Output v) : SV_Target0
+{
+    olib_instance = v.Instance;
+    return float4(v.Normal, 1) * InstanceTint;
+}
+ENDHLSL
+}
+}`
+	doc := parse(good, "swarm.oshader")
+	testing.expectf(t, doc.error == "", "%s", doc.error)
+	dispose(&doc)
+
+	// 网格属性写在实例输入前面：报在第一个成员那一行。
+	moved, _ := strings.replace_all(good, "    OlibInstanceInput Instance; // 实例输入在前\n    float3 Position : TEXCOORD0;",
+		"    float3 Position : TEXCOORD0;\n    OlibInstanceInput Instance;", context.temp_allocator)
+	doc = parse(moved, "swarm.oshader")
+	testing.expectf(t, strings.has_prefix(doc.error, "swarm.oshader:6:1:") &&
+		strings.contains(doc.error, "Input must start with OlibInstanceInput"), "%s", doc.error)
+	dispose(&doc)
+	// 不是 instanced 的模型没有实例输入，不检查顺序。
+	plain, _ := strings.replace_all(moved, "Instanced\n", "", context.temp_allocator)
+	doc = parse(plain, "swarm.oshader")
+	testing.expect(t, !strings.contains(doc.error, "must start with"))
+	dispose(&doc)
+
+	// Normal 传给片元却没用到（注释里的 v.Normal 不算）：报在 Output 的这个成员。
+	unused, _ := strings.replace_all(good, "return float4(v.Normal, 1) * InstanceTint;",
+		"return InstanceTint; // v.Normal", context.temp_allocator)
+	doc = parse(unused, "swarm.oshader")
+	testing.expectf(t, strings.has_prefix(doc.error, "swarm.oshader:11:1:") &&
+		strings.contains(doc.error, "Output.Normal is passed to fragment_main but never used"), "%s", doc.error)
+	dispose(&doc)
+	// 整个输入交给别的函数时无法判断，不报错。
+	whole, _ := strings.replace_all(unused, "olib_instance = v.Instance;", "olib_instance = v.Instance; shade(v);",
+		context.temp_allocator)
+	doc = parse(whole, "swarm.oshader")
+	testing.expect(t, !strings.contains(doc.error, "never used"))
+	dispose(&doc)
+
+	// 精灵：Input 以 OlibSpriteInput 开头。
+	sprite := `Shader "Glow" {
+Pass "main" { Draw Sprite
+HLSLPROGRAM
+struct Input { float2 Extra : TEXCOORD5; OlibSpriteInput Sprite; };
+struct Output { float4 Position : SV_Position; };
+Output vertex_main(Input v) { Output o; o.Position = float4(olib_sprite(v.Sprite).position, 0, 1); return o; }
+float4 fragment_main(Output v) : SV_Target0 { return 1; }
+ENDHLSL
+}
+}`
+	doc = parse(sprite, "glow.oshader")
+	testing.expectf(t, strings.contains(doc.error, "Input must start with OlibSpriteInput"), "%s", doc.error)
+	dispose(&doc)
+}

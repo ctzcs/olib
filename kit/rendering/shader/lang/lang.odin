@@ -95,6 +95,9 @@ parse :: proc(text, source_path: string) -> (result: Document) {
 		fail(&p, "Shader name must be an identifier; use Label for display names")
 	}
 	source := shader_body(&p, name)
+	for pass, i in source.passes {
+		hlsl_rules_check(&p, pass, source.effect.instanced, source.shared, source.codes[i])
+	}
 	schemas, programs, instanced_programs := shader_programs(&source, name, source_path)
 	if p.error == "" {
 		_, error := fx.effect_order(source.effect, schemas)

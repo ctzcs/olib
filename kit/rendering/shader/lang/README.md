@@ -142,6 +142,9 @@ struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibIn
    网格属性自动后移，网格里末尾未使用的属性（如 Tangent）无妨，中间未使用的属性会错位。
 2. 传给片元的变量（`Output` 里除 `SV_Position` 外的成员）必须全部在片元里被使用，否则顶点输出与片元输入对不上。
 
+解析器检查这两条并报出源码行（第 1 条对 Sprite 要求 `Input` 以 `OlibSpriteInput` 开头）：只认 `vertex_main` / `fragment_main`
+和写在 `HLSLINCLUDE`、`HLSLPROGRAM` 里的 struct；结构体在 `#include` 的文件里、或片元把整个输入交给别的函数时不检查。
+
 - `2D` 默认值是相对 Shader Lab `source_root` 的贴图路径，空字符串使用内置棋盘格。
 - 数值只支持 fragment 参数；保持现有 fragment b1/space3、每字段 16 字节及
   texture/sampler space2 布局。引擎 b0 由宿主提供，生成器不注入；用 `#include "olib/<Draw>.hlsli"` 声明（见上文）。

@@ -55,22 +55,35 @@ instance_slot_count :: proc(material: ^Material) -> int {
 }
 
 // 写平铺数组里第 index 个实例的一个字段：values 里每个实例连续占 slots 个 float4，按实例顺序排列
-// （缓冲上传的 values 参数就是这个布局，长度 = 实例数 × slots）。句柄无效或越界返回 false，不写入。
-instance_array_set :: proc(values: [][4]f32, slots, index: int, slot: Instance_Slot, value: [4]f32) -> bool {
-	if !slot.valid || slot.index < 0 || slot.index >= slots || index < 0 do return false
+// （缓冲上传的 values 参数就是这个布局，长度 = 实例数 × slots）。
+// value 依次是 x、y、z、w，只写用到的分量（Scalar 一个、Vector3 三个），没写的补 0；已有的 [4]f32 写成 ..v[:]。
+// 句柄无效、越界或超过 4 个分量返回 false，不写入。
+instance_array_set :: proc(values: [][4]f32, slots, index: int, slot: Instance_Slot, value: ..f32) -> bool {
+	if !slot.valid || slot.index < 0 || slot.index >= slots || index < 0 || len(value) > 4 do return false
 	at := index*slots + slot.index
 	if at >= len(values) do return false
-	values[at] = value
+	values[at] = {}
+	copy(values[at][:], value)
 	return true
 }
 
-// 设置一个实例字段的值并记入掩码；句柄无效返回 false，不写入。
-instance_values_set :: proc(values: ^Instance_Values, slot: Instance_Slot, value: [4]f32) -> bool {
-	if values == nil || !slot.valid || slot.index < 0 || slot.index >= MAX_INSTANCE_FIELDS do return false
-	values.numbers[slot.index] = value
+// 设置一个实例字段的值并记入掩码；value 的写法同 instance_array_set。句柄无效或超过 4 个分量返回 false，不写入。
+instance_values_set :: proc(values: ^Instance_Values, slot: Instance_Slot, value: ..f32) -> bool {
+	if values == nil || !slot.valid || slot.index < 0 || slot.index >= MAX_INSTANCE_FIELDS || len(value) > 4 do return false
+	values.numbers[slot.index] = {}
+	copy(values.numbers[slot.index][:], value)
 	values.set |= 1 << u32(slot.index)
 	values.count = max(values.count, slot.index+1)
 	return true
+}
+
+// 平铺数组里一个实例的全部字段（该实例的 slots 个 float4，例如 values[i*slots:][:slots]）转成整套覆盖值：
+// 每个槽位都算显式设置。超过 MAX_INSTANCE_FIELDS 的部分忽略。
+instance_values_from :: proc(numbers: [][4]f32) -> (values: Instance_Values) {
+	values.count = min(len(numbers), MAX_INSTANCE_FIELDS)
+	copy(values.numbers[:values.count], numbers)
+	values.set = (1 << u32(values.count)) - 1
+	return
 }
 
 // 把显式设置的槽位写进 values（与 schema.fields 一一对应）：非有限数值忽略，其余按字段范围钳制。

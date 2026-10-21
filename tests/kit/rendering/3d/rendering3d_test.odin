@@ -253,11 +253,14 @@ lod_screen_height_estimates :: proc(t: ^testing.T) {
 @(test)
 instance_value_set_writes_flat_slots :: proc(t: ^testing.T) {
 	values := make([][4]f32, 3*2, context.temp_allocator) // 3 个实例，每个 2 个槽
-	testing.expect(t, mat.instance_array_set(values, 2, 2, {1, true}, {0.5, 0, 0, 0}))
+	testing.expect(t, mat.instance_array_set(values, 2, 2, {1, true}, 0.5))
 	testing.expect_value(t, values[5], [4]f32{0.5, 0, 0, 0}) // 实例 2 的槽 1
-	testing.expect(t, !mat.instance_array_set(values, 2, 0, {}, {1, 0, 0, 0})) // 句柄无效
-	testing.expect(t, !mat.instance_array_set(values, 2, 0, {2, true}, {1, 0, 0, 0})) // 槽位越界
-	testing.expect(t, !mat.instance_array_set(values, 2, 3, {0, true}, {1, 0, 0, 0})) // 实例越界
+	testing.expect(t, mat.instance_array_set(values, 2, 1, {0, true}, 1, 2, 3)) // Vector3 只写三个分量
+	testing.expect_value(t, values[2], [4]f32{1, 2, 3, 0})
+	testing.expect(t, !mat.instance_array_set(values, 2, 0, {}, 1)) // 句柄无效
+	testing.expect(t, !mat.instance_array_set(values, 2, 0, {2, true}, 1)) // 槽位越界
+	testing.expect(t, !mat.instance_array_set(values, 2, 3, {0, true}, 1)) // 实例越界
+	testing.expect(t, !mat.instance_array_set(values, 2, 0, {0, true}, 1, 2, 3, 4, 5)) // 超过 4 个分量
 }
 
 // 变换后的包围球：平移时半径不变；旋转后再非均匀缩放时，只变换 min/max 两个角会低估半径。

@@ -45,7 +45,7 @@ err := r2d.image(&renderer, frame, transform, material = material)
 err = r2d.texture(&renderer, &texture, transform, origin = {16, 32}, material = material)
 hue := mat.instance_slot(material, "hue") // 只解析一次
 cool: mat.Instance_Values
-mat.instance_values_set(&cool, hue, {0.7, 0, 0, 0})
+mat.instance_values_set(&cool, hue, 0.7)
 err = r2d.image(&renderer, frame, transform, material = material, values = &cool)
 ```
 
@@ -75,7 +75,7 @@ reason := r2d.sprite_buffer_init(&sprites, material, capacity = count) // "" 成
 items := make([]r2d.Sprite_Item, count)
 values := make([][4]f32, count * sprites.slots)
 items[i] = r2d.sprite_item_make(frame, origin, transform, tint)
-mat.instance_array_set(values, sprites.slots, i, hue, {0.7, 0, 0, 0})
+mat.instance_array_set(values, sprites.slots, i, hue, 0.7)
 ok := r2d.sprite_buffer_upload(&sprites, items, values = values)
 
 // 每帧，与其他图元保持记录顺序；每个选中 Pass 一次 Draw。

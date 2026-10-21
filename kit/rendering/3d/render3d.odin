@@ -178,8 +178,7 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 		for i in 0..<selection.count {
 			instance := defaults[i]
 			if flat != nil {
-				input := mat.Instance_Values{count = slots, set = (1 << u32(slots)) - 1}
-				copy(input.numbers[:], flat[item_index*slots:(item_index+1)*slots])
+				input := mat.instance_values_from(flat[item_index*slots:(item_index+1)*slots])
 				p := m.effect.desc.passes[selection.passes[i]]
 				instance = mat.material_pass_instance(p, m.bindings[selection.bindings[i]], &input)
 			}

@@ -51,11 +51,11 @@ hue := mat.instance_slot(material, "hue")            // 解析一次；名字写
 
 // 逐个绘制：Instance_Values 设置这一次绘制的实例字段，只覆盖显式设置的槽位，其余沿用材质里的值
 cool: mat.Instance_Values
-mat.instance_values_set(&cool, hue, {0.7, 0, 0, 0})
+mat.instance_values_set(&cool, hue, 0.7)                 // 只写用到的分量：Scalar 一个、Vector3 三个，其余补 0
 r2d.image(&renderer, frame, transform, material = material, values = &cool)
 
 // 缓冲：同样的槽位，写进平铺数组（每个实例连续 buffer.slots 个 float4），上传时一并传入
-mat.instance_array_set(values, sprite_buffer.slots, i, hue, {0.7, 0, 0, 0})
+mat.instance_array_set(values, sprite_buffer.slots, i, hue, 0.7)
 r2d.sprite_buffer_upload(&sprite_buffer, items, values = values)
 r3d.model_buffer_upload(&model_buffer, instances, values = values)
 ```
@@ -87,9 +87,12 @@ mat.material_set_number(material, "Sprite_body", "strength", {0.8, 0, 0, 0})   /
 ```odin
 r2d.sprite_buffer_init(&buffer, material, capacity)   // buffer.slots = 效果的 [Instance] 字段数
 values := make([][4]f32, count*buffer.slots)         // 平铺数组：每个实例连续 slots 个 float4
-mat.instance_array_set(values, buffer.slots, i, hue, {0.7, 0, 0, 0})
+mat.instance_array_set(values, buffer.slots, i, hue, 0.7)
 r2d.sprite_buffer_upload(&buffer, items, values = values)
 ```
+
+平铺数组里某个实例要单独绘制时，`mat.instance_values_from(values[i*slots:][:slots])` 把它转成整套覆盖值
+（每个槽位都算显式设置），可直接传给 `r3d.model` / `r2d.image` 的 values。已有的 `[4]f32` 变量写成 `..color[:]`。
 
 - 硬上限 `MAX_INSTANCE_FIELDS` = 16，只用来保护顶点属性预算：每个实例占 `5 + 槽数` 个属性，网格还要自己的属性
   （3D 常见 4 个），桌面 GPU 一般支持 16～32 个。需要更多值时，先考虑把几个标量打包进同一个 `float4` 的 xyzw。

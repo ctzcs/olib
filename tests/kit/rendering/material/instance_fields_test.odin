@@ -134,20 +134,20 @@ instance_values_set_marks_slots_and_apply_overrides_only_those :: proc(t: ^testi
 	values := values_make(schema)
 	defer values_dispose(values)
 	overrides: Instance_Values
-	testing.expect(t, instance_values_set(&overrides, {0, true}, {0.7, 0, 0, 0}))
+	testing.expect(t, instance_values_set(&overrides, {0, true}, 0.7))
 	testing.expect_value(t, overrides.set, u32(0b1))
 	testing.expect_value(t, overrides.count, 1)
-	testing.expect(t, !instance_values_set(&overrides, {}, {1, 0, 0, 0})) // 句柄无效
-	testing.expect(t, !instance_values_set(&overrides, {MAX_INSTANCE_FIELDS, true}, {1, 0, 0, 0})) // 越界
-	testing.expect(t, !instance_values_set(nil, {0, true}, {1, 0, 0, 0}))
+	testing.expect(t, !instance_values_set(&overrides, {}, 1)) // 句柄无效
+	testing.expect(t, !instance_values_set(&overrides, {MAX_INSTANCE_FIELDS, true}, 1)) // 越界
+	testing.expect(t, !instance_values_set(nil, {0, true}, 1))
 	instance_values_apply(&overrides, schema, values)
 	testing.expect_value(t, values[0].number[0], 0.7) // hue 被覆盖
 	testing.expect_value(t, values[3].number, [4]f32{1, 1, 1, 1}) // tint 没设置，沿用材质值
 	// 超出范围的值钳制到字段范围；非有限值忽略。
-	instance_values_set(&overrides, {0, true}, {5, 0, 0, 0})
+	instance_values_set(&overrides, {0, true}, 5)
 	instance_values_apply(&overrides, schema, values)
 	testing.expect_value(t, values[0].number[0], 1)
-	instance_values_set(&overrides, {0, true}, {max(f32) * 2, 0, 0, 0})
+	instance_values_set(&overrides, {0, true}, max(f32) * 2)
 	instance_values_apply(&overrides, schema, values)
 	testing.expect_value(t, values[0].number[0], 1)
 	// 没有显式设置任何槽位，或传 nil：什么都不改。
@@ -158,6 +158,24 @@ instance_values_set_marks_slots_and_apply_overrides_only_those :: proc(t: ^testi
 	testing.expect_value(t, untouched[0].number[0], 0.15)
 }
 
+// 只写用到的分量，其余补 0；超过 4 个分量拒绝且不写入；平铺数组的一个实例转成整套覆盖值。
+@(test)
+instance_values_take_only_needed_components :: proc(t: ^testing.T) {
+	overrides: Instance_Values
+	testing.expect(t, instance_values_set(&overrides, {1, true}, 0.1, 0.2, 0.3, 0.4))
+	testing.expect(t, instance_values_set(&overrides, {1, true}, 0.5, 0.6))
+	testing.expect_value(t, overrides.numbers[1], [4]f32{0.5, 0.6, 0, 0})
+	testing.expect(t, !instance_values_set(&overrides, {1, true}, 1, 2, 3, 4, 5))
+	testing.expect_value(t, overrides.numbers[1], [4]f32{0.5, 0.6, 0, 0})
+
+	flat := [][4]f32{{0.2, 0, 0, 0}, {1, 2, 3, 0}}
+	from := instance_values_from(flat)
+	testing.expect_value(t, from.count, 2)
+	testing.expect_value(t, from.set, u32(0b11))
+	testing.expect_value(t, from.numbers[1], [4]f32{1, 2, 3, 0})
+	testing.expect_value(t, instance_values_from(nil).set, u32(0))
+}
+
 @(test)
 draw_collects_instance_values_in_field_order :: proc(t: ^testing.T) {
 	// 与 material_pass_submit 相同的规则：材质值 < Instance_Values < Pass 固定覆盖。
@@ -165,8 +183,8 @@ draw_collects_instance_values_in_field_order :: proc(t: ^testing.T) {
 	values := values_make(schema)
 	defer values_dispose(values)
 	overrides: Instance_Values
-	instance_values_set(&overrides, {0, true}, {0.6, 0, 0, 0})
-	instance_values_set(&overrides, {1, true}, {0.1, 0.2, 0.3, 0.4})
+	instance_values_set(&overrides, {0, true}, 0.6)
+	instance_values_set(&overrides, {1, true}, 0.1, 0.2, 0.3, 0.4)
 	instance_values_apply(&overrides, schema, values)
 	for fixed in ([]Pass_Value{{field = "hue", number = {0.9, 0, 0, 0}}}) {
 		values[field_index(schema, string(fixed.field))].number = fixed.number

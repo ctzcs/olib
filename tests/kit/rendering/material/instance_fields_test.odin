@@ -34,31 +34,31 @@ instance_fields_leave_uniform_layout_and_define_olib_instance :: proc(t: ^testin
 	text := fx.hlsl(schema, .Sprite)
 	defer delete(text)
 	testing.expect(t, strings.contains(text, "_olib_param_0;") && !strings.contains(text, "_olib_param_1"))
-	// 精灵：顶点输入 sprite0..3 + tint + 字段；传给片元的变量从 TEXCOORD8 起，且为 nointerpolation。
-	testing.expect(t, strings.contains(text, "struct OlibInstanceInput {"))
-	for column in 0..<4 {
-		testing.expect(t, strings.contains(text, fmt.tprintf("float4 sprite%d : TEXCOORD%d;", column, fx.INSTANCE_SEMANTIC_BASE+column)))
-	}
-	testing.expect(t, strings.contains(text, "float4 tint : TEXCOORD10;"))
-	testing.expect(t, strings.contains(text, "nointerpolation float4 tint : TEXCOORD8;"))
-	testing.expect(t, strings.contains(text, "nointerpolation float4 data1 : TEXCOORD10;"))
-	testing.expect(t, strings.contains(text, "void olib_sprite_vertex(OlibInstanceInput i, float2 corner,"))
-	testing.expect(t, !strings.contains(text, "olib_world"))
+	// 精灵常驻缓冲：固定代码在 olib/instance.hlsli 与 olib/sprite_vertex.hlsli；生成器只给变体与槽位。
+	// 每个槽位 X(槽位, 顶点输入语义号, 传给片元的语义号)：输入在 sprite0..3 + tint（TEXCOORD6..10）之后，片元在 tint（TEXCOORD8）之后。
+	testing.expect(t, strings.contains(text, "#define OLIB_INSTANCE_SLOTS 2\n"))
+	testing.expect(t, strings.contains(text, "#define OLIB_INSTANCE_DATA(X) X(0, 11, 9) X(1, 12, 10)\n"))
+	testing.expect(t, strings.contains(text, "#define OLIB_INSTANCE_SPRITE\n#include \"olib/instance.hlsli\"\n#include \"olib/sprite_vertex.hlsli\""))
+	testing.expect(t, !strings.contains(text, "OLIB_INSTANCE_MODEL"))
 	testing.expect(t, strings.contains(text, "#define _hue (olib_instance.data0.x)"))
 	testing.expect(t, strings.contains(text, "#define _tint (olib_instance.data1.xyzw)"))
 	testing.expect(t, strings.contains(text, "#define _strength (_olib_param_0.x)"))
 	testing.expect(t, strings.contains(text, "register(t0, space2)"))
 
 	testing.expect(t, !strings.contains(text, "%!")) // 格式串里的花括号不能被 fmt 吃掉
-	// 没有 instance 字段且效果不是 instanced：不生成 OlibInstance，保持原有输出。
+	// 没有 instance 字段且效果不是 instanced：不 include 实例代码，只有参数块。
 	plain := fx.Schema{name = "Plain", fields = {{id = "a", name = "a", kind = .Scalar, maximum = 1}}}
 	plain_text := fx.hlsl(plain)
 	defer delete(plain_text)
-	testing.expect(t, !strings.contains(plain_text, "OlibInstance"))
-	// 仅 instanced（只用 tint）也生成 OlibInstance。
+	testing.expect(t, !strings.contains(plain_text, "OLIB_INSTANCE") && !strings.contains(plain_text, "#include"))
+	// 仅 instanced（只用 tint）也 include，槽位为空。
 	tint_only := fx.hlsl(plain, .Sprite)
 	defer delete(tint_only)
-	testing.expect(t, strings.contains(tint_only, "OlibInstance") && !strings.contains(tint_only, "data0"))
+	testing.expect(t, strings.contains(tint_only, "#define OLIB_INSTANCE_DATA(X)\n") && strings.contains(tint_only, "olib/instance.hlsli"))
+	// 批量变体：不声明实例顶点输入，只 include 精灵接口。
+	batch := fx.hlsl(plain, .Sprite_Batch)
+	defer delete(batch)
+	testing.expect(t, strings.contains(batch, "#define OLIB_SPRITE_BATCH\n") && strings.contains(batch, "olib/sprite_vertex.hlsli"))
 }
 
 @(test)
@@ -210,24 +210,15 @@ model_instancing_hlsl_declares_input_world_and_varyings :: proc(t: ^testing.T) {
 	text := fx.hlsl(schema, .Model)
 	defer delete(text)
 	testing.expect(t, !strings.contains(text, "%!"))
-	testing.expect(t, strings.contains(text, "struct OlibInstanceInput {"))
-	for column in 0..<4 {
-		testing.expect(t, strings.contains(text, fmt.tprintf("float4 world%d : TEXCOORD%d;", column, fx.INSTANCE_SEMANTIC_BASE+column)))
-	}
-	testing.expect(t, strings.contains(text, "float4 tint : TEXCOORD10;"))
-	testing.expect(t, strings.contains(text, "float4 data0 : TEXCOORD11;") && strings.contains(text, "float4 data1 : TEXCOORD12;"))
-	// 传给片元的变量从 TEXCOORD8 起，且为 nointerpolation。
-	testing.expect(t, strings.contains(text, "nointerpolation float4 tint : TEXCOORD8;"))
-	testing.expect(t, strings.contains(text, "nointerpolation float4 data1 : TEXCOORD10;"))
-	testing.expect(t, strings.contains(text, "transpose(float4x4(i.world0, i.world1, i.world2, i.world3))"))
-	testing.expect(t, strings.contains(text, "OlibInstance olib_instance_from(OlibInstanceInput i)"))
-	testing.expect(t, strings.contains(text, "o.data1 = i.data1;"))
+	// 模型实例：世界矩阵、olib_world 与 olib_instance_from 在 olib/instance.hlsli；语义号与精灵相同。
+	testing.expect(t, strings.contains(text, "#define OLIB_INSTANCE_DATA(X) X(0, 11, 9) X(1, 12, 10)\n"))
+	testing.expect(t, strings.contains(text, "#define OLIB_INSTANCE_MODEL\n#include \"olib/instance.hlsli\"\n"))
+	testing.expect(t, !strings.contains(text, "sprite_vertex.hlsli"))
 	testing.expect(t, strings.contains(text, "#define _hue (olib_instance.data0.x)"))
 	// 精灵没有世界矩阵输入。
 	sprite := fx.hlsl(schema, .Sprite)
 	defer delete(sprite)
-	testing.expect(t, strings.contains(sprite, "OlibInstanceInput") && !strings.contains(sprite, "olib_world"))
-	testing.expect(t, !strings.contains(text, "sprite0") || !strings.contains(sprite, "world0"))
+	testing.expect(t, strings.contains(sprite, "OLIB_INSTANCE_SPRITE") && !strings.contains(sprite, "OLIB_INSTANCE_MODEL"))
 }
 
 @(test)

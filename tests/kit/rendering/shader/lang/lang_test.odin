@@ -2,6 +2,7 @@
 package lang
 
 import "core:fmt"
+import "core:os"
 import "core:strings"
 import "core:testing"
 
@@ -174,20 +175,13 @@ ENDHLSL
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Hue (olib_instance.data0.x)"))
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Amount (olib_instance.data1.x)"))
 	// Sprite Pass：programs 是批量变体（BatcherVertex 输入，字段从顶点 storage buffer 按 mode 偏移读取），
-	// instanced 效果另有缓冲变体（实例记录 + 角点）；两者都提供 OlibSpriteInput / olib_sprite。
+	// instanced 效果另有缓冲变体（实例记录 + 角点）；两者都 include olib/sprite_vertex.hlsli 得到 OlibSpriteInput / olib_sprite。
 	batch, buffer := doc.programs[0], doc.instanced_programs[0]
-	testing.expect(t, strings.contains(batch, "float4 Mode : TEXCOORD3;"))
-	testing.expect(t, strings.contains(batch, "StructuredBuffer<float4> OlibInstanceValues : register(t0, space0);"))
-	testing.expect(t, strings.contains(batch, "s.instance.data1 = OlibInstanceValues[offset + 1];"))
-	testing.expect(t, !strings.contains(batch, "OlibInstanceInput"))
-	testing.expect(t, strings.contains(buffer, "struct OlibSpriteInput {\n    OlibInstanceInput Instance;"))
-	testing.expect(t, strings.contains(buffer, "olib_sprite_vertex(i.Instance, i.Corner, p, s.uv);"))
-	// 缓冲变体在 GPU 上套用变换栈（b1），position 与批量变体同在目标像素空间。
-	testing.expect(t, strings.contains(buffer, "register(b1, space1) { float4 _olib_view_axes; float4 _olib_view_origin; };"))
-	testing.expect(t, strings.contains(buffer, "s.position = p.x * _olib_view_axes.xy + p.y * _olib_view_axes.zw + _olib_view_origin.xy;"))
-	testing.expect(t, !strings.contains(buffer, "StructuredBuffer"))
+	testing.expect(t, strings.contains(batch, "#define OLIB_SPRITE_BATCH\n") && !strings.contains(batch, "OLIB_INSTANCE_SPRITE"))
+	testing.expect(t, strings.contains(buffer, "#define OLIB_INSTANCE_SPRITE\n") && !strings.contains(buffer, "OLIB_SPRITE_BATCH"))
 	for program in ([2]string{batch, buffer}) {
-		testing.expect(t, strings.contains(program, "OlibSprite olib_sprite(OlibSpriteInput i)"))
+		testing.expect(t, strings.contains(program, "#define OLIB_INSTANCE_DATA(X) X(0, 11, 9) X(1, 12, 10)\n"))
+		testing.expect(t, strings.contains(program, "#include \"olib/instance.hlsli\"\n#include \"olib/sprite_vertex.hlsli\"\n"))
 	}
 
 	// 只写 Instanced：效果启用顶点 tint，没有实例字段。
@@ -203,14 +197,9 @@ ENDHLSL
 	tinted := parse(flag_only, "tinted.oshader")
 	defer dispose(&tinted)
 	testing.expectf(t, tinted.error == "" && tinted.effect.instanced, "%s", tinted.error)
-	testing.expect(t, strings.contains(tinted.programs[0], "OlibInstance"))
-	// 没有实例字段：批量变体仍从 storage buffer 读两条轴，不读字段；tint 直接取顶点色。
-	testing.expect(t, strings.contains(tinted.programs[0], "s.axis_x = axes.xy;"))
-	testing.expect(t, !strings.contains(tinted.programs[0], "s.instance.data0"))
-	testing.expect(t, strings.contains(tinted.programs[0], "s.instance.tint = i.Color;"))
-	// 缓冲变体的两条轴来自实例记录的线性部分，再套用变换栈，与批量变体在 CPU 上的换算相同。
-	testing.expect(t, strings.contains(tinted.instanced_programs[0],
-		"s.axis_x = i.Instance.sprite0.x * _olib_view_axes.xy + i.Instance.sprite0.y * _olib_view_axes.zw;"))
+	// 没有实例字段：槽位为空，批量变体仍 include 精灵接口（从 storage buffer 读两条轴，不读字段）。
+	testing.expect(t, strings.contains(tinted.programs[0], "#define OLIB_INSTANCE_SLOTS 0\n#define OLIB_INSTANCE_DATA(X)\n"))
+	testing.expect(t, strings.contains(tinted.instanced_programs[0], "#define OLIB_INSTANCE_SPRITE\n"))
 	// 非 Sprite 的效果没有缓冲变体。
 	water := parse(SOURCE, "water.oshader")
 	defer dispose(&water)
@@ -225,4 +214,27 @@ ENDHLSL }
 }`, "bad.oshader")
 	defer dispose(&bad)
 	testing.expect(t, strings.contains(bad.error, "Texture cannot be Instance"))
+}
+
+// 生成代码 include 的两个文件提供作者用到的接口；批量变体读 storage buffer，缓冲变体在 GPU 上套用变换栈（b1）。
+@(test)
+generator_includes_provide_sprite_and_instance_interfaces :: proc(t: ^testing.T) {
+	read :: proc(name: string) -> string {
+		bytes, err := os.read_entire_file(fmt.tprintf("%s/olib/%s", INCLUDE_DIRECTORY, name), context.temp_allocator)
+		return err == nil ? string(bytes) : ""
+	}
+	instance, sprite := read("instance.hlsli"), read("sprite_vertex.hlsli")
+	for text in ([]string{
+		"struct OlibInstance {", "OLIB_INSTANCE_DATA(OLIB_INSTANCE_VARYING)", "#define InstanceTint (olib_instance.tint)",
+		"struct OlibInstanceInput {", "float4x4 olib_world(OlibInstanceInput i)", "void olib_sprite_vertex(OlibInstanceInput i,",
+		"OlibInstance olib_instance_from(OlibInstanceInput i)",
+	}) {
+		testing.expectf(t, strings.contains(instance, text), "instance.hlsli: %s", text)
+	}
+	for text in ([]string{
+		"#ifdef OLIB_INSTANCE_SPRITE", "OlibInstanceInput Instance;", "_olib_view_axes", "StructuredBuffer<float4> OlibInstanceValues",
+		"#if OLIB_INSTANCE_SLOTS > 0", "OlibSprite olib_sprite(OlibSpriteInput i)",
+	}) {
+		testing.expectf(t, strings.contains(sprite, text), "sprite_vertex.hlsli: %s", text)
+	}
 }

@@ -69,7 +69,12 @@ Shader "Water"
 | `olib/fullscreen.hlsli` | `Draw Fullscreen`；2D 的 `Preview_Model`（Shader Lab 预览） | `View` | `Clock`、`Pointer`、`Tint` |
 
 文件在 `kit/rendering/shader/lang/include/olib/`，是普通 HLSL 的 cbuffer 声明，每个成员的含义写在注释里；
-生成器不注入它们，手写仍然合法。顶点侧与片元同名的值加 `Vertex` 前缀（同一份源码里两个阶段的 cbuffer 不能重名）。
+生成器不注入它们，手写仍然合法。
+
+同目录还有两个生成器内部的 include，作者不直接 include：`olib/instance.hlsli`（`OlibInstanceInput`、`OlibInstance`、
+`olib_instance_from`、`olib_world`、`olib_sprite_vertex`）与 `olib/sprite_vertex.hlsli`（`OlibSpriteInput`、`olib_sprite`）。
+每个 Pass 的生成代码只写参数块、字段的 `#define`、变体开关与按槽位展开的 `OLIB_INSTANCE_DATA(X)`，再 include 它们；
+想看 `olib_sprite` 等辅助函数做了什么，直接读这两个文件。顶点侧与片元同名的值加 `Vertex` 前缀（同一份源码里两个阶段的 cbuffer 不能重名）。
 instanced 模型的 `World` 为单位矩阵，`Wvp` 即 ViewProjection。
 
 shadercross 只接受一个 `-I`（留给项目的 shader 目录），所以 tools/shaders 与 Shader Lab 编译 `.oshader` 前，

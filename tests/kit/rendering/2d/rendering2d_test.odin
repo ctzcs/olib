@@ -88,18 +88,20 @@ kenney_build_rects_parse :: proc(t: ^testing.T) {
 @(test)
 atlas_subtexture_uses_local_origin :: proc(t: ^testing.T) {
 	atlas: Sprite_Atlas
-	atlas.rects = make(map[string]foster.RectInt)
-	defer delete(atlas.rects)
-	atlas.rects["ui/test"] = {X = 266, Y = 398, Width = 128, Height = 128}
-	atlas.texture.Width = 4096
-	atlas.texture.Height = 4096
+	atlas.pages = make([]Atlas_Page, 1)
+	defer delete(atlas.pages)
+	atlas.regions = make(map[string]Atlas_Region)
+	defer delete(atlas.regions)
+	atlas.regions["ui/test"] = {rect = {X = 266, Y = 398, Width = 128, Height = 128}}
+	atlas.pages[0].texture.Width = 4096
+	atlas.pages[0].texture.Height = 4096
 
 	_, before_upload := atlas_subtexture(&atlas, "ui/test")
 	testing.expect(t, !before_upload)
 	// 这里只构造纹理尺寸元数据，不创建 GPU 资源。
 	atlas.has_upload = true
 	sub, ok := atlas_subtexture(&atlas, "ui/test")
-	testing.expect(t, ok && sub.Texture == &atlas.texture)
+	testing.expect(t, ok && sub.Texture == &atlas.pages[0].texture)
 	testing.expect(t, sub.Frame == foster.Rect{0, 0, 128, 128})
 	testing.expect(t, sub.DrawCoords[0] == foster.Vec2{0, 0})
 	testing.expect(t, sub.DrawCoords[2] == foster.Vec2{128, 128})
@@ -107,6 +109,35 @@ atlas_subtexture_uses_local_origin :: proc(t: ^testing.T) {
 	testing.expect(t, sub.TexCoords[2] == foster.Vec2{394.0 / 4096, 526.0 / 4096})
 	_, missing := atlas_subtexture(&atlas, "missing")
 	testing.expect(t, !missing)
+}
+
+// 多页：子图指向区域所在页的纹理；裁边的区域保留原始帧，绘制位置与未裁边时一致；越界页号的区域丢弃。
+@(test)
+atlas_pages_pick_texture_and_keep_trim :: proc(t: ^testing.T) {
+	images := []foster.Image{foster.ImageMake(64, 64), foster.ImageMake(32, 32)}
+	regions := make(map[string]Atlas_Region)
+	defer delete(regions)
+	regions["a"] = {page = 0, rect = {X = 0, Y = 0, Width = 16, Height = 16}}
+	// 原始帧 20×20，裁边后内容 10×12，位于原始帧内的 (4, 3)
+	regions["b"] = {page = 1, rect = {X = 8, Y = 8, Width = 10, Height = 12}, frame = {X = -4, Y = -3, Width = 20, Height = 20}}
+	regions["bad"] = {page = 2, rect = {Width = 1, Height = 1}}
+	atlas: Sprite_Atlas
+	atlas_from_pages(&atlas, images, regions)
+	defer atlas_dispose(&atlas)
+	testing.expect_value(t, len(atlas.pages), 2)
+	testing.expect(t, !atlas_has(&atlas, "bad"))
+	region, found := atlas_get(&atlas, "b")
+	testing.expect(t, found && region.page == 1)
+
+	for &page in atlas.pages do page.texture.Width, page.texture.Height = page.image.Width, page.image.Height
+	atlas.has_upload = true // 只验证子图计算；atlas_dispose 跳过没有 Resource 的纹理
+	a, _ := atlas_subtexture(&atlas, "a")
+	b, _ := atlas_subtexture(&atlas, "b")
+	testing.expect(t, a.Texture == &atlas.pages[0].texture && b.Texture == &atlas.pages[1].texture)
+	testing.expect_value(t, b.DrawCoords[0], foster.Vec2{4, 3})
+	testing.expect_value(t, b.DrawCoords[2], foster.Vec2{14, 15})
+	testing.expect_value(t, b.TexCoords[0], foster.Vec2{8.0 / 32, 8.0 / 32})
+	testing.expect_value(t, foster.SubtextureSize(b), foster.Vec2{20, 20})
 }
 
 @(test)

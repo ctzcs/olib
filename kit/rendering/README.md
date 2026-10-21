@@ -42,7 +42,7 @@ mat.material_library_dispose(&materials)
 | 2D 画精灵 | `Render2D`、`init/dispose`、`image/texture`、`push_matrix/pop_matrix`、`submit`、`View` | [2d/render2d.odin](2d/render2d.odin) |
 | 2D 百万精灵（一次 Draw） | `Sprite_Buffer`、`sprite_buffer_init/upload/dispose`、`Sprite_Item`、`sprite_item_make`、`buffer` | [2d/sprite_buffer.odin](2d/sprite_buffer.odin) |
 | 2D 帧动画 | `Animation_Set`、`animation_set_init/dispose`、`animation_set_add_frame/add_animation`、`animation_set_get_animation/get_frame_at` | [2d/animation_set.odin](2d/animation_set.odin) |
-| 2D 图集 | `Sprite_Atlas`、`atlas_from_rects`、`atlas_upload`、`atlas_subtexture`、`atlas_get/has/names/crop` | [2d/atlas.odin](2d/atlas.odin)（来源格式见 `atlas_grid / atlas_kenney / atlas_aseprite / atlas_builtin_icons`） |
+| 2D 图集（可多页） | `Sprite_Atlas`、`atlas_from_rects / atlas_from_pages / atlas_from_built`、`atlas_upload`、`atlas_subtexture`、`atlas_get/has/names/crop` | [2d/atlas.odin](2d/atlas.odin)（来源格式见 `atlas_grid / atlas_kenney / atlas_aseprite / atlas_builtin_icons`） |
 | 3D 画模型 / 自动实例化 | `Render3D`、`View`、`init/dispose/clear`、`model/models`、`submit`、`Model_Item` | [3d/render3d.odin](3d/render3d.odin) |
 | 全屏后处理 | 场景画到 Target，`r2d.texture` 铺满窗口并套上后处理材质 | [material/README](material/README.md#全屏后处理) |
 | 3D 视图级数据（太阳、雾、相机轴） | `View.globals`、`mat.VIEW_GLOBALS_SIZE` | [3d/README](3d/README.md#相机视图块与运行时贴图)、[material/draw.odin](material/draw.odin) |

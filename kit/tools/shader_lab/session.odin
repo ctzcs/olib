@@ -103,7 +103,7 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	if config.font.Size <= 0 || config.font.DistanceRange <= 0 do return false
 	if config.source_root == "" do return false
 	if config.icons != nil {
-		if !config.icons.has_upload || config.icons.texture.Resource == nil do return false
+		if !config.icons.has_upload || len(config.icons.pages) == 0 || config.icons.pages[0].texture.Resource == nil do return false
 		s.icons = config.icons
 	} else {
 		if !r2d.builtin_icons_load(&s.owned_icons, device) do return false

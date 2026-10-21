@@ -16,8 +16,7 @@ builtin_icons_load :: proc(
 	keep_pixels := false,
 ) -> bool {
 	if atlas == nil || device == nil do return false
-	if atlas.has_upload || atlas.texture.Resource != nil || atlas.image.Width != 0 ||
-		len(atlas.image.Pixels) != 0 || atlas.rects != nil || atlas.crop_cache != nil ||
+	if atlas.has_upload || atlas.pages != nil || atlas.regions != nil || atlas.crop_cache != nil ||
 		len(atlas.owned_crops) != 0 {
 		return false
 	}
@@ -38,8 +37,8 @@ builtin_icons_load :: proc(
 		return false
 	}
 	if !keep_pixels {
-		delete(atlas.image.Pixels)
-		atlas.image = {}
+		delete(atlas.pages[0].image.Pixels)
+		atlas.pages[0].image = {}
 	}
 	return true
 }

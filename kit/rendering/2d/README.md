@@ -108,6 +108,21 @@ err := r2d.image(&renderer, frame.subtexture, transform, origin = hero.origin)
 ```
 
 追加动画后不要保留旧 Animation 指针；循环参数 false 表示停在最后一帧。
-图集用 `Sprite_Atlas` 和 `atlas_subtexture`；grid、Kenney、Aseprite 各用自己的导入入口。
-`aseprite_build` 的 Built_Clip 提供区域名与时长，经 atlas_subtexture 转成动画帧。
 暂停、变速和结束回调由游戏实现。
+
+图集用 `Sprite_Atlas` 和 `atlas_subtexture`；grid、Kenney、内置图标是单页，各用自己的导入入口。
+Aseprite 目录用 `aseprite_build` 打包，一页放不下 `max_size`（默认 8192）时自动开新页：
+
+```odin
+built, ok := r2d.aseprite_build("art/sprites")
+atlas: r2d.Sprite_Atlas
+r2d.atlas_from_built(&atlas, &built)     // 图集接管每页像素与区域；动画剪辑仍在 built.clips
+r2d.atlas_upload(&atlas, device)
+frame, _ := r2d.atlas_subtexture(&atlas, "hero/run_3") // 帧自己知道在哪一页，画法与单页相同
+// 退出：r2d.atlas_dispose(&atlas)；r2d.built_atlas_dispose(&built)
+```
+
+- 区域记录所在页、页内矩形和裁边前的原始帧；`atlas_subtexture` 带上原始帧，打包时裁掉的透明边不会让动画抖动。
+- 合批按贴图算：同一页的精灵连续画合成一次 Draw，换页像换图集一样断批；`r2d.buffer` 一个缓冲只能用一页。
+  打包器先填满第一页再开新页，页数越少越好；同场景一起画的精灵尽量放进同一个目录打包。
+- `Built_Clip` 提供区域名与时长，经 `atlas_subtexture` 转成动画帧；自己产出多页时用 `atlas_from_pages`。

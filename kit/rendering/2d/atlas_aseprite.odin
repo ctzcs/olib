@@ -1,10 +1,10 @@
 #+build !js
-// atlas:aseprite —— .aseprite 目录 -> 单张图集的构建器（对位 DragonLib AsepriteAtlasBuilder）。
+// atlas:aseprite —— .aseprite 目录 -> 图集的构建器（对位 DragonLib AsepriteAtlasBuilder）。
 //
 // 解析 .aseprite 二进制（Foster 的 Aseprite），拍平可见图层渲染每一帧
 // （bg/shadow 这类预览图层默认跳过），frame tag 变成命名动画、帧时长毫秒
 // 转秒；装箱用 Foster 的 Packer（二叉树 + 透明裁剪 + 边缘出血 + 重复帧
-// 合并）。PingPong 标签展开帧列表（a b c -> a b c b），Reverse 反转帧序。
+// 合并）。一页放不下 max_size 时自动开新页。PingPong 标签展开帧列表（a b c -> a b c b），Reverse 反转帧序。
 //
 // 注意：构建器固定 Trim=true（PackerAdd 立即拷贝像素，渲染帧当轮释放）；
 // 本文件只在 native 目标可用（目录枚举依赖 core:os）。
@@ -20,13 +20,6 @@ import foster "olib:foster"
 // 类型 —— 打包产物
 // ------------------------------------------------------------------------------
 
-// 打包区域：source = 图集内的（已裁剪）像素矩形；frame = 裁剪内容在未裁剪
-// 帧内的位置与原始帧尺寸（Subtexture 的 frame 用）。
-Atlas_Region_Placement :: struct {
-	source: foster.RectInt,
-	frame:  foster.RectInt,
-}
-
 // 一条自动生成的动画：controller 来自 .aseprite 文件名，name 来自 frame tag。
 Built_Clip :: struct {
 	controller: string,
@@ -36,11 +29,11 @@ Built_Clip :: struct {
 	loop:       bool,
 }
 
-// 打包产物：合成后的图集像素 + 区域表 + 自动生成的动画剪辑。
-// 所有字符串均为克隆（context.allocator），built_atlas_dispose 统一释放。
+// 打包产物：每页的图集像素 + 区域表（页号、页内矩形、裁边帧）+ 自动生成的动画剪辑。
+// 所有字符串均为克隆（context.allocator），built_atlas_dispose 统一释放；atlas_from_built 接管页与区域。
 Built_Atlas :: struct {
-	image:        foster.Image,
-	regions:      map[string]Atlas_Region_Placement,
+	pages:        []foster.Image,
+	regions:      map[string]Atlas_Region,
 	clips:        [dynamic]Built_Clip,
 	source_count: int, // 参与打包的 .aseprite 文件数
 }
@@ -51,7 +44,7 @@ Built_Atlas :: struct {
 
 Aseprite_Build_Config :: struct {
 	padding:     int,      // 区域间距（>=2 时启用边缘出血）
-	max_size:    int,      // 图集最大边长
+	max_size:    int,      // 每页最大边长；放不下时开新页
 	skip_layers: []string, // 拍平时跳过的图层名（大小写不敏感）
 }
 
@@ -65,8 +58,8 @@ ASEPRITE_BUILD_DEFAULT :: Aseprite_Build_Config{
 // 构建
 // ------------------------------------------------------------------------------
 
-// 扫描目录（递归）里的所有 .aseprite，渲染帧并装箱成一张图集。
-// 失败（无源文件 / 单页装不下）返回 false。
+// 扫描目录（递归）里的所有 .aseprite，渲染帧并装箱成图集（一页或多页）。
+// 没有源文件时返回 false。
 aseprite_build :: proc(root: string, config := ASEPRITE_BUILD_DEFAULT) -> (Built_Atlas, bool) {
 	files: [dynamic]string
 	defer {
@@ -99,9 +92,7 @@ aseprite_build :: proc(root: string, config := ASEPRITE_BUILD_DEFAULT) -> (Built
 	}
 
 	output := foster.PackerPack(&packer)
-	if len(output.Pages) != 1 {
-		// 项目图集是单纹理的；多页说明 MaxSize 不够
-		for &page in output.Pages do foster.ImageDispose(&page)
+	if len(output.Pages) == 0 {
 		delete(output.Pages)
 		delete(output.Entries)
 		return {}, false
@@ -109,14 +100,15 @@ aseprite_build :: proc(root: string, config := ASEPRITE_BUILD_DEFAULT) -> (Built
 
 	clips_moved = true // clips 从这里起归产物所有
 	result := Built_Atlas{
-		image        = output.Pages[0], // 转移第 0 页所有权
-		regions      = make(map[string]Atlas_Region_Placement, len(output.Entries)),
+		pages        = make([]foster.Image, len(output.Pages)), // 接管每页像素
+		regions      = make(map[string]Atlas_Region, len(output.Entries)),
 		clips        = clips,
 		source_count = source_count,
 	}
+	copy(result.pages, output.Pages[:])
 	for &entry in output.Entries {
 		key, _ := strings.clone(entry.Name, context.allocator)
-		result.regions[key] = Atlas_Region_Placement{source = entry.Source, frame = entry.Frame}
+		result.regions[key] = Atlas_Region{page = entry.Page, rect = entry.Source, frame = entry.Frame}
 	}
 	delete(output.Pages)
 	delete(output.Entries)
@@ -131,8 +123,19 @@ built_atlas_dispose :: proc(built: ^Built_Atlas) {
 		delete(key, context.allocator)
 	}
 	delete(built.regions)
-	foster.ImageDispose(&built.image)
+	for &page in built.pages do foster.ImageDispose(&page)
+	delete(built.pages)
 	built^ = {}
+}
+
+// 用打包产物构造图集：图集接管每页像素与区域表（built 里随之清空），动画剪辑仍归 built。
+// 之后照常 atlas_upload；built 仍须 built_atlas_dispose 释放剪辑。
+atlas_from_built :: proc(atlas: ^Sprite_Atlas, built: ^Built_Atlas) {
+	atlas^ = {pages = make([]Atlas_Page, len(built.pages)), regions = built.regions}
+	for image, i in built.pages do atlas.pages[i].image = image
+	delete(built.pages)
+	built.pages = nil
+	built.regions = nil
 }
 
 // ------------------------------------------------------------------------------

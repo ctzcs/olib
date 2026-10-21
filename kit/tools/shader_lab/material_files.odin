@@ -66,11 +66,11 @@ material_file_write :: proc(path: string, bytes: []u8) -> string {
 }
 
 @(private)
-material_file_load :: proc(effect: sh.Shader_Desc, schemas: []sh.Schema, path: string) -> (sh.Instance, string) {
+material_file_load :: proc(shader: sh.Shader_Desc, schemas: []sh.Schema, path: string) -> (sh.Instance, string) {
 	storage := foster.StorageContainer{Root = filepath.dir(path)}
 	bytes := foster.ReadAllBytes(&storage, filepath.base(path), context.temp_allocator)
 	if len(bytes) == 0 do return {}, "Cannot read material instance or file is empty"
-	result, reason := sh.instance_decode(effect, schemas, bytes)
+	result, reason := sh.instance_decode(shader, schemas, bytes)
 	if reason != "" do return {}, reason
 	directory, _ := filepath.abs(filepath.dir(path), context.temp_allocator)
 	for &group in result.groups {

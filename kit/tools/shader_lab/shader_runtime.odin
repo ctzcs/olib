@@ -15,7 +15,7 @@ Pass_Target :: struct {
 	history: bool,
 }
 
-Effect_Runtime :: struct {
+Shader_Runtime :: struct {
 	desc: sh.Shader_Desc,
 	order: []int,
 	targets: []Pass_Target,
@@ -25,24 +25,24 @@ Effect_Runtime :: struct {
 	last_tick: u64,
 	clear_pending: bool,
 	ready: bool,
-	// 按参数组下标记录，长度等于所属 bank 的 shader_count。
+	// 按参数组下标记录，长度等于所属 bank 的 program_count。
 	validated_revision: []u64,
 	rejected_revision: []u64,
 	enabled, expanded: [32]bool,
 }
 
 // 启停是会话预览状态；同时重置反馈，避免切换后混入旧历史。
-set_pass_enabled :: proc(s: ^Session, effect, pass: int, enabled: bool) {
-	if !s.initialized || effect < 0 || effect >= len(s.effects) do return
-	e := &s.effects[effect]
+set_pass_enabled :: proc(s: ^Session, shader, pass: int, enabled: bool) {
+	if !s.initialized || shader < 0 || shader >= len(s.shaders) do return
+	e := &s.shaders[shader]
 	if pass < 0 || pass >= len(e.desc.passes) || e.enabled[pass] == enabled do return
 	cancel(s)
 	e.enabled[pass] = enabled
-	effect_reset(s, e)
+	shader_reset(s, e)
 }
 
 // 唯一 Current 输入自动直通；无输入或多个 Current 输入时使用声明的清屏色。
-pass_bypass :: proc(s: ^Session, e: ^Effect_Runtime, pass: int, target: ^foster.Target) {
+pass_bypass :: proc(s: ^Session, e: ^Shader_Runtime, pass: int, target: ^foster.Target) {
 	p := e.desc.passes[pass]
 	target_clear(s, target, p.target.clear)
 	source_name: sh.Target_Ref
@@ -64,8 +64,8 @@ pass_bypass :: proc(s: ^Session, e: ^Effect_Runtime, pass: int, target: ^foster.
 	}
 }
 
-effect_dispose :: proc(e: ^Effect_Runtime) {
-	effect_targets_release(e)
+shader_dispose :: proc(e: ^Shader_Runtime) {
+	shader_targets_release(e)
 	delete(e.targets)
 	delete(e.order)
 	delete(e.validated_revision)
@@ -75,7 +75,7 @@ effect_dispose :: proc(e: ^Effect_Runtime) {
 }
 
 // 仅释放 GPU 目标，保留声明、Pass 启停和折叠状态。
-effect_targets_release :: proc(e: ^Effect_Runtime) {
+shader_targets_release :: proc(e: ^Shader_Runtime) {
 	for &target in e.targets {
 		for &buffer in target.buffers {
 			foster.TargetDispose(&buffer)
@@ -87,10 +87,10 @@ effect_targets_release :: proc(e: ^Effect_Runtime) {
 	for &r in e.rejected_revision do r = 0
 }
 
-effect_targets_trim :: proc(bank: ^Parameter_Bank, selected: int) {
+shader_targets_trim :: proc(bank: ^Parameter_Bank, selected: int) {
 	if bank == nil do return
-	for &e, i in bank.effects {
-		if i != selected do effect_targets_release(&e)
+	for &e, i in bank.shaders {
+		if i != selected do shader_targets_release(&e)
 	}
 }
 
@@ -107,15 +107,15 @@ target_clear :: proc(s: ^Session, target: ^foster.Target, color: [4]f32) {
 }
 
 // Resize 先分配整套新目标，失败保留该效果旧目标。历史目标始终两张，其余只分配一张。
-effect_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int) -> bool {
-	effect_targets_trim(bank, selected)
-	for &used in bank.shader_used do used = false
-	for &e, effect_index in bank.effects {
-		if effect_index != selected do continue
+shader_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int) -> bool {
+	shader_targets_trim(bank, selected)
+	for &used in bank.program_used do used = false
+	for &e, shader_index in bank.shaders {
+		if shader_index != selected do continue
 		model := sh.shader_is_material(e.desc)
 		changed := false
 		for p, i in e.desc.passes {
-			bank.shader_used[bank_index(bank, string(p.params))] = true
+			bank.program_used[bank_index(bank, string(p.params))] = true
 			if model && i > 0 do continue
 			w, h := target_size(p.target, int(s.viewport.Width), int(s.viewport.Height))
 			if w > 8192 || h > 8192 {
@@ -149,7 +149,7 @@ effect_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int
 				for &buffer in target.buffers do foster.TargetDispose(&buffer)
 			}
 			delete(next)
-			bank_error(s, "Cannot allocate effect targets; previous targets retained")
+			bank_error(s, "Cannot allocate shader targets; previous targets retained")
 			return false
 		}
 		for &target in e.targets {
@@ -157,12 +157,12 @@ effect_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int
 		}
 		delete(e.targets)
 		e.targets = next
-		effect_reset(s, &e)
+		shader_reset(s, &e)
 	}
 	return true
 }
 
-effect_reset :: proc(s: ^Session, e: ^Effect_Runtime) {
+shader_reset :: proc(s: ^Session, e: ^Shader_Runtime) {
 	e.current = 0
 	e.frame = 0
 	e.time = 0
@@ -175,7 +175,7 @@ effect_reset :: proc(s: ^Session, e: ^Effect_Runtime) {
 
 reset_history :: proc(s: ^Session) {
 	if !s.initialized do return
-	if s.selected_effect >= 0 do effect_reset(s, &s.effects[s.selected_effect])
+	if s.selected_shader >= 0 do shader_reset(s, &s.shaders[s.selected_shader])
 }
 
 step :: proc(s: ^Session) {
@@ -242,7 +242,7 @@ pass_uniforms :: proc(s: ^Session, index: int, draw: sh.Pass_Draw, target: foste
 }
 
 // 暂停时重绘当前输出但保持 Previous 不动，因此调参数不会偷偷推进反馈模拟。
-effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
+shader_render :: proc(s: ^Session, e: ^Shader_Runtime) -> ^foster.Texture {
 	if e.clear_pending {
 		for p, i in e.desc.passes {
 			if sh.shader_is_material(e.desc) && i > 0 do continue
@@ -264,7 +264,7 @@ effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
 	e.last_tick = s.tick_serial
 	e.last_clock = s.clock
 	s.step_requested = false
-	if sh.shader_is_material(e.desc) do return material_effect_render(s, e)
+	if sh.shader_is_material(e.desc) do return material_shader_render(s, e)
 	for i in e.order {
 		p := e.desc.passes[i]
 		index := bank_index(s.bank, string(p.params))

@@ -53,11 +53,11 @@ material_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) 
 		{name = "Body", preview = "3d", fields = {{id = "amount", kind = .Scalar, maximum = 1}}},
 		{name = "Outline", preview = "3d", fields = {{id = "image", kind = .Texture, texture = "edge.png"}}},
 	}
-	effect := sh.Shader_Desc{name = "Outlined", output = "color", passes = {
+	shader := sh.Shader_Desc{name = "Outlined", output = "color", passes = {
 		{id = "body", draw = .Model, output = "color", params = "Body"},
 		{id = "outline", draw = .Model, output = "color", params = "Outline"},
 	}}
-	instance, reason := sh.instance_make(effect, schemas)
+	instance, reason := sh.instance_make(shader, schemas)
 	defer sh.instance_dispose(&instance)
 	if !testing.expect_value(t, reason, "") do return
 	instance.groups[0].values[0].number[0] = 0.75
@@ -68,7 +68,7 @@ material_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) 
 	path := fmt.tprintf("%s/material.json", directory)
 	defer _ = os.remove(path)
 	testing.expect_value(t, material_file_save(instance, path, directory), "")
-	loaded, load_error := material_file_load(effect, schemas, path)
+	loaded, load_error := material_file_load(shader, schemas, path)
 	defer sh.instance_dispose(&loaded)
 	if !testing.expect(t, load_error == "") do return
 	testing.expect_value(t, loaded.groups[0].values[0].number[0], 0.75)
@@ -77,7 +77,7 @@ material_file_roundtrip_and_failed_save_retains_previous :: proc(t: ^testing.T) 
 	testing.expect_value(t, instance.groups[1].values[0].texture, "edge.png")
 	instance.groups[0].values[0].number[0] = 5
 	testing.expect(t, material_file_save(instance, path, directory) != "")
-	retained, retained_error := material_file_load(effect, schemas, path)
+	retained, retained_error := material_file_load(shader, schemas, path)
 	defer sh.instance_dispose(&retained)
 	testing.expect(t, retained_error == "" && retained.groups[0].values[0].number[0] == 0.75)
 }

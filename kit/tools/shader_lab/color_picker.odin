@@ -82,7 +82,7 @@ color_picker_value :: proc(p: ^Color_Picker) -> [4]f32 {
 
 color_picker_target :: proc(s: ^Session) -> ^sh.Value {
 	p := &s.color_picker
-	for &group in s.parameters[:s.shader_count] {
+	for &group in s.parameters[:s.program_count] {
 		if !group.available || group.name != p.group do continue
 		for f, i in group.live.fields {
 			if f.id == p.field && f.kind == .Color do return &group.values[i]

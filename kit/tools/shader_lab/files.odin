@@ -15,7 +15,7 @@ File_Request :: struct {
 	id, generation: u64,
 	action: File_Action,
 	group, field: string,
-	effect: string, // 模型材质请求绑定整个效果，切换选中项不会重定向保存/载入。
+	shader: string, // 模型材质请求绑定整个效果，切换选中项不会重定向保存/载入。
 }
 
 // 返回借用描述；宿主只需保留 id/action，路径在主线程通过 file_reply 交回。
@@ -26,20 +26,20 @@ file_request :: proc(s: ^Session) -> File_Request {
 file_request_clear :: proc(s: ^Session) {
 	delete(s.request.group)
 	delete(s.request.field)
-	delete(s.request.effect)
+	delete(s.request.shader)
 	s.request = {}
 }
 
 request_file :: proc(s: ^Session, index: int, action: File_Action, field := "") {
-	if !s.file_dialogs || s.request.id != 0 || index < 0 || index >= s.shader_count do return
+	if !s.file_dialogs || s.request.id != 0 || index < 0 || index >= s.program_count do return
 	p := &s.parameters[index]
 	if !p.available do return
 	color_picker_close(s, true)
 	s.request_serial += 1
 	s.request = {id = s.request_serial, generation = p.generation, action = action,
 		group = strings.clone(p.name), field = strings.clone(field)}
-	if action != .Texture && s.selected_effect >= 0 && sh.shader_is_material(s.effects[s.selected_effect].desc) {
-		s.request.effect = strings.clone(s.effects[s.selected_effect].desc.name)
+	if action != .Texture && s.selected_shader >= 0 && sh.shader_is_material(s.shaders[s.selected_shader].desc) {
+		s.request.shader = strings.clone(s.shaders[s.selected_shader].desc.name)
 	}
 }
 
@@ -49,11 +49,11 @@ file_reply :: proc(s: ^Session, id: u64, path: string) -> bool {
 	request := s.request
 	defer file_request_clear(s)
 	if path == "" do return true
-	for &p, index in s.parameters[:s.shader_count] {
+	for &p, index in s.parameters[:s.program_count] {
 		if !p.available || p.name != request.group || p.generation != request.generation do continue
-		if request.effect != "" {
-			for e, i in s.effects {
-				if e.desc.name != request.effect do continue
+		if request.shader != "" {
+			for e, i in s.shaders {
+				if e.desc.name != request.shader do continue
 				if request.action == .Save_Preset do return save_material(s, i, path)
 				if request.action == .Load_Preset do return load_material(s, i, path)
 			}
@@ -106,7 +106,7 @@ textures_update :: proc(s: ^Session) {
 	s.texture_poll += s.delta_time
 	if s.texture_poll < 0.25 do return
 	s.texture_poll = 0
-	for &p in s.parameters[:s.shader_count] {
+	for &p in s.parameters[:s.program_count] {
 		if !p.available do continue
 		slot := 0
 		for f, i in p.live.fields {

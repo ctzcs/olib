@@ -14,7 +14,7 @@ Preset :: sh.Resource
 
 // 全部数值与纹理准备成功后一次切换；失败不改变旧值和 GPU 资源。
 values_apply :: proc(s: ^Session, index: int, values: []sh.Value) -> bool {
-	if index < 0 || index >= s.shader_count do return false
+	if index < 0 || index >= s.program_count do return false
 	p := &s.parameters[index]
 	if !p.available || len(values) != len(p.live.fields) do return false
 	for f, i in p.live.fields {
@@ -62,7 +62,7 @@ values_apply :: proc(s: ^Session, index: int, values: []sh.Value) -> bool {
 
 // field=-1 恢复整组；其他值只恢复该字段。
 reset_defaults :: proc(s: ^Session, index: int, field: int = -1) -> bool {
-	if index < 0 || index >= s.shader_count do return false
+	if index < 0 || index >= s.program_count do return false
 	p := &s.parameters[index]
 	if !p.available || field < -1 || field >= len(p.live.fields) do return false
 	color_picker_close(s, false)
@@ -80,7 +80,7 @@ reset_defaults :: proc(s: ^Session, index: int, field: int = -1) -> bool {
 
 // 继续使用原有按钮与 API，保存结果同时是运行时材质资源。
 save_preset :: proc(s: ^Session, index: int, path: string) -> bool {
-	if index < 0 || index >= s.shader_count || path == "" do return false
+	if index < 0 || index >= s.program_count || path == "" do return false
 	p := &s.parameters[index]
 	if !p.available do return false
 	color_picker_close(s, true)
@@ -90,7 +90,7 @@ save_preset :: proc(s: ^Session, index: int, path: string) -> bool {
 }
 
 load_preset :: proc(s: ^Session, index: int, path: string) -> bool {
-	if index < 0 || index >= s.shader_count do return false
+	if index < 0 || index >= s.program_count do return false
 	p := &s.parameters[index]
 	if !p.available do return false
 	values, reason := preset_file_load(p.live, path)

@@ -97,8 +97,8 @@ parameters_panel :: proc(s: ^Session, index: int) {
 	p := &s.parameters[index]
 	if p.error != "" do ui.ui_label(&s.ctx, &s.theme, wrap_diagnostic(p.error))
 	for f, i in p.live.fields {
-		override, overridden := effect_value(s, index, f.id)
-		bound_texture, binding_label := effect_input(s, index, f.id)
+		override, overridden := shader_value(s, index, f.id)
+		bound_texture, binding_label := shader_input(s, index, f.id)
 		if clay.UI()(ui.ui_row_decl(4)) {
 			ui.ui_label(&s.ctx, &s.theme, f.label)
 			ui.ui_spacer()
@@ -209,7 +209,7 @@ parameter_texture_card :: proc(s: ^Session, p: ^Parameter_State, field: int, id:
 }
 
 parameter_texture_set :: proc(s: ^Session, index, field: int, path: string) {
-	if index < 0 || index >= s.shader_count do return
+	if index < 0 || index >= s.program_count do return
 	p := &s.parameters[index]
 	if !p.available || field < 0 || field >= len(p.live.fields) || p.live.fields[field].kind != .Texture do return
 	texture, ok := load_parameter_texture(s, s.device, path)
@@ -256,14 +256,14 @@ texture_retire_flush :: proc(s: ^Session) {
 // 离线字符集固定；热改标签后报告缺字，要求更新共享图集并重新构建。
 validate_parameter_fonts :: proc(s: ^Session) {
 	s.fonts_dirty = false
-	for p in s.parameters[:s.shader_count] {
+	for p in s.parameters[:s.program_count] {
 		validate_label_font(s, display_name(p.live.label, p.name))
 		validate_label_font(s, p.live.folder)
 		for f in p.live.fields {
 			validate_label_font(s, f.label)
 		}
 	}
-	for e in s.effects {
+	for e in s.shaders {
 		validate_label_font(s, display_name(e.desc.label, e.desc.name))
 		for p in e.desc.passes do validate_label_font(s, display_name(p.label, string(p.id)))
 	}

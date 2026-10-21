@@ -42,10 +42,10 @@ Session :: struct {
 	pending_bank: ^Parameter_Bank,
 	bank_error: string,
 	selected: int,
-	// selected_effect=-1 表示工作区无效果；inspect_pass 只决定编辑哪个 Pass。
-	selected_effect, inspect_pass: int,
+	// selected_shader=-1 表示工作区无效果；inspect_pass 只决定编辑哪个 Pass。
+	selected_shader, inspect_pass: int,
 	preview_pass: int, // -1 始终看最终效果；与编辑中的 inspect_pass 分开。
-	effect_menu, preview_settings: bool,
+	shader_menu, preview_settings: bool,
 	ui_scale: f32,
 	workspace: int, // 0: 2D，1: 3D。
 	workspace_empty: bool,
@@ -80,7 +80,7 @@ Session :: struct {
 	request_serial, schema_generation: u64,
 	preview_hooks: Preview_Hooks,
 	custom_preview: bool,
-	pending_effect: string, // new_shader 写出的效果名，编译进 bank 后自动选中
+	pending_shader: string, // new_shader 写出的效果名，编译进 bank 后自动选中
 	sidebar_width, sidebar_effective, splitter_original: f32,
 	sidebar_collapsed, compact, splitting: bool,
 	parameter_inset: f32, // 当前 Shader folder 的布局缩进，仅在构建 UI 时使用。
@@ -110,7 +110,7 @@ init :: proc(s: ^Session, device: ^foster.GraphicsDevice, config: Config) -> boo
 	}
 	s.device = device
 	s.bank = new(Parameter_Bank)
-	s.selected_effect = -1
+	s.selected_shader = -1
 	s.inspect_pass = -1
 	s.preview_pass = -1
 	s.ui_scale = 1
@@ -219,7 +219,7 @@ dispose :: proc(s: ^Session) {
 	delete(s.retired_textures)
 	foster.TargetDispose(&s.output)
 	delete(s.source_root)
-	delete(s.pending_effect)
+	delete(s.pending_shader)
 	for &workspace in s.workspaces do workspace_dispose(&workspace)
 	delete(s.scroll_offsets)
 	delete(s.scroll_restores)
@@ -238,19 +238,19 @@ update :: proc(s: ^Session, delta_time: f32) {
 	if !s.paused do s.clock += s.delta_time
 	parameters_update(s)
 	if s.pending_bank != nil {
-		for &shader in s.pending_bank.shaders[:s.pending_bank.shader_count] {
-			dev.update(&shader, f64(s.delta_time))
+		for &program in s.pending_bank.programs[:s.pending_bank.program_count] {
+			dev.update(&program, f64(s.delta_time))
 		}
 	}
 	textures_update(s)
 	templates_update(s)
 
-	for &shader, i in s.shaders[:s.shader_count] {
+	for &program, i in s.programs[:s.program_count] {
 		if !s.parameters[i].available do continue
-		if shader.status != s.last_status[i] {
-			fmt.printf("%s: %v (revision %d)\n", s.parameters[i].name, shader.status, shader.revision)
-			if shader.status == .Error && shader.diagnostic != "" do fmt.eprintln(shader.diagnostic)
-			s.last_status[i] = shader.status
+		if program.status != s.last_status[i] {
+			fmt.printf("%s: %v (revision %d)\n", s.parameters[i].name, program.status, program.revision)
+			if program.status == .Error && program.diagnostic != "" do fmt.eprintln(program.diagnostic)
+			s.last_status[i] = program.status
 		}
 	}
 }

@@ -30,15 +30,15 @@ new_shader :: proc(s: ^Session, template: Shader_Template) -> (path, reason: str
 		suffix := n == 1 ? "" : fmt.tprint(n)
 		name := fmt.tprintf("%s%s", base, suffix)
 		path = fmt.tprintf("%s/%s.oshader", s.source_root, name)
-		if os.exists(path) || template_effect_named(s, name) do continue
+		if os.exists(path) || template_shader_named(s, name) do continue
 		content, _ := strings.replace(text, `Shader "Template"`, fmt.tprintf(`Shader "%s"`, name), 1, context.temp_allocator)
 		if suffix != "" {
 			content, _ = strings.replace(content, fmt.tprintf(`Label "%s"`, label),
 				fmt.tprintf(`Label "%s %s"`, label, suffix), 1, context.temp_allocator)
 		}
 		if os.write_entire_file(path, transmute([]u8)content) != nil do return "", fmt.tprintf("Cannot write %s", path)
-		delete(s.pending_effect)
-		s.pending_effect = strings.clone(name)
+		delete(s.pending_shader)
+		s.pending_shader = strings.clone(name)
 		return path, ""
 	}
 	return "", fmt.tprintf("No free name for %s", base)
@@ -47,18 +47,18 @@ new_shader :: proc(s: ^Session, template: Shader_Template) -> (path, reason: str
 // 新建的效果编译进 bank 后选中它；编译失败时继续等待，错误照常显示在面板上。
 @(private)
 templates_update :: proc(s: ^Session) {
-	if s.pending_effect == "" do return
-	for e, i in s.effects {
-		if e.desc.name != s.pending_effect do continue
-		select_effect(s, i)
-		delete(s.pending_effect)
-		s.pending_effect = ""
+	if s.pending_shader == "" do return
+	for e, i in s.shaders {
+		if e.desc.name != s.pending_shader do continue
+		select_shader(s, i)
+		delete(s.pending_shader)
+		s.pending_shader = ""
 		return
 	}
 }
 
 @(private = "file")
-template_effect_named :: proc(s: ^Session, name: string) -> bool {
-	for e in s.effects do if e.desc.name == name do return true
+template_shader_named :: proc(s: ^Session, name: string) -> bool {
+	for e in s.shaders do if e.desc.name == name do return true
 	return false
 }

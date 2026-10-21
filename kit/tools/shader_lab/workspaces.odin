@@ -7,26 +7,26 @@ import ui "olib:kit/ui"
 import clay "olib:thirdparty/clay-odin"
 
 Workspace_State :: struct {
-	effect, pass, preview: string, // 拥有的稳定 ID，跨候选包提交仍有效。
+	shader, pass, preview: string, // 拥有的稳定 ID，跨候选包提交仍有效。
 	paused, custom_preview, preview_settings: bool,
 	mode: int,
 	yaw, pitch, distance: f32,
 }
 
 workspace_dispose :: proc(w: ^Workspace_State) {
-	delete(w.effect)
+	delete(w.shader)
 	delete(w.pass)
 	delete(w.preview)
 	w^ = {}
 }
 
 workspace_save :: proc(s: ^Session) {
-	if s.shader_count == 0 || s.workspace_empty do return
+	if s.program_count == 0 || s.workspace_empty do return
 	w := &s.workspaces[s.workspace]
 	workspace_dispose(w)
-	if s.selected_effect >= 0 {
-		e := &s.effects[s.selected_effect]
-		w.effect = strings.clone(e.desc.name)
+	if s.selected_shader >= 0 {
+		e := &s.shaders[s.selected_shader]
+		w.shader = strings.clone(e.desc.name)
 		if s.inspect_pass >= 0 do w.pass = strings.clone(string(e.desc.passes[s.inspect_pass].id))
 		if s.preview_pass >= 0 do w.preview = strings.clone(string(e.desc.passes[s.preview_pass].id))
 	}
@@ -43,7 +43,7 @@ workspace_view_restore :: proc(s: ^Session) {
 	w := &s.workspaces[s.workspace]
 	s.mode = s.workspace == 1 ? 2 : 0
 	s.preview_settings = false
-	s.effect_menu = false
+	s.shader_menu = false
 	s.mode = w.mode
 	s.paused = w.paused
 	s.custom_preview = w.custom_preview
@@ -64,29 +64,29 @@ select_workspace :: proc(s: ^Session, dimension: int) {
 workspace_restore :: proc(s: ^Session) {
 	workspace_view_restore(s)
 	w := &s.workspaces[s.workspace]
-	s.selected_effect = -1
+	s.selected_shader = -1
 	s.inspect_pass = -1
 	s.preview_pass = -1
 	s.workspace_empty = false
 	chosen := -1
-	for e, i in s.effects {
-		if effect_has_3d(s, i) != (s.workspace == 1) do continue
+	for e, i in s.shaders {
+		if shader_has_3d(s, i) != (s.workspace == 1) do continue
 		if chosen < 0 do chosen = i
-		if e.desc.name == w.effect {
+		if e.desc.name == w.shader {
 			chosen = i
 			break
 		}
 	}
 	if chosen >= 0 {
 		pass := -1
-		if s.effects[chosen].desc.name == w.effect {
-			for p, i in s.effects[chosen].desc.passes {
+		if s.shaders[chosen].desc.name == w.shader {
+			for p, i in s.shaders[chosen].desc.passes {
 				if string(p.id) == w.pass do pass = i
 			}
 		}
-		select_effect(s, chosen, pass)
-		if s.effects[chosen].desc.name == w.effect {
-			for p, i in s.effects[chosen].desc.passes {
+		select_shader(s, chosen, pass)
+		if s.shaders[chosen].desc.name == w.shader {
+			for p, i in s.shaders[chosen].desc.passes {
 				if string(p.id) == w.preview do s.preview_pass = i
 			}
 		}
@@ -124,8 +124,8 @@ scroll_memory_restore :: proc(s: ^Session) {
 
 inspector_scroll_id :: proc(s: ^Session) -> string {
 	if s.preview_settings do return fmt.tprintf("inspector:settings:%d", s.workspace)
-	if s.selected_effect >= 0 && s.inspect_pass >= 0 {
-		e := &s.effects[s.selected_effect]
+	if s.selected_shader >= 0 && s.inspect_pass >= 0 {
+		e := &s.shaders[s.selected_shader]
 		return fmt.tprintf("inspector:%d:%s:%s", s.workspace, e.desc.name, e.desc.passes[s.inspect_pass].id)
 	}
 	return fmt.tprintf("inspector:%d:empty", s.workspace)

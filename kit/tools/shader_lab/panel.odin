@@ -26,7 +26,7 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 	ui.ui_set_modal(&s.ctx, s.color_picker.open ? "color-picker" : "")
 	ui.ui_begin(&s.ctx, s.delta_time)
 	scroll_memory_capture(s)
-	if input.escape do s.effect_menu = false
+	if input.escape do s.shader_menu = false
 	root := ui.ui_column_decl(8)
 	root.layout.padding = clay.PaddingAll(8)
 	if clay.UI()(root) {
@@ -40,9 +40,9 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 			ui.ui_spacer()
 			if w > 700 do ui.ui_label_dim(&s.ctx, &s.small_theme, "保存源码即更新")
 			if lab_button(s, "pause", s.paused ? "播放" : "暂停", icon = s.paused ? "media/play" : "media/pause") do s.paused = !s.paused
-			if s.selected_effect >= 0 && w > 900 {
-				if lab_button(s, "effect-step", "单步", icon = "media/next-frame") do step(s)
-				if lab_button(s, "effect-reset", "重置反馈", icon = "ui/refresh") do reset_history(s)
+			if s.selected_shader >= 0 && w > 900 {
+				if lab_button(s, "shader-step", "单步", icon = "media/next-frame") do step(s)
+				if lab_button(s, "shader-reset", "重置反馈", icon = "ui/refresh") do reset_history(s)
 			}
 		}
 		if !s.sidebar_collapsed {
@@ -61,16 +61,16 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 						if lab_button(s, "workspace:2d", "2D", s.workspace == 0, true, "media/image") do select_workspace(s, 0)
 						if lab_button(s, "workspace:3d", "3D", s.workspace == 1, true, "media/pc-host") do select_workspace(s, 1)
 					}
-					effect_selector(s)
+					shader_selector(s)
 				}
 				list_height := math.clamp((h-84)*0.25, 80, 156)
 				list := ui.ui_column_decl(6)
 				list.layout.sizing.height = clay.SizingFixed(list_height)
 				if clay.UI()(list) {
 					ui.ui_label_dim(&s.ctx, &s.small_theme, "处理流程 · 勾选启用，点击编辑")
-					id := s.selected_effect >= 0 ? fmt.tprintf("passes:%d:%s", s.workspace, s.effects[s.selected_effect].desc.name) : fmt.tprintf("passes:%d", s.workspace)
+					id := s.selected_shader >= 0 ? fmt.tprintf("passes:%d:%s", s.workspace, s.shaders[s.selected_shader].desc.name) : fmt.tprintf("passes:%d", s.workspace)
 					if clay.UI()(lab_scroll(s, id, list_height-24, panel_width(s), 4)) {
-						effects_panel(s)
+						passes_panel(s)
 					}
 				}
 				if clay.UI()(ui.ui_row_decl(6)) {
@@ -105,11 +105,11 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 			ui.ui_block_pointer(&s.ctx, "preview-toolbar")
 			if clay.UI()(bar) {
 				ui.ui_label_dim(&s.ctx, &s.small_theme, "预览")
-				if s.selected_effect >= 0 && len(s.effects[s.selected_effect].desc.passes) > 1 {
-					if lab_button(s, "effect-final", "最终效果", s.preview_pass < 0, icon = "media/display") do s.preview_pass = -1
+				if s.selected_shader >= 0 && len(s.shaders[s.selected_shader].desc.passes) > 1 {
+					if lab_button(s, "shader-final", "最终效果", s.preview_pass < 0, icon = "media/display") do s.preview_pass = -1
 					if lab_button(s, "pass-preview", "当前 Pass", s.preview_pass >= 0, icon = "ui/visible") do s.preview_pass = s.inspect_pass
 					if s.preview_pass >= 0 && s.viewport.Width/s.ui_scale > 550 {
-						p := s.effects[s.selected_effect].desc.passes[s.preview_pass]
+						p := s.shaders[s.selected_shader].desc.passes[s.preview_pass]
 						ui.ui_label_dim(&s.ctx, &s.small_theme, display_name(p.label, string(p.id)))
 					}
 				} else {
@@ -123,7 +123,7 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 			ui.ui_label_dim(&s.ctx, &s.small_theme, status)
 			ui.ui_spacer()
 			if w > 650 {
-				time := s.selected_effect >= 0 ? s.effects[s.selected_effect].time : s.clock
+				time := s.selected_shader >= 0 ? s.shaders[s.selected_shader].time : s.clock
 				ui.ui_label_dim(&s.ctx, &s.small_theme, fmt.tprintf("%.2fs   UI %d%%   %s", time, int(s.ui_scale*100), preview_size_label(s)))
 			}
 		}
@@ -151,9 +151,9 @@ panel :: proc(s: ^Session, pixel_w, pixel_h: f32) {
 }
 
 preview_options :: proc(s: ^Session) {
-	if s.workspace_empty || s.shader_count == 0 do return
+	if s.workspace_empty || s.program_count == 0 do return
 	ui.ui_label_dim(&s.ctx, &s.small_theme, "预览载体 · 不会切换 Shader")
-	model3d := s.selected_effect >= 0 ? effect_has_3d(s, s.selected_effect) : s.parameters[s.selected].live.preview == "3d"
+	model3d := s.selected_shader >= 0 ? shader_has_3d(s, s.selected_shader) : s.parameters[s.selected].live.preview == "3d"
 	if clay.UI()(ui.ui_row_decl(6)) {
 		for id, i in ([4]string{"2D / Fullscreen", "2D / Sprite", "3D / Sphere", "3D / Cube"}) {
 			if model3d != (i >= 2) do continue
@@ -172,7 +172,7 @@ preview_options :: proc(s: ^Session) {
 			s.distance = 4
 		}
 	}
-	if s.selected_effect >= 0 {
+	if s.selected_shader >= 0 {
 		if clay.UI()(ui.ui_row_decl(6)) {
 			if lab_button(s, "settings-step", "单步", icon = "media/next-frame") do step(s)
 			if lab_button(s, "settings-reset", "重置反馈", icon = "ui/refresh") do reset_history(s)
@@ -188,9 +188,9 @@ lab_diagnostics :: proc(s: ^Session) {
 	if s.parameter_watch.diagnostic != "" {
 		ui.ui_label(&s.ctx, &s.theme, wrap_diagnostic(s.parameter_watch.diagnostic))
 	}
-	if s.shader_count > 0 && s.shaders[s.selected].diagnostic != "" {
+	if s.program_count > 0 && s.programs[s.selected].diagnostic != "" {
 		if clay.UI()(ui.ui_scroll_decl(&s.ctx, "diagnostic", 170, panel_width(s), gap = 4)) {
-			message, _ := strings.replace_all(s.shaders[s.selected].diagnostic, s.source_root,
+			message, _ := strings.replace_all(s.programs[s.selected].diagnostic, s.source_root,
 				"shaders", context.temp_allocator)
 			ui.ui_label(&s.ctx, &s.theme, wrap_diagnostic(message))
 		}

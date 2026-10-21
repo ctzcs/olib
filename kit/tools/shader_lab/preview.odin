@@ -29,14 +29,14 @@ render :: proc(s: ^Session, target: foster.DrawableTarget, region: foster.Rect, 
 		foster.TargetDispose(&s.output)
 		foster.TargetInit(&s.output, device, w, h)
 	}
-	if s.pending_bank != nil && bank_apply(s, s.pending_bank, bank_selected_effect(s, s.pending_bank)) do bank_commit(s)
+	if s.pending_bank != nil && bank_apply(s, s.pending_bank, bank_selected_shader(s, s.pending_bank)) do bank_commit(s)
 	// 新布局尚未整体通过时，只准备旧包当前效果，不分批应用新的 HLSL。
-	_ = bank_apply(s, s.bank, s.selected_effect, s.pending_bank == nil)
+	_ = bank_apply(s, s.bank, s.selected_shader, s.pending_bank == nil)
 	if s.fonts_dirty do validate_parameter_fonts(s)
 	panel(s, f32(w), f32(h))
 	image: ^foster.Texture
-	if s.selected_effect >= 0 && s.effects[s.selected_effect].ready {
-		image = effect_render(s, &s.effects[s.selected_effect])
+	if s.selected_shader >= 0 && s.shaders[s.selected_shader].ready {
+		image = shader_render(s, &s.shaders[s.selected_shader])
 	} else {
 		s.step_requested = false
 	}
@@ -56,8 +56,8 @@ render :: proc(s: ^Session, target: foster.DrawableTarget, region: foster.Rect, 
 	texture_retire_flush(s)
 	// UI 可能刚切换效果；等本帧缩略图与合成命令提交完，再释放旧引用。
 	// 新选中项在下一帧开始时创建目标，避免 UI 尚在引用旧纹理时销毁。
-	effect_targets_trim(s.bank, s.selected_effect)
-	if s.pending_bank != nil do effect_targets_trim(s.pending_bank, bank_selected_effect(s, s.pending_bank))
+	shader_targets_trim(s.bank, s.selected_shader)
+	if s.pending_bank != nil do shader_targets_trim(s.pending_bank, bank_selected_shader(s, s.pending_bank))
 	s.render_serial += 1
 	return s.capture
 }

@@ -12,7 +12,7 @@ import world "olib:kit/world"
 
 // 材质效果的预览：借用 bank 的 GPU 绑定组成材质，用 Render2D / Render3D 记录后提交到预览目标，
 // 渲染状态与游戏一致。Pass 启停与“只预览到第 N 个 Pass”在这里逐 Pass 处理。
-material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
+material_shader_render :: proc(s: ^Session, e: ^Shader_Runtime) -> ^foster.Texture {
 	target := &e.targets[0].buffers[0]
 	target_clear(s, target, e.desc.passes[0].target.clear)
 	// 每帧组装：编辑或载入参数时，数值切片会被替换。绑定按 Pass 首次引用参数组的顺序排列。
@@ -37,8 +37,8 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 		schemas[i] = p.live
 		bindings[i] = {p.live, p.values, &s.materials[index], samplers}
 	}
-	effect := mat.Material_Shader{desc = e.desc, schemas = schemas}
-	material, reason := mat.material_from_bindings(&s.library, &effect, bindings)
+	shader := mat.Material_Shader{desc = e.desc, schemas = schemas}
+	material, reason := mat.material_from_bindings(&s.library, &shader, bindings)
 	if reason != "" {
 		bank_error(s, fmt.tprintf("Cannot bind material: %s", reason))
 		return foster.TargetAttachment(target)
@@ -94,7 +94,7 @@ material_effect_render :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 
 // 被检查 Pass 的帧字段可选预览图片；业务运行时该字段由 Sprite 当前帧覆盖。
 @(private = "file")
-preview_sprite_texture :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Texture {
+preview_sprite_texture :: proc(s: ^Session, e: ^Shader_Runtime) -> ^foster.Texture {
 	texture := &s.sprite_texture
 	for pass, i in e.desc.passes {
 		if i != s.inspect_pass || pass.sprite_texture == "" do continue
@@ -113,10 +113,10 @@ preview_sprite_texture :: proc(s: ^Session, e: ^Effect_Runtime) -> ^foster.Textu
 
 
 // 保存整个对象效果的参数；临时借用组和数值，文件保存函数内部复制路径。
-save_material :: proc(s: ^Session, effect: int, path: string) -> bool {
-	if effect < 0 || effect >= len(s.effects) || !sh.shader_is_material(s.effects[effect].desc) do return false
+save_material :: proc(s: ^Session, shader: int, path: string) -> bool {
+	if shader < 0 || shader >= len(s.shaders) || !sh.shader_is_material(s.shaders[shader].desc) do return false
 	color_picker_close(s, true)
-	e := s.effects[effect].desc
+	e := s.shaders[shader].desc
 	groups := make([dynamic]sh.Instance_Group, context.temp_allocator)
 	for pass in e.passes {
 		found := false
@@ -131,11 +131,11 @@ save_material :: proc(s: ^Session, effect: int, path: string) -> bool {
 }
 
 // 所有参数和贴图准备完成再提交；任一组失败都保留整个旧材质。
-load_material :: proc(s: ^Session, effect: int, path: string) -> bool {
-	if effect < 0 || effect >= len(s.effects) do return false
-	e := s.effects[effect].desc
-	schemas := make([]sh.Schema, s.shader_count, context.temp_allocator)
-	for p, i in s.parameters[:s.shader_count] do schemas[i] = p.live
+load_material :: proc(s: ^Session, shader: int, path: string) -> bool {
+	if shader < 0 || shader >= len(s.shaders) do return false
+	e := s.shaders[shader].desc
+	schemas := make([]sh.Schema, s.program_count, context.temp_allocator)
+	for p, i in s.parameters[:s.program_count] do schemas[i] = p.live
 	next, reason := material_file_load(e, schemas, path)
 	defer sh.instance_dispose(&next)
 	reporter := &s.parameters[bank_index(s.bank, string(e.passes[0].params))]

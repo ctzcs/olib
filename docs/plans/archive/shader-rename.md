@@ -1,5 +1,8 @@
 # Plan：effect 改叫 Shader，补后处理模板与做法说明
 
+> **状态：已完成（2026-10-21）** · 提交 `1a47373`..`95eb538`（olib_sample：`7145b93`、`9418a4f`、`6dd26ee`）
+> 偏离：① 前置的 `tools/check` 基线沿用 rendering-usability 最后一次完整运行（代码相同，只多了计划文件）。② `Schema.shader` 未改名：它记的是参数组来自哪个 `.oshader`，正合新含义。③ 第 2 步另给材质文件头的匿名结构体和测试里自建的清单结构体加了 `json:"effect"` 标签；测试里原来指 GPU 程序的局部 `shader` 改叫 `program`。④ 第 3 步局部 `new_effect` 改叫 `new_selected`（避开 `new_shader`），`effects_panel` 改叫 `passes_panel`，`shader_folder` 改叫 `group_folder`（控件 ID `group-folder:`）；olib_sample 的 `shared/shader_lab_files/bridge.odin` 一并改名；`bank.odin` 里别人未提交的那行为能编译跟着改成 `b.programs`（只改标识符，仍未提交）。⑤ 第 4 步改正了 `olib/instance.hlsli` 注释里失效的目录名，Shader Lab 示例的 `sources.json` 记录随之更新（字节码不变），与“不重新生成 Compiled”略有出入；表示画面效果的“最终效果”“拖尾效果”“技能效果”等保留；README 搬家后的相对链接一并修正。⑥ 第 5 步 features 检查按模板枚举逐个新建，加上后处理不需要改验证程序，olib_sample 没有对应提交。⑦ 截图：material 示例逐像素一致；Shader Lab 只有侧栏“效果 / 选择效果”改为“Shader / 选择 Shader”处的像素不同，新建模板截图换成最后新建的后处理，菜单截图改名为 features-shader-menu。
+
 ## 背景
 
 `.oshader` 文件里写的是 `Shader "Trail2D" { ... }`，代码和文档里同一个东西却叫 effect / 效果（`fx.Effect_Desc`、

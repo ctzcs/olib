@@ -11,7 +11,8 @@ package imgui_impl_ofoster
 //   - Init      once after foster.InitApp / in StartupProc
 //   - NewFrame  every update  (feeds io from app.Input.State)
 //   - Render    every render  (ends ofoster's open pass, builds + draws UI
-//               into the swapchain on top of the scene)
+//               into the swapchain on top of the scene); BeginRender/EndRender
+//               are the split form for callers that submit widgets inline
 //   - Shutdown  before foster.Dispose
 //
 // Usage:
@@ -39,6 +40,11 @@ package imgui_impl_ofoster
 // Notes / limitations:
 //   - single window, no multi-viewport support (ofoster owns the window)
 //   - gamepad navigation is not fed (keyboard + mouse only)
+//   - state is per linked module: a hot-reloaded DLL gets its own ImGui
+//     context and must Init on load and Shutdown before it is unloaded
+//   - no helper yet for showing foster textures through imgui.Image, no IME
+//     candidate positioning (Platform_SetImeDataFn), and the default font has
+//     no CJK glyphs (add a TTF to the font atlas when needed)
 
 import "core:c"
 import "core:fmt"
@@ -212,12 +218,25 @@ WantCaptureKeyboard :: proc() -> bool {
 // swapchain. Call it from the app's RenderProc after drawing the scene.
 // build_ui (optional) submits widgets, e.g. proc(app: ^foster.App) {...}.
 Render :: proc(owner: ^foster.App, build_ui: foster.AppCallback = nil) {
-	if !ready {
+	if !BeginRender(owner) {
 		return
+	}
+	if build_ui != nil {
+		build_ui(owner)
+	}
+	EndRender(owner)
+}
+
+// BeginRender opens an ImGui frame; submit widgets, then call EndRender to
+// draw them over the swapchain. When it returns false no frame was opened
+// (not initialized, or no swapchain this frame): skip both widgets and EndRender.
+BeginRender :: proc(owner: ^foster.App) -> bool {
+	if !ready {
+		return false
 	}
 	device := &owner.GraphicsDevice
 	if device.CommandBuffer == nil || device.SwapchainTexture == nil {
-		return
+		return false
 	}
 
 	io := imgui.GetIO()
@@ -241,11 +260,12 @@ Render :: proc(owner: ^foster.App, build_ui: foster.AppCallback = nil) {
 
 	imgui_sdlgpu3.NewFrame()
 	imgui.NewFrame()
+	return true
+}
 
-	if build_ui != nil {
-		build_ui(owner)
-	}
-
+// EndRender finishes the frame opened by BeginRender and draws it.
+EndRender :: proc(owner: ^foster.App) {
+	device := &owner.GraphicsDevice
 	update_mouse_cursor()
 	imgui.Render()
 	draw_data := imgui.GetDrawData()

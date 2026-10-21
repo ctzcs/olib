@@ -80,6 +80,7 @@ Session :: struct {
 	request_serial, schema_generation: u64,
 	preview_hooks: Preview_Hooks,
 	custom_preview: bool,
+	pending_effect: string, // new_shader 写出的效果名，编译进 bank 后自动选中
 	sidebar_width, sidebar_effective, splitter_original: f32,
 	sidebar_collapsed, compact, splitting: bool,
 	parameter_inset: f32, // 当前 Shader folder 的布局缩进，仅在构建 UI 时使用。
@@ -218,6 +219,7 @@ dispose :: proc(s: ^Session) {
 	delete(s.retired_textures)
 	foster.TargetDispose(&s.output)
 	delete(s.source_root)
+	delete(s.pending_effect)
 	for &workspace in s.workspaces do workspace_dispose(&workspace)
 	delete(s.scroll_offsets)
 	delete(s.scroll_restores)
@@ -241,6 +243,7 @@ update :: proc(s: ^Session, delta_time: f32) {
 		}
 	}
 	textures_update(s)
+	templates_update(s)
 
 	for &shader, i in s.shaders[:s.shader_count] {
 		if !s.parameters[i].available do continue

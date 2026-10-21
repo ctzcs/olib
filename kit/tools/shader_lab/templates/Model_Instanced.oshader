@@ -1,0 +1,59 @@
+// 新建的 3D 实例化模型材质：同一网格、同一材质的模型由 Render3D 自动合成一次 Draw，
+// 也可以用 r3d.Model_Buffer 常驻上传大量实例。改 Properties 与 HLSL，保存即热重载。
+// 接口与引擎块说明见 olib kit/rendering/shader/lang/README.md 的 instanced 约定。
+Shader "Template"
+{
+    Label "新实例化模型材质"
+    Preview 3D
+    Output "color"
+    Instanced
+    Properties
+    {
+        _color ("Color", Color) = (0.8,0.8,0.8,1)
+        // [Instance] 字段随每个实例传入；用 mat.instance_slot 设置。
+        [Instance] _brightness ("Brightness", Range(0,2)) = 1
+    }
+
+    Pass "main"
+    {
+        Label "本体"
+        Draw Model
+        Cull Back
+        Blend Opaque
+        ZTest Less
+        ZWrite On
+        Target { Clear (0.12,0.15,0.20,1) }
+        HLSLPROGRAM
+        // 引擎块：instanced 时 Wvp 即 ViewProjection、World 为单位矩阵，世界矩阵用 olib_world 从实例取。
+        #include "olib/model.hlsli"
+        // OlibInstanceInput 必须是 Input 的第一个成员，网格属性随后（D3D12 规则）。
+        struct Input {
+            OlibInstanceInput Instance;
+            float3 Position : TEXCOORD0;
+            float3 Normal : TEXCOORD1;
+        };
+        // Output 里的成员都要在 fragment_main 里用到（D3D12 规则）。
+        struct Output {
+            float4 Position : SV_Position;
+            float3 Normal : TEXCOORD0;
+            OlibInstance Instance;
+        };
+        Output vertex_main(Input v)
+        {
+            Output o;
+            float4x4 world = olib_world(v.Instance);
+            o.Position = mul(mul(float4(v.Position, 1), world), Wvp);
+            o.Normal = mul(v.Normal, (float3x3)world);
+            o.Instance = olib_instance_from(v.Instance);
+            return o;
+        }
+        float4 fragment_main(Output v) : SV_Target0
+        {
+            olib_instance = v.Instance; // 之后 _brightness 与 InstanceTint（这个实例的颜色）可用
+            float light = 0.25 + 0.75 * saturate(dot(normalize(v.Normal), normalize(float3(-0.5, 0.8, 0.6))));
+            float3 color = _color.rgb * InstanceTint.rgb * _brightness;
+            return float4(color * light, _color.a * InstanceTint.a);
+        }
+        ENDHLSL
+    }
+}

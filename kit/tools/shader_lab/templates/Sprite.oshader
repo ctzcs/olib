@@ -1,0 +1,48 @@
+// 新建的 2D 精灵材质：改 Properties 与 HLSL，保存即热重载。
+// 游戏里用 tools/shaders 生成产物、mat.material_register_directory 登记后，mat.material_create(&materials, "<Shader 名>") 创建，
+// r2d.image(..., material = m) 绘制。接口与引擎块说明见 olib kit/rendering/shader/lang/README.md。
+Shader "Template"
+{
+    Label "新精灵材质"
+    Preview 2D
+    Output "color"
+    Properties
+    {
+        _image ("Image", 2D) = ""
+        _tint ("Tint", Color) = (1,1,1,1)
+        // [Instance] 字段随每个精灵传入，不同取值的精灵仍能合成一次 Draw；用 mat.instance_slot 设置。
+        [Instance] _glow ("Glow", Range(0,1)) = 0
+    }
+
+    Pass "main"
+    {
+        Label "本体"
+        Draw Sprite
+        // 当前帧贴图写进哪个 2D 属性。
+        SpriteTexture _image
+        Target { Clear (0.12,0.15,0.20,1) }
+        HLSLPROGRAM
+        // 引擎块：顶点 Projection、VertexClock；片元 Clock、Pointer、Tint。
+        #include "olib/sprite.hlsli"
+        // 精灵统一顶点接口：Input 以 OlibSpriteInput 开头，Output 里的成员都要在 fragment_main 里用到（D3D12 规则）。
+        struct Input { OlibSpriteInput Sprite; };
+        struct Output { float4 Position : SV_Position; float2 Uv : TEXCOORD0; OlibInstance Instance; };
+        Output vertex_main(Input v)
+        {
+            OlibSprite s = olib_sprite(v.Sprite);
+            Output o;
+            o.Position = mul(Projection, float4(s.position, 0, 1));
+            o.Uv = s.uv;
+            o.Instance = s.instance;
+            return o;
+        }
+        float4 fragment_main(Output v) : SV_Target0
+        {
+            olib_instance = v.Instance; // 之后 _glow 与 InstanceTint（这个精灵的颜色）可用
+            float4 color = _image.Sample(_imageSampler, v.Uv) * _tint * InstanceTint;
+            color.rgb += _glow * color.a; // 预乘 Alpha
+            return color;
+        }
+        ENDHLSL
+    }
+}

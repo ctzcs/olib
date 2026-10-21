@@ -2,6 +2,7 @@ package shader_lab
 
 // 效果选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 .oshader 文件。
 import "core:fmt"
+import "core:strings"
 import foster "olib:foster"
 import fx "olib:kit/rendering/shader/effect"
 import ui "olib:kit/ui"
@@ -132,6 +133,16 @@ effect_selector :: proc(s: ^Session) {
 			if effect_has_3d(s, i) != (s.workspace == 1) do continue
 			if lab_button(s, fmt.tprintf("effect:%s", e.desc.name), display_name(e.desc.label, e.desc.name), s.selected_effect == i, true) {
 				select_effect(s, i)
+				s.effect_menu = false
+			}
+		}
+		// 新建：按当前工作区写一份能直接编译的模板到源码目录，热重载后自动选中。
+		templates := s.workspace == 1 ? []Shader_Template{.Model, .Model_Instanced} : []Shader_Template{.Sprite}
+		for template in templates {
+			_, _, label := template_source(template)
+			if lab_button(s, fmt.tprintf("effect-new:%v", template), fmt.tprintf("新建%s", strings.trim_prefix(label, "新")),
+				false, true, "symbols/plus") {
+				if _, reason := new_shader(s, template); reason != "" do bank_error(s, reason)
 				s.effect_menu = false
 			}
 		}

@@ -1,0 +1,55 @@
+// 新建的 3D 模型材质：改 Properties 与 HLSL，保存即热重载。
+// 游戏里用 tools/shaders 生成产物、mat.material_register_directory 登记后，mat.material_create(&materials, "<Shader 名>") 创建，
+// r3d.model(..., material = m) 记录。接口与引擎块说明见 olib kit/rendering/shader/lang/README.md。
+Shader "Template"
+{
+    Label "新模型材质"
+    Preview 3D
+    Output "color"
+    Properties
+    {
+        _color ("Color", Color) = (0.8,0.8,0.8,1)
+        _image ("Texture", 2D) = ""
+    }
+
+    Pass "main"
+    {
+        Label "本体"
+        Draw Model
+        Cull Back
+        Blend Opaque
+        ZTest Less
+        ZWrite On
+        Target { Clear (0.12,0.15,0.20,1) }
+        HLSLPROGRAM
+        // 引擎块：顶点 Wvp、World、VertexClock、VertexCameraPosition；片元 Clock、Pointer、Tint（这个模型的颜色）、CameraPosition。
+        #include "olib/model.hlsli"
+        // 网格属性依次是位置、法线、UV、切线；末尾没用到的可以不写。
+        struct Input {
+            float3 Position : TEXCOORD0;
+            float3 Normal : TEXCOORD1;
+            float2 Uv : TEXCOORD2;
+        };
+        // Output 里的成员都要在 fragment_main 里用到（D3D12 规则）。
+        struct Output {
+            float4 Position : SV_Position;
+            float3 Normal : TEXCOORD0;
+            float2 Uv : TEXCOORD1;
+        };
+        Output vertex_main(Input v)
+        {
+            Output o;
+            o.Position = mul(float4(v.Position, 1), Wvp);
+            o.Normal = mul(v.Normal, (float3x3)World);
+            o.Uv = v.Uv;
+            return o;
+        }
+        float4 fragment_main(Output v) : SV_Target0
+        {
+            float light = 0.25 + 0.75 * saturate(dot(normalize(v.Normal), normalize(float3(-0.5, 0.8, 0.6))));
+            float4 color = _image.Sample(_imageSampler, v.Uv) * _color * Tint;
+            return float4(color.rgb * light, color.a);
+        }
+        ENDHLSL
+    }
+}

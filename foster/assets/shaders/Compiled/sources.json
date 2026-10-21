@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "path": "Batcher.hlsl",
+      "hash": "9ec5ed3e60127f7b"
+    },
+    {
+      "path": "Msdf.hlsl",
+      "hash": "49ecc660a34ebc37"
+    },
+    {
+      "path": "Textured.hlsl",
+      "hash": "0042af0434ab8e7d"
+    }
+  ]
+}

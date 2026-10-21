@@ -95,5 +95,6 @@ odin run ../olib/tools/shaders -- -check -dir:src/forward3d/shaders
 并列出文件和重新生成的命令。`tools/check` 对 olib 的 foster/、kit/ 与同级 olib_sample/src 下每个有记录的
 `Compiled` 运行它；没有记录的目录只提示跳过，重新生成一次后开始检查。游戏仓库可以在自己的检查脚本里调用 `-check`。
 
-2026-10-20 时 foster 默认 shader 和 olib_sample book_ui 的产物与当前工具链编译结果不一致（book_ui 还缺 `.msl`），
-stylized3d 有进行中的改动，这三个目录暂未记录；其余目录重新编译与已提交产物逐字节一致后才写入记录。
+foster 默认 shader 和 olib_sample book_ui 的产物原先与当前工具链编译结果不一致（book_ui 还缺 `.msl`），2026-10-21
+用当前工具链重建，比对反汇编并在 D3D12/Vulkan 截图逐像素一致后写入记录（foster 见 [LOCAL_CHANGES L-019](../../foster/docs/LOCAL_CHANGES.md)）。
+stylized3d 有进行中的改动，暂未记录；其余目录重新编译与已提交产物逐字节一致后写入记录。

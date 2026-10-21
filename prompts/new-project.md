@@ -40,7 +40,7 @@ olib 位置：<本文件上一级的 olib 根目录；复制提示词时填写�
 5. 新游戏默认建在 olib 的同级独立目录。不要因为当前工作目录在 olib 就把游戏业务写进库，也不要复制 olib 源码进游戏。
 6. **不得 import `olib:foster/internal/...`**，这是 olib 的硬规则，对游戏同样适用。需要的能力在 foster 公开 API 或 kit 中找；确实缺失时说明缺口，不要绕道内部包。
 7. 默认不用 ECS：按数据形状选容器（见 `prompts/dod-guidelines.md` 第 1 节）。网格用扁平数组，没人跨帧引用的批量数据用 `#soa[dynamic]`，只有会被跨帧引用的实体才用 `core/handle` 句柄池 + SoA 行。`core/entities` 存在但不是默认方案。
-8. 调试界面需要时可用 `thirdparty/odin-imgui`（含 foster 后端），只用于桌面调试工具，不用于玩家 UI。需要编辑器或开发工具时先读 olib 的 `prompts/editor-guidelines.md`，按统一的会话、输入和编辑事务约定接入；该文档是项目实现约定，不代表库已有编辑器框架。
+8. 编辑器、开发面板和调试工具默认用 `thirdparty/odin-imgui`（含 foster 后端，模板的 core_editor 已接通），只用于桌面开发入口，不用于玩家 UI，也不进入发布与 Web 构建。需要编辑器或开发工具时先读 olib 的 `prompts/editor-guidelines.md`，按统一的会话、输入和编辑事务约定接入；该文档是项目实现约定，不代表库已有编辑器框架。
 9. 物理、音频、多线程、自定义 Shader 等按实际需求添加，不因库中存在某个模块就全部接入。
 10. 如果依赖缺失，说明缺少的具体路径和受影响的步骤，继续完成不依赖它的工作；不要创建同名空壳冒充真实库，也不要声称已构建成功。
 11. **桌面开发版默认支持保留状态的游戏代码、游戏 UI 与编辑器 UI 热重载**，除非用户明确关闭。新建 Windows 项目先用 [tools/new-game](../tools/new-game/README.md) 生成已接通的底座，再实现玩法；不再从示例复制或重新手写宿主接线。先读 `core/hotreload/README.md` 和实际 API。模板已验证 Windows 和 Chromium Web 静态发布；Web 不接热重载/editor，其他桌面平台和新增玩法的 Web 能力仍需单独验证。
@@ -103,7 +103,7 @@ cd ../MyGame
 
 开发入口 `src/editor` 编译成常驻 EXE，运行时把 `src/core_editor` 及它导入的 core 编译成一个 DLL。游戏代码放 core，编辑器实现放 core_editor，两个入口 editor/game 只负责启动与生命周期；不另建 host、editor/play、src/tools/editor 或根目录宿主。普通玩法和工具 UI 不需要逐函数导出。静态发布入口 `src/game` 只导入 core；仅做 Web 时可省略 editor 与 core_editor，保留 game/core。
 
-`src/core_editor/editor.odin` 提供 F1 收起/打开的编辑面板，游戏与编辑器 UI 一起热重载。DLL 拥有游戏实例、编辑会话、UI 与待处理命令，常驻入口只保留窗口、资源和不透明模块实例。组合快照保留游戏状态、面板开关与待处理命令；UI 对象和瞬时输入重建，按住的鼠标须先松开才允许新操作。监听 core_editor 与 core（含子包）；editor 入口、core/services.odin 的服务协议/资源初始化、core/args_native.odin、olib 或工具链变化需重启。服务协议结构变化还须升级 SERVICES_VERSION。core 和 game 不导入 core_editor 或 editor；任何包都不能导入入口。内容文档、保存和撤销遵循 [编辑工具开发约定](editor-guidelines.md)。
+`src/core_editor/editor.odin` 提供用 ImGui 实现的编辑面板，默认停靠右侧，F1 收起/打开，游戏绘制到中央 Dock 区域；游戏与编辑器 UI 一起热重载。DLL 拥有游戏实例、编辑会话、ImGui 上下文、UI 与待处理命令，常驻入口只保留窗口、资源和不透明模块实例。组合快照保留游戏状态、面板开关、Dock 布局（ImGui ini 文本）与待处理命令；UI 对象和瞬时输入重建，按住的鼠标须先松开才允许新操作。监听 core_editor 与 core（含子包）；editor 入口、core/services.odin 的服务协议/资源初始化、core/args_native.odin、olib 或工具链变化需重启。服务协议结构变化还须升级 SERVICES_VERSION。core 和 game 不导入 core_editor 或 editor；任何包都不能导入入口。内容文档、保存和撤销遵循 [编辑工具开发约定](editor-guidelines.md)。
 
 文件装载起步可按文件放在 `core`；需要给独立工具复用时再提取配置和装载包，依赖方向按 dod-guidelines 第 2 节。根目录 `tools/` 保留给无界面的构建期工具；独立交互工具入口需要时放 `src/tools/<name>`。
 
@@ -219,13 +219,13 @@ odin run tools/check
 - `src/editor/main.odin` 直接使用 Foster 生命周期，构建为常驻 EXE；通过 core 的资源函数持有资源、服务、Session、Watch 与最小失败提示，不创建或调用静态游戏实例。监听 `core_editor` 与 `core`，递归覆盖子包。`#load` 文件显式列入监听根或扩展名；入口、core/services.odin、core/args_native.odin、olib 和工具链变化需重启。
 - `core_editor/module.odin` 集中导出 `olib_game_api`，校验 API 版本和结构大小，实现 load、save、snapshot_size、unload、update、render；按需增加 activate。每个需要 Context 的 `proc "c"` 回调先恢复 `call.host_context^`。模块组装 core 和编辑器 UI；编辑命令在模块内经 core 规则处理，候选 load 不修改宿主、旧会话或持久存储。
 - `core/core.odin` 集中实现实例创建/释放、操作队列、模拟调度和快照恢复，静态入口与 DLL 入口共用。游戏包不依赖 `core/hotreload`、editor 或动态库入口；伤害、收入等规则写在 `core/rules.odin` 或相应功能文件。
-- 模块拥有独立的世界、UI/Clay、Batcher、缓存和任务。UI 上下文每次加载重建并重新注册字体；宿主持有的共享字体等资源只借用。失败的候选也能释放部分初始化资源。load 只创建私有候选，外部注册和任务启动放到成功提交后的 activate；unload 注销回调、停止并 join 任务、释放模块资源。
+- 模块拥有独立的世界、UI/Clay、ImGui 上下文、Batcher、缓存和任务。UI 上下文每次加载重建并重新注册字体；ImGui 上下文在 load 中创建、unload 前 Shutdown，不与宿主或旧 DLL 共享，`io.IniFilename` 置空，布局经快照恢复；宿主持有的共享字体等资源只借用。失败的候选也能释放部分初始化资源。load 只创建私有候选，外部注册和任务启动放到成功提交后的 activate；unload 注销回调、停止并 join 任务、释放模块资源。
 - 宿主在尚未生成新一帧 UI/绘制命令的安全边界应用候选，确保旧模块调用和 GPU 使用结束；需要时等待设备 idle。编译、快照、版本或初始化失败保留旧局面并显示诊断，修复后自动重试，提供手动 retry。不能留下指向旧 DLL 的回调、任务或资源释放函数。
 - 沿用 `src/editor/main.odin` 内的常驻失败提示；首次未加载与旧版仍运行分别说明，编译失败和加载拒绝都显示摘要，完整错误写入终端和 `build/hotreload-last-error.txt`。Waiting/Compiling/Ready 不能清除失败提示，只有 `watch_apply == .Success` 才清除。反馈 UI 不属于 DLL、不暂停旧游戏，桌面/Web 静态发布排除它。
 
 **状态集中保存，规则与 UI 无需逐个注册**
 
-- 用一个明确的快照结构/编码入口保存权威世界状态及需要保留的会话状态：进度、实体与稳定身份、随机数进度、计时器、暂停/倍速、相机、选中项和持久 UI 设置。动态数组、map、字符串编码内容，在候选实例中独立分配；不得保存裸指针、proc、`any/typeid`、分配器、GPU 句柄或 Clay 内存，也不能用 `mem.copy(World)` 冒充快照。
+- 用一个明确的快照结构/编码入口保存权威世界状态及需要保留的会话状态：进度、实体与稳定身份、随机数进度、计时器、暂停/倍速、相机、选中项和持久 UI 设置。动态数组、map、字符串编码内容，在候选实例中独立分配；不得保存裸指针、proc、`any/typeid`、分配器、GPU 句柄、Clay 内存或 ImGui 上下文，也不能用 `mem.copy(World)` 冒充快照。
 - 一次点击产生的待处理命令不得因重载丢失或重复：在快照前的安全更新边界恰好消费一次，或把纯数据命令纳入快照。游戏和编辑器队列都适用；面板开关、选中项等持久会话状态进入编辑器快照。模块内的悬停、按住、焦点、拖动等瞬时交互默认重置，已有按住输入必须等松开再启用。以后接入文档/撤销时，快照须保留文档与历史，并在安全边界完成或取消活动事务；不能靠丢掉会话实现重载。实体句柄需恢复代数及引用一致性，或使用稳定 ID 完成重映射。
 - 派生规则、索引和表现缓存由新模块重建，不能用旧快照覆盖新代码默认值或新规则。玩家运行中修改的配置覆盖应显式保存，并按“新默认值 → 内容配置 → 当前覆盖”重新安装、校验与构建派生数据；权威进度继续保留。
 - 普通开发只需修改 `core/rules.odin` 中接收状态和 dt 的函数、`core/ui.odin` 中的 UI/绘制声明，`core_editor/editor.odin` 中的面板，以及 `core/world.odin` 中的实例字段。不为每个函数写导出、回调表或热重载分支，不把需保留的进度放进可变包全局变量。新增可序列化字段优先复用集中编码；创建者负责缺省值恢复和往返验证，不要求业务调用点关心 DLL。
@@ -271,6 +271,8 @@ Odin 没有 GC，所有权必须显式：
 
 玩家 UI 使用 **`kit/ui`**：clay 负责布局，kit/ui 提供控件、交互和 foster Batcher 后端。接入前完整阅读 olib 的 `kit/ui/README.md`，并对照 olib_sample 的 `src/game_ui`。
 
+编辑器、开发面板和调试工具使用 **odin-imgui**（`olib:thirdparty/odin-imgui` 与 `imgui_impl_ofoster`）：直接用它的折叠、滑条、输入框、下拉框、表格、拖放与 Docking，不在 kit/ui 上为工具手写这些控件。接入方式以模板 `core_editor/editor.odin` 为准：上下文归 DLL，按 `WantCaptureMouse` / `WantTextInput` 分配输入，按住输入用 `NoMouse` 屏蔽到松开，默认不开键盘导航。后端限制（没有显示 foster 贴图的 `Image` 帮助函数、没有 IME 候选框定位、默认字体无中文、只带 Windows x64 预编译库）见后端文件头，需要时再补。
+
 **先查 kit/ui 是否已有对应控件，再决定是否自定义。** 自定义控件用 `ui_interact` 复用悬停/按下/焦点/禁用状态，不从零重写交互。
 
 | 界面需求 | 优先查看 |
@@ -281,7 +283,7 @@ Odin 没有 GC，所有权必须显式：
 | 布局与容器 | `ui_row_decl`、`ui_column_decl`、`ui_panel_decl`、`ui_scroll_decl`、`ui_modal_decl` |
 | 图片与皮肤 | `ui_image`、`ui_image_decl`、`ui_nine_slice_decl` |
 
-kit/ui 目前**没有**文本输入/IME、Dropdown、富文本、拖放和列表虚拟化（见 olib `docs/ROADMAP.md`）。第一版需要这些时，先评估能否用现有控件组合替代；调试工具可改用 odin-imgui。不要假定它们存在。
+kit/ui 目前**没有**文本输入/IME、Dropdown、富文本、拖放和列表虚拟化（见 olib `docs/ROADMAP.md`）。玩家 UI 第一版需要这些时，先评估能否用现有控件组合替代；编辑器和调试工具直接用 odin-imgui。不要假定它们存在。
 
 帧流程（在 `RenderProc` 中）：设置 viewport 与指针 → `ui_set_navigation` → `ui_begin` → 声明 UI → 绘制世界 → `ui_draw` 叠加 UI → `ui_input_capture` 决定本帧鼠标/键盘是否还交给世界。读取 capture 之后再处理世界点击，避免穿透。
 

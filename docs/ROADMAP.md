@@ -5,7 +5,7 @@
 
 ## 现状（2026-10）
 
-- 三层：`core/`（纯 Odin）→ `foster/`（Foster 移植，唯一运行时）→ `kit/`（扩展能力），外加 `thirdparty/`（纯 Odin clay-odin / odin-imgui）。
+- 三层：`core/`（纯 Odin）→ `foster/`（Foster 移植，唯一运行时）→ `kit/`（扩展能力），外加 `thirdparty/`（纯 Odin clay-odin；odin-imgui 是 Dear ImGui C++ 库的绑定，只带 Windows x64 预编译库）。
 - 17 个包带单元测试，共 93 个测试；示例在同级仓库 olib_sample（9 个，含 kit/ui 的截图验收）。
 - 原则：foster/ 保持 Foster API 对齐，本地修改登记到 [LOCAL_CHANGES.md](../foster/docs/LOCAL_CHANGES.md)；
   扩展能力在 kit/ 拼装，kit 不封装、不别名 foster（见 CODE_STYLE「foster 与 kit 的边界」）。
@@ -39,7 +39,8 @@
 ### UI 增量（`kit/ui`）
 
 文本输入 / IME、Dropdown、富文本与字体 fallback、空间方向导航与焦点自动滚动、拖放、列表虚拟化、
-过渡动画、圆角遮罩及完整圆角描边。用法和兼容变更见 [UI README](../kit/ui/README.md)。
+过渡动画、圆角遮罩及完整圆角描边。只按玩家 UI 的需要排期；编辑器和开发工具用 odin-imgui，
+不为它们补树、Dock 等控件。用法和兼容变更见 [UI README](../kit/ui/README.md)。
 
 ### 平台
 
@@ -68,7 +69,7 @@ ShaderCompiler 的编译部分已由 `tools/shaders` 覆盖（`odin run tools/sh
 | ECS 全线（DragonECS / Engine.ECS / 预制体序列化） | 2026-10 决定不采用 ECS 路线；`thirdparty/oflecs` 已移除（git 历史可找回），`core/entities` 保留但无排期 |
 | 库内 PBR / IBL / 阴影 / CSM / 后处理 / 天空 | 外观由游戏决定，库只做机制；参考前向渲染器见 olib_sample `src/forward3d`，DragonLib 的 DepthOnly/Tonemap/Post*/Sky3D HLSL 源见 git 历史（`dcff6d8` 之前） |
 | Mathf（861 行） | `foster/utility.odin` 已覆盖 |
-| Paper UI | 由 `kit/ui`（clay）与 odin-imgui 替代 |
+| Paper UI | 玩家 UI 由 `kit/ui`（clay）替代，编辑器与工具 UI 由 odin-imgui 替代 |
 | Vector2Int | `core:math` 已有 |
 | Roslyn Analyzers | C# 编译器机制，Odin 无对应 |
 | 库内示例 / 启动模板 | 库仓库只放库代码与测试；示例在同级仓库 olib_sample，启动直接用 `foster.App`；早期根 main.odin 的环境知识见 git 历史 `1b3dc69` |

@@ -7,7 +7,7 @@ Odin 游戏库集合，内置 `foster/`（Foster 框架的 Odin 移植，原 OFo
 
 开发编辑器、开发面板或交互工具时，遵循 [编辑工具开发约定](prompts/editor-guidelines.md)：统一编辑会话、工具输入、编辑事务、撤销与保存。它是项目组织与接入规则，不代表库已提供编辑器框架。
 
-新建 Windows 游戏可直接运行 `odin run tools/new-game -- ../MyGame MyGame`，进入新目录运行 `play.bat`。生成的[游戏模板](tools/new-game/README.md)已包含热重载宿主、共享 core 包、独立的 core_editor 实现与薄 editor 开发入口、可一起热重载的游戏与编辑器 UI、薄 game 发布入口、Windows/Web 静态发布、默认跨平台存储、字体资产与构建检查，无需从示例复制接线。
+新建 Windows 游戏可直接运行 `odin run tools/new-game -- ../MyGame MyGame`，进入新目录运行 `play.bat`。生成的[游戏模板](tools/new-game/README.md)已包含热重载宿主、共享 core 包、独立的 core_editor 实现与薄 editor 开发入口、可一起热重载的游戏 UI（kit/ui）与 ImGui 编辑面板、薄 game 发布入口、Windows/Web 静态发布、默认跨平台存储、字体资产与构建检查，无需从示例复制接线。
 
 生成截图、图像候选和临时报告时统一遵循 [生成文件与目录纪律](prompts/new-project.md#生成文件与目录纪律)：
 归入所属项目的 library 固定子目录，按需创建；目录或文档调整不额外截图。正式资源与构建产物另行维护。
@@ -48,7 +48,7 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── ui/          clay 布局 + 位图/MSDF/裁剪后端 + 游戏控件/输入/缩放
 └── tools/       可嵌入工具：shader_lab / perf_overlay（悬浮性能面板）
 
-thirdparty/  外部移植与绑定：纯 Odin clay-odin / odin-imgui（含 Foster 后端）
+thirdparty/  外部移植与绑定：纯 Odin clay-odin（玩家 UI 布局）/ odin-imgui（Dear ImGui 绑定，编辑器与工具 UI，含 Foster 后端，只带 Windows x64 预编译库）
 
 prompts/     给 AI 的提示词：新项目创建 / 面向数据开发约定 / 编辑工具开发约定
 ```

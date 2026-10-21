@@ -1,6 +1,7 @@
 # 游戏 UI
 
 [纯 Odin Clay](../../thirdparty/clay-odin/README.md) 负责布局，`kit/ui` 提供控件、交互与 Render2D 后端（原生使用 olib 材质）。
+kit/ui 只承担玩家 UI；编辑器、开发面板和调试工具使用 odin-imgui，见[新项目约定](../../prompts/new-project.md#ui-用什么以及如何接入)。
 可运行游戏界面位于示例仓库 [olib_sample](https://github.com/ctzcs/olib_sample) 的 `src/game_ui`：遗迹场景上的生命/能量 HUD、
 带冷却遮罩的技能栏、格子背包和暂停菜单。它使用同一套布局与交互，游戏皮肤在示例中定义。
 原来的设置页和控件验收示例在同仓库的 `src/ui_gallery`。

@@ -58,3 +58,9 @@ Abel 源字体及 OFL 许可证位于 `foster/tests/port_regression/fonts/`，�
 
 示例共用的中英文图集及复现说明位于同级 `olib_sample/shared/msdf_font/`；
 `game_ui`、`ui_gallery` 和 Shader Lab 内嵌该资产，无系统字体依赖。
+
+## ImGui 字体
+
+ImGui 不使用 MSDF 图集，而是在运行时按需光栅化 OTF。olib 的 ImGui 后端默认加载
+[`assets/fonts`](../../assets/fonts/README.md) 里同一字体（Noto Sans CJK SC）的 GB2312 子集，
+由本目录的 `imgui_font.py` 生成；用法与复现命令见该 README。

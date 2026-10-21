@@ -156,6 +156,28 @@ builtin_icons_catalog_bounds :: proc(t: ^testing.T) {
 	testing.expect(t, "game/action-points" in rects^)
 }
 
+@(test)
+builtin_icons_decode_keeps_straight_alpha :: proc(t: ^testing.T) {
+	image, rects, ok := builtin_icons_decode()
+	if !testing.expect(t, ok) do return
+	defer delete(image.Pixels)
+	defer kenney_rects_dispose(rects)
+	testing.expect(t, len(rects^) == 815)
+	// 白色图标：半透明边缘在 straight alpha 下仍是白色，预乘后才会变暗。
+	rect := rects^["ui/menu"]
+	edges := 0
+	for y in rect.Y..<rect.Y+rect.Height {
+		for x in rect.X..<rect.X+rect.Width {
+			p := image.Pixels[y*image.Width+x]
+			if p.A == 0 || p.A == 255 do continue
+			edges += 1
+			testing.expectf(t, p.R == 255 && p.G == 255 && p.B == 255, "边缘像素应保持白色：%v", p)
+			if p.R != 255 do return
+		}
+	}
+	testing.expect(t, edges > 0)
+}
+
 // ---------------------------------------------------------------------------
 // Animation_Set 动画采样
 // ---------------------------------------------------------------------------

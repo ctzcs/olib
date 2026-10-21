@@ -53,3 +53,27 @@ UI 在最终像素目标绘制，小尺寸与非整数缩放仍需在项目最�
 
 原始的 815 个 PNG 不重复存入仓库；重建时提供原包目录。
 生成命令和完整像素校验见 [打包工具](../../tools/icons/README.md)。
+
+## 在 ImGui 中使用
+
+ImGui 的 sdlgpu3 管线按 straight alpha 混合，且工具只用到几十个图标，不直接借用上面预乘后的 4096 图集。
+用 `r2d.builtin_icons_decode()` 取 CPU 原图与名称表，交给 ImGui 后端的 `IconsInit` 挑出需要的名字、
+面积平均缩放成小图标表，再用 `Icon` / `IconButton` 绘制：
+
+```odin
+import r2d "olib:kit/rendering/2d"
+import imgui_foster "olib:thirdparty/odin-imgui/imgui_impl_ofoster"
+
+image, rects, ok := r2d.builtin_icons_decode()
+if ok {
+	defer delete(image.Pixels)
+	defer r2d.kenney_rects_dispose(rects)
+	// 格子取绘制尺寸的约 2 倍；icons 地址稳定，在 Shutdown 与设备释放前 IconsDispose。
+	imgui_foster.IconsInit(&icons, device, image, rects^, {"media/play", "ui/settings"}, 40)
+}
+if imgui_foster.IconButton(&icons, "play", "media/play", "播放") {
+	// ...
+}
+```
+
+解码每次约 64 MiB 临时像素，用完即释放；图标表只占几十 KB 显存。

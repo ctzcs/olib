@@ -42,9 +42,13 @@ package imgui_impl_ofoster
 //   - gamepad navigation is not fed (keyboard + mouse only)
 //   - state is per linked module: a hot-reloaded DLL gets its own ImGui
 //     context and must Init on load and Shutdown before it is unloaded
-//   - no helper yet for showing foster textures through imgui.Image, no IME
-//     candidate positioning (Platform_SetImeDataFn), and the default font has
-//     no CJK glyphs (add a TTF to the font atlas when needed)
+//   - no IME candidate positioning (Platform_SetImeDataFn)
+//
+// olib additions (olib_ui.odin): Init loads the olib UI font (the Noto Sans
+// CJK SC subset in olib/assets/fonts, same typeface as kit/ui) and the Olib
+// style; Texture turns a foster texture into an ImTextureRef; Icons builds a
+// small sheet of olib icons for Icon / IconButton. EndRender can draw into a
+// foster Target instead of the swapchain when Init got its color format.
 
 import "core:c"
 import "core:fmt"
@@ -55,6 +59,7 @@ import foster "olib:foster"
 import sdl "vendor:sdl3"
 
 Style :: enum {
+	Olib, // dark palette matching kit/ui's tool theme
 	Dark,
 	Light,
 	Classic,
@@ -68,7 +73,11 @@ framebuffer_scale: [2]f32
 
 // ---- lifecycle ----------------------------------------------------------------
 
-Init :: proc(owner: ^foster.App, config_flags: imgui.ConfigFlags = {.NavEnableKeyboard, .DockingEnable}, style_kind: Style = .Dark) -> bool {
+// color_format: format of the targets ImGui draws into. .INVALID draws into
+// the swapchain; pass a foster Target's format (e.g. .R8G8B8A8_UNORM) to use
+// EndRender(app, target) instead. font_size <= 0 keeps ImGui's built-in font.
+Init :: proc(owner: ^foster.App, config_flags: imgui.ConfigFlags = {.NavEnableKeyboard, .DockingEnable},
+	style_kind: Style = .Olib, color_format: sdl.GPUTextureFormat = .INVALID, font_size: f32 = FONT_SIZE) -> bool {
 	if ready {
 		return true
 	}
@@ -83,6 +92,7 @@ Init :: proc(owner: ^foster.App, config_flags: imgui.ConfigFlags = {.NavEnableKe
 	io.BackendFlags |= {.HasMouseCursors}
 
 	switch style_kind {
+	case .Olib:    style_olib()
 	case .Dark:    imgui.StyleColorsDark()
 	case .Light:   imgui.StyleColorsLight()
 	case .Classic: imgui.StyleColorsClassic()
@@ -94,6 +104,9 @@ Init :: proc(owner: ^foster.App, config_flags: imgui.ConfigFlags = {.NavEnableKe
 	imgui.Style_ScaleAllSizes(style, scale)
 	style.FontScaleDpi = scale
 	io.ConfigDpiScaleFonts = true
+	if font_size > 0 && !font_load_default(font_size) {
+		fmt.eprintln("imgui_impl_ofoster: olib UI font failed to load; using the ImGui default font")
+	}
 
 	pio := imgui.GetPlatformIO()
 	pio.Platform_SetClipboardTextFn = set_clipboard_text
@@ -102,8 +115,8 @@ Init :: proc(owner: ^foster.App, config_flags: imgui.ConfigFlags = {.NavEnableKe
 	device := &owner.GraphicsDevice
 	init_info := imgui_sdlgpu3.InitInfo{
 		Device            = device.Device,
-		ColorTargetFormat = device.SwapchainFormat,
-		MSAASamples       = ._1, // UI renders straight into the swapchain
+		ColorTargetFormat = color_format != .INVALID ? color_format : device.SwapchainFormat,
+		MSAASamples       = ._1, // UI renders straight into the final target
 		// Only used in multi-viewports mode, which this bridge does not enable:
 		SwapchainComposition = .SDR,
 		PresentMode          = .VSYNC,
@@ -263,9 +276,14 @@ BeginRender :: proc(owner: ^foster.App) -> bool {
 	return true
 }
 
-// EndRender finishes the frame opened by BeginRender and draws it.
-EndRender :: proc(owner: ^foster.App) {
+// EndRender finishes the frame opened by BeginRender and draws it over the
+// swapchain, or over target when given (its format must be the color_format
+// passed to Init, its size the window's pixel size).
+EndRender :: proc(owner: ^foster.App, target: ^foster.Target = nil) {
 	device := &owner.GraphicsDevice
+	// widgets may have recorded foster passes (e.g. a tool rendering a preview
+	// target); ImGui uploads and opens its own pass, so close them first
+	foster.GraphicsDeviceEndRenderPass(device)
 	update_mouse_cursor()
 	imgui.Render()
 	draw_data := imgui.GetDrawData()
@@ -274,15 +292,19 @@ EndRender :: proc(owner: ^foster.App) {
 	}
 
 	imgui_sdlgpu3.PrepareDrawData(draw_data, device.CommandBuffer)
-	target := sdl.GPUColorTargetInfo{
-		texture = device.SwapchainTexture,
+	output := device.SwapchainTexture
+	if target != nil {
+		output = foster.TargetAttachment(target).Resource
+	}
+	color := sdl.GPUColorTargetInfo{
+		texture = output,
 		mip_level = 0,
 		layer_or_depth_plane = 0,
 		load_op = .LOAD, // scene is already in the swapchain
 		store_op = .STORE,
 		cycle = false,
 	}
-	pass := sdl.BeginGPURenderPass(device.CommandBuffer, &target, 1, nil)
+	pass := sdl.BeginGPURenderPass(device.CommandBuffer, &color, 1, nil)
 	if pass != nil {
 		imgui_sdlgpu3.RenderDrawData(draw_data, device.CommandBuffer, pass, nil)
 		sdl.EndGPURenderPass(pass)

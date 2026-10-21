@@ -10,6 +10,7 @@ Shader_Template :: enum {
 	Sprite,          // 2D 精灵材质
 	Model,           // 3D 模型材质
 	Model_Instanced, // 3D 实例化模型材质
+	Post_Process,    // 2D 后处理：铺满屏幕的精灵材质
 }
 
 // 模板文件名（文件里的 Shader 名是 "Template"）、新文件的默认名与显示名。
@@ -18,6 +19,7 @@ template_source :: proc(template: Shader_Template) -> (text, base, label: string
 	case .Sprite: return #load("templates/Sprite.oshader", string), "NewSprite", "新精灵材质"
 	case .Model: return #load("templates/Model.oshader", string), "NewModel", "新模型材质"
 	case .Model_Instanced: return #load("templates/Model_Instanced.oshader", string), "NewInstancedModel", "新实例化模型材质"
+	case .Post_Process: return #load("templates/Post_Process.oshader", string), "NewPostProcess", "新后处理"
 	}
 	return
 }

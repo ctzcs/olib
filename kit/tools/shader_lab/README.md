@@ -109,9 +109,9 @@ lab.dispose(&editor.lab)
 文件路径由宿主保存到一次 `render` 返回；拖放坐标和普通 pointer 一样使用目标最终像素。
 GPU 纹理、默认值和预设的直接 API 均须在主线程调用。
 
-## 新建着色器
+## 新建 Shader
 
-Shader 菜单底部按当前工作区列出“新建精灵材质”（2D）、“新建模型材质”“新建实例化模型材质”（3D）。点击后把
+Shader 菜单底部按当前工作区列出“新建精灵材质”“新建后处理”（2D）、“新建模型材质”“新建实例化模型材质”（3D）。点击后把
 [templates/](templates/) 里对应的 `.oshader` 写到 `source_root`（名字取 `NewSprite`、`NewSprite2`…，不覆盖已有文件），
 热重载编译后自动选中。模板已写好引擎块 include、统一顶点接口和满足 D3D12 规则的 Input / Output，只需改参数与着色；
 游戏里同样用 tools/shaders 生成产物后 `mat.material_create` 创建。宿主也可调用 `lab.new_shader(session, .Model)`。

@@ -15,7 +15,7 @@ templates_parse_as_materials :: proc(t: ^testing.T) {
 		defer lang.dispose(&doc)
 		if !testing.expectf(t, doc.error == "", "%v: %s", template, doc.error) do continue
 		testing.expectf(t, sh.shader_is_material(doc.shader), "%v is not a material", template)
-		testing.expect_value(t, sh.shader_is_sprite(doc.shader), template == .Sprite)
-		testing.expect_value(t, doc.shader.instanced, template != .Model)
+		testing.expect_value(t, sh.shader_is_sprite(doc.shader), template == .Sprite || template == .Post_Process)
+		testing.expect_value(t, doc.shader.instanced, template == .Sprite || template == .Model_Instanced)
 	}
 }

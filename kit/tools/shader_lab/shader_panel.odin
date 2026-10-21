@@ -137,7 +137,7 @@ shader_selector :: proc(s: ^Session) {
 			}
 		}
 		// 新建：按当前工作区写一份能直接编译的模板到源码目录，热重载后自动选中。
-		templates := s.workspace == 1 ? []Shader_Template{.Model, .Model_Instanced} : []Shader_Template{.Sprite}
+		templates := s.workspace == 1 ? []Shader_Template{.Model, .Model_Instanced} : []Shader_Template{.Sprite, .Post_Process}
 		for template in templates {
 			_, _, label := template_source(template)
 			if lab_button(s, fmt.tprintf("shader-new:%v", template), fmt.tprintf("新建%s", strings.trim_prefix(label, "新")),

@@ -1,0 +1,52 @@
+// 新建的后处理：游戏把场景画到自己的 Target，再用 r2d.texture 把它铺满窗口、套上这个材质画出去。
+// 做法见 olib kit/rendering/material/README.md 的“全屏后处理”。Shader Lab 用内置棋盘格或选中的图片代替场景预览。
+Shader "Template"
+{
+    Label "新后处理"
+    Preview 2D
+    Output "color"
+    Properties
+    {
+        // 场景颜色。写了 Filter(Linear)：场景目标与窗口尺寸不同时线性缩放；没写的 Wrap 跟随 Render2D 的 push_sampler。
+        [Filter(Linear)] _image ("Scene", 2D) = ""
+        _vignette ("Vignette", Range(0,1)) = 0.35
+        _saturation ("Saturation", Range(0,2)) = 1
+        _tint ("Tint", Color) = (1,1,1,1)
+    }
+
+    Pass "main"
+    {
+        Label "后处理"
+        Draw Sprite
+        // 当前帧贴图（场景颜色）写进 _image。
+        SpriteTexture _image
+        // 覆盖整个目标，不与目标里原有的内容混合。
+        Blend Opaque
+        Target { Clear (0.12,0.15,0.20,1) }
+        HLSLPROGRAM
+        // 引擎块：顶点 Projection、VertexClock；片元 Clock、Pointer、Tint。
+        #include "olib/sprite.hlsli"
+        // Input 以 OlibSpriteInput 开头；Output 里的成员都要在 fragment_main 里用到（D3D12 规则）。
+        struct Input { OlibSpriteInput Sprite; };
+        struct Output { float4 Position : SV_Position; float2 Uv : TEXCOORD0; };
+        Output vertex_main(Input v)
+        {
+            OlibSprite s = olib_sprite(v.Sprite);
+            Output o;
+            o.Position = mul(Projection, float4(s.position, 0, 1));
+            o.Uv = s.uv;
+            return o;
+        }
+        float4 fragment_main(Output v) : SV_Target0
+        {
+            float3 color = _image.Sample(_imageSampler, v.Uv).rgb;
+            float gray = dot(color, float3(0.299, 0.587, 0.114));
+            color = lerp(gray.xxx, color, _saturation) * _tint.rgb;
+            // 暗角：按到画面中心的距离压暗；铺满窗口时 Uv 就是屏幕位置。
+            float2 d = v.Uv - 0.5;
+            color *= 1 - _vignette * smoothstep(0.1, 0.5, dot(d, d) * 2);
+            return float4(color, 1);
+        }
+        ENDHLSL
+    }
+}

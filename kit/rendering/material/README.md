@@ -159,6 +159,31 @@ Shader Lab 预览与游戏使用同一规则。
 目前不逐项卸载，建议按场景或资源会话划分库。
 路径中的 `.`、`..`、反斜杠会规范化；导出文件含绝对贴图路径时，应先将贴图纳入资产根并改为相对路径。
 
+## 全屏后处理
+
+后处理就是一个 `Draw Sprite` 的材质 Shader：游戏先把场景画到自己的 Target，再把这张 Target 当成一张铺满窗口的精灵，
+套上后处理材质画出去。Shader Lab 的 Shader 菜单里“新建后处理”（2D 工作区）给出一个能直接用的模板：暗角、饱和度和色调。
+
+```odin
+scene: foster.Target // 与窗口同尺寸；要读深度时再带一个 Depth32 附件
+grading, reason := mat.material_create(&materials, "Grading") // 用模板新建、改名后的 Shader
+
+// 每帧：场景画到 scene，再把 scene 铺满窗口并套上后处理材质。
+r3d.submit(&models, {target = foster.DrawableTargetFromTarget(&scene), view_projection = vp, view_matrix = view})
+r2d.texture(&screen, foster.TargetAttachment(&scene), foster.Matrix3x2Identity, material = grading)
+r2d.submit(&screen, {target = foster.DrawableTargetFromWindow(&app.Window)})
+```
+
+- **读深度**：`mat.material_set_texture(grading, "<参数组>", "depth", foster.TargetAttachment(&scene, 1))`。
+  深度附件须是单采样，而且这一遍不能同时把它当深度目标：后处理画到另一张 Target 或窗口。
+- **两遍以上**（例如横竖两遍模糊）：多建一张中间 Target。可以把两遍写成同一个 Shader 的两个 Pass，
+  第一次 `r2d.texture(..., pass_id = "blur_x")` 画到中间 Target，第二次以中间 Target 为贴图、`pass_id = "blur_y"` 画到窗口。
+  同一材质的多个 Pass 若不指定 `pass_id`，会按顺序画到同一个目标上，不会串成链。
+- **上一帧**：游戏保留两张 Target 交替使用，用 `material_set_texture` 把上一帧那张绑到历史字段。
+- **采样**：精灵纹理字段写了 `[Filter]` / `[Wrap]` 的部分按字段，没写的部分跟随 Render2D 的 `push_sampler`（默认 Nearest、Clamp）。
+  场景目标与窗口尺寸不同时，在场景字段上写 `[Filter(Linear)]`。
+- Shader Lab 里预览这类材质时用内置棋盘格或选中的图片代替场景；深度等运行时才绑定的贴图字段在 Shader Lab 里同样显示棋盘格。
+
 ## 内置 Shader 与 Web
 
 ```odin

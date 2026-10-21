@@ -1,5 +1,8 @@
 # Plan：Shader Lab 改走 Render2D / Render3D，引擎块每个维度一处打包
 
+> **状态：已完成（2026-10-21）** · 提交 `6207607`..`f9b417d`（olib_sample：`c0f9ca4`、`fc504fd`）
+> 偏离：① 决策 2：没有复用 `Session.render`，新增 `preview_sprites` / `preview_models` 两个渲染器；借用材质每帧组装，不在 bank 提交时重建（参数编辑与载入会替换数值切片，每帧组装最简单可靠）。② 决策 3：`Draw_Options`、`Material_Draw` 与 `Draw_Error.Bad_Pass_Selection` 整个删除，`material_select` 改为直接取 Pass 种类、`pass_id` 与精灵纹理；`pass_command` 保留一个不具名的第 6 个参数，避免改动别人未提交的 `bank.odin`。③ 第 1 步改了 include 注释，olib_sample 的 Shader Lab 产物记录随之过期，多一个提交 `c0f9ca4`；第 3 步改 `model.hlsli` 注释同理，记录更新并入 `fc504fd`。④ 按用户要求减少测试：Shader Lab 各模式每步只跑一遍（计划写 3 遍）。截图对比脚本起初只比较 alpha 通道，第 1、2 步报告的“逐像素一致”不可靠；修正后重比：第 1、2 步只有 `workflow-large` 的预览区有 ≤2/255 的差异，第 3 步（三步全部生效）与基线逐像素一致，判断为那两次运行的时间抖动；第 3 步只有 `features-host`、`features-compact` 与基线不同，均来自自定义钩子的预期变化（宿主改为用 Render2D 记录 SpriteShadow 小精灵；非材质效果不再有自定义钩子，compact 截图从旧钩子的立方体回到内置球体）。⑤ `features` 的录制用例用 2D 效果 SpriteShadow：Shader Lab 的管线探测用不带实例属性的内置网格，实例化 Model 效果（Swarm）在 D3D12 上探测失败，这是改动前就有的限制。
+
 ## 背景
 
 游戏用 `Render2D` / `Render3D` 记录再提交，它们只接受材质库里的 `^mat.Material`。Shader Lab 的 shader 是开发期

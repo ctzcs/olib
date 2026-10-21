@@ -30,7 +30,7 @@ render :: proc(s: ^Session, target: foster.DrawableTarget, region: foster.Rect, 
 		foster.TargetInit(&s.output, device, w, h)
 	}
 	if s.pending_bank != nil && bank_apply(s, s.pending_bank, bank_selected_shader(s, s.pending_bank)) do bank_commit(s)
-	// 新布局尚未整体通过时，只准备旧包当前效果，不分批应用新的 HLSL。
+	// 新布局尚未整体通过时，只准备旧包当前 Shader，不分批应用新的 HLSL。
 	_ = bank_apply(s, s.bank, s.selected_shader, s.pending_bank == nil)
 	if s.fonts_dirty do validate_parameter_fonts(s)
 	panel(s, f32(w), f32(h))
@@ -54,7 +54,7 @@ render :: proc(s: ^Session, target: foster.DrawableTarget, region: foster.Rect, 
 	quad(&s.render, foster.TargetAttachment(&s.output), s.region)
 	r2d.submit(&s.render, {target = target})
 	texture_retire_flush(s)
-	// UI 可能刚切换效果；等本帧缩略图与合成命令提交完，再释放旧引用。
+	// UI 可能刚切换 Shader；等本帧缩略图与合成命令提交完，再释放旧引用。
 	// 新选中项在下一帧开始时创建目标，避免 UI 尚在引用旧纹理时销毁。
 	shader_targets_trim(s.bank, s.selected_shader)
 	if s.pending_bank != nil do shader_targets_trim(s.pending_bank, bank_selected_shader(s, s.pending_bank))

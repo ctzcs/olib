@@ -175,7 +175,7 @@ ENDHLSL
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Hue (olib_instance.data0.x)"))
 	testing.expect(t, strings.contains(doc.programs[0], "#define _Amount (olib_instance.data1.x)"))
 	// Sprite Pass：programs 是批量变体（BatcherVertex 输入，字段从顶点 storage buffer 按 mode 偏移读取），
-	// instanced 效果另有缓冲变体（实例记录 + 角点）；两者都 include olib/sprite_vertex.hlsli 得到 OlibSpriteInput / olib_sprite。
+	// instanced Shader 另有缓冲变体（实例记录 + 角点）；两者都 include olib/sprite_vertex.hlsli 得到 OlibSpriteInput / olib_sprite。
 	batch, buffer := doc.programs[0], doc.instanced_programs[0]
 	testing.expect(t, strings.contains(batch, "#define OLIB_SPRITE_BATCH\n") && !strings.contains(batch, "OLIB_INSTANCE_SPRITE"))
 	testing.expect(t, strings.contains(buffer, "#define OLIB_INSTANCE_SPRITE\n") && !strings.contains(buffer, "OLIB_SPRITE_BATCH"))
@@ -184,7 +184,7 @@ ENDHLSL
 		testing.expect(t, strings.contains(program, "#include \"olib/instance.hlsli\"\n#include \"olib/sprite_vertex.hlsli\"\n"))
 	}
 
-	// 只写 Instanced：效果启用顶点 tint，没有实例字段。
+	// 只写 Instanced：Shader 启用顶点 tint，没有实例字段。
 	flag_only := `Shader "Tinted" {
 Instanced
 Pass "body" {
@@ -200,7 +200,7 @@ ENDHLSL
 	// 没有实例字段：槽位为空，批量变体仍 include 精灵接口（从 storage buffer 读两条轴，不读字段）。
 	testing.expect(t, strings.contains(tinted.programs[0], "#define OLIB_INSTANCE_SLOTS 0\n#define OLIB_INSTANCE_DATA(X)\n"))
 	testing.expect(t, strings.contains(tinted.instanced_programs[0], "#define OLIB_INSTANCE_SPRITE\n"))
-	// 非 Sprite 的效果没有缓冲变体。
+	// 非 Sprite 的 Shader 没有缓冲变体。
 	water := parse(SOURCE, "water.oshader")
 	defer dispose(&water)
 	for program in water.instanced_programs do testing.expect_value(t, program, "")

@@ -697,7 +697,7 @@ msdf_batches_separate_even_with_same_texture :: proc(t: ^testing.T) {
 	testing.expect(t, len(r.vertices) == 12)
 }
 
-// Render2D 只记录、不提交的测试夹具：两个内置效果的最小材质（Sprite_Default、Text_Msdf）。
+// Render2D 只记录、不提交的测试夹具：两个内置 Shader 的最小材质（Sprite_Default、Text_Msdf）。
 // Shader 与贴图句柄是非空占位值，满足记录时的绑定检查，从不交给 GPU。
 @(private)
 Test_Render2D :: struct {

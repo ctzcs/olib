@@ -16,7 +16,7 @@ MAX_UNIFORM_BYTES :: 16384
 PARAM_SLOT_BYTES :: 16
 // 每个绘制对象自带的数值字段（[Instance]）的硬上限；它们随顶点而不是 uniform 传给 Shader。
 // 每个实例占 INSTANCE_FIXED_ATTRIBUTES + 字段数个顶点属性，再加网格自己的属性，桌面 GPU 通常支持 16～32 个，
-// 所以取 16。实际用几个由效果里的 [Instance] 字段数和缓冲的 slots 决定，库里没有全局配置；
+// 所以取 16。实际用几个由 Shader 里的 [Instance] 字段数和缓冲的 slots 决定，库里没有全局配置；
 // 更多的值请改用把几个标量打包进同一个 float4。
 MAX_INSTANCE_FIELDS :: 16
 
@@ -213,7 +213,7 @@ pack :: proc(schema: Schema, values: []Value, buffer: []u8) -> bool {
 	return true
 }
 
-// instanced 效果按绘制种类生成不同的 per-instance 接口。两种都由调用方或渲染器提供一个
+// instanced Shader 按绘制种类生成不同的 per-instance 接口。两种都由调用方或渲染器提供一个
 // 按实例步进的顶点缓冲，一次 Draw 画出全部实例。
 Instancing :: enum {
 	None,
@@ -235,7 +235,7 @@ INSTANCE_FIXED_ATTRIBUTES :: 5
 // - olib/instance.hlsli：OlibInstanceInput（顶点输入，必须是 Input 的第一个成员）、传给片元的 OlibInstance、
 //   olib_instance_from、olib_world（Model）、olib_sprite_vertex（Sprite 常驻缓冲）；
 // - olib/sprite_vertex.hlsli：Sprite Pass 的 OlibSpriteInput / olib_sprite，批量与常驻缓冲两种变体。
-// 非 None（或存在 per-instance 字段）时才 include；没有实例的 Model / 图像效果只有参数块。
+// 非 None（或存在 per-instance 字段）时才 include；没有实例的 Model / 全屏 Shader 只有参数块。
 hlsl :: proc(schema: Schema, mode := Instancing.None) -> string {
 	b: strings.Builder
 	strings.builder_init(&b)

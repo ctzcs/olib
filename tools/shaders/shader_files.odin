@@ -73,7 +73,7 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 				append(&files, fmt.aprintf("%s.%s", stem, format))
 			}
 		}
-		// instanced 精灵效果的缓冲变体：片元与批量变体相同，只编译顶点阶段。
+		// instanced 精灵 Shader 的缓冲变体：片元与批量变体相同，只编译顶点阶段。
 		if doc.instanced_programs[i] != "" {
 			instanced := path_join(workspace, fmt.tprintf("%s.instanced.hlsl", schema.name))
 			if !write_shader_file(instanced, transmute([]u8)doc.instanced_programs[i]) {
@@ -102,7 +102,7 @@ compile_shader :: proc(source, include_directory, output: string) -> bool {
 	manifest := struct {
 		version: int,
 		schemas: []sh.Schema,
-		shader: sh.Shader_Desc `json:"effect"`, // 清单里的键沿用 effect
+		shader: sh.Shader_Desc `json:"effect"`, // 清单里的键仍是 "effect"
 	}{mat.MANIFEST_VERSION, doc.schemas, doc.shader}
 	data, json_err := json.marshal(manifest)
 	if json_err != nil {

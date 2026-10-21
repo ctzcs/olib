@@ -24,7 +24,7 @@ material_pass_selection_preserves_order_and_disabled_flags :: proc(t: ^testing.T
 	testing.expect(t, error == .None && count == 0)
 }
 
-// 用真实 StorageContainer 内存条目验证文件 -> 效果解析，不创建窗口或伪造 GPU。
+// 用真实 StorageContainer 内存条目验证文件 -> Shader 解析，不创建窗口或伪造 GPU。
 @(test)
 material_library_resolves_shader_and_preserves_failed_reload :: proc(t: ^testing.T) {
 	entries := make(map[string][dynamic]u8)
@@ -122,7 +122,7 @@ material_texture_paths_are_relative_and_canonical :: proc(t: ^testing.T) {
 	}
 }
 
-// 借用调用方的 GPU 绑定组成 Material：拒绝非材质效果、绑定数或顺序不符、缺 Shader、别的设备；成功时能被 material_select 选中。
+// 借用调用方的 GPU 绑定组成 Material：拒绝非材质 Shader、绑定数或顺序不符、缺 Shader、别的设备；成功时能被 material_select 选中。
 @(test)
 material_from_bindings_borrows_tool_bindings :: proc(t: ^testing.T) {
 	device, other: foster.GraphicsDevice

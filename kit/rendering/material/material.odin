@@ -1,6 +1,6 @@
 package material
 
-// 对象材质实例：每次 load 创建独立数值实例，GPU Shader 与贴图在 Material_Library 中共享。
+// 对象材质实例：每次 load 创建独立数值实例，GPU 程序与贴图在 Material_Library 中共享。
 // 分区：类型 / 加载与替换 / 数值修改。
 import "core:encoding/json"
 import "core:fmt"
@@ -29,7 +29,7 @@ Material :: struct {
 	revision: u64,
 }
 
-// 记录与提交时选 Pass 用的 ID（r2d.image、r3d.submit 等的 pass_id）；定义在效果描述层，游戏用 mat.Pass_Id 即可。
+// 记录与提交时选 Pass 用的 ID（r2d.image、r3d.submit 等的 pass_id）；定义在 Shader 描述层，游戏用 mat.Pass_Id 即可。
 Pass_Id :: sh.Pass_Id
 
 @(private)
@@ -82,7 +82,7 @@ material_read :: proc(library: ^Material_Library, source: string) -> (sh.Instanc
 	if library.storage == nil do return {}, nil, "Missing material storage"
 	bytes := foster.ReadAllBytes(library.storage, source, context.temp_allocator)
 	if len(bytes) == 0 || len(bytes) > sh.MAX_RESOURCE_BYTES do return {}, nil, "Cannot read material or resource exceeds 1 MiB"
-	header: struct {version: int, shader: string `json:"effect"`} // 文件里的键沿用 effect
+	header: struct {version: int, shader: string `json:"effect"`} // 文件里的键仍是 "effect"
 	if json.unmarshal(bytes, &header, allocator = context.temp_allocator) != nil || header.version != 2 {
 		return {}, nil, "Invalid material resource"
 	}
@@ -105,7 +105,7 @@ material_white_texture :: proc(library: ^Material_Library) -> string {
 	return ""
 }
 
-// 工具用（Shader Lab）：把调用方持有的效果与 GPU 绑定组成 Material，交给 Render2D / Render3D 记录。
+// 工具用（Shader Lab）：把调用方持有的 Shader 与 GPU 绑定组成 Material，交给 Render2D / Render3D 记录。
 // 不登记、不复制、不拥有资源：shader 与 bindings 借用到调用方释放，返回值不用释放。
 // shader 只需填 desc 与 schemas；bindings 与 schemas 一一对应，数值和采样器在记录时读取。
 material_from_bindings :: proc(library: ^Material_Library, shader: ^Material_Shader,
@@ -160,7 +160,7 @@ material_replace :: proc(library: ^Material_Library, material: ^Material, file: 
 	return ""
 }
 
-// 用默认参数值在代码里创建材质实例，不读材质文件；内置效果（BUILTIN_SPRITE / BUILTIN_TEXT）首次使用时自动登记。
+// 用默认参数值在代码里创建材质实例，不读材质文件；内置 Shader（BUILTIN_SPRITE / BUILTIN_TEXT）首次使用时自动登记。
 // 数值用 material_set_number 修改；没有来源文件，material_reload 会返回错误。指针借用至 material_library_dispose。
 material_create :: proc(library: ^Material_Library, shader_name: string) -> (^Material, string) {
 	if library == nil do return nil, "Missing material library"
@@ -186,7 +186,7 @@ material_create :: proc(library: ^Material_Library, shader_name: string) -> (^Ma
 	return result, ""
 }
 
-// 准备效果的 GPU 资源并按参数组建立绑定；贴图路径相对于 source（为空时相对于容器根）。
+// 准备 Shader 的 GPU 资源并按参数组建立绑定；贴图路径相对于 source（为空时相对于容器根）。
 @(private)
 material_bind :: proc(library: ^Material_Library, material: ^Material, source: string) -> string {
 	if !material_shader_prepare(library, material.shader) do return "Cannot prepare material shaders"

@@ -1,6 +1,6 @@
 package shader
 
-// 效果与多 Pass 的纯数据声明；不依赖编辑器或 GPU。分区：声明 / 校验与拓扑排序 / 所有权。
+// Shader 与多 Pass 的纯数据声明；不依赖编辑器或 GPU。分区：声明 / 校验与拓扑排序 / 所有权。
 import "core:fmt"
 import "core:math"
 
@@ -64,7 +64,7 @@ Pass_Desc :: struct {
 }
 
 // Model 是可挂在网格上的有序材质 Pass，共享外部颜色/深度目标。
-// 图像效果仍使用 Preview_Model / Fullscreen 和各自独立的图目标。
+// 全屏 Shader 仍使用 Preview_Model / Fullscreen 和各自独立的图目标。
 shader_is_model :: proc(e: Shader_Desc) -> bool {
 	return len(e.passes) > 0 && e.passes[0].draw == .Model
 }
@@ -82,18 +82,18 @@ Shader_Desc :: struct {
 	output: Target_Ref,
 	label: string,
 	passes: []Pass_Desc,
-	preview: string, // 效果工作区：2d / 3d；空值兼容旧声明的模型 Pass 推断。
+	preview: string, // Shader 工作区：2d / 3d；空值兼容旧声明的模型 Pass 推断。
 	// 每个绘制对象的 tint 与 [Instance] 字段随顶点传入（见 hlsl 的 OlibInstance），不同取值可合批。
-	// Sprite 与 Model 效果支持；模型需要用调用方持有的实例缓冲绘制（见 3d 包的 Model_Buffer）。
+	// Sprite 与 Model Shader 支持；模型需要用调用方持有的实例缓冲绘制（见 3d 包的 Model_Buffer）。
 	instanced: bool,
 	// uniform 布局：Olib 为 .oshader 约定（顶点 b0 投影/矩阵块，片元 b0 Clock/Pointer/Tint、b1 参数）；
-	// Foster 为借用 foster 默认 Shader 的内置效果（顶点 b0 矩阵，片元 b0 直接放参数，没有帧块）。
+	// Foster 为借用 foster 默认 Shader 的内置 Shader（顶点 b0 矩阵，片元 b0 直接放参数，没有帧块）。
 	uniforms: Uniform_Layout,
 }
 
 Uniform_Layout :: enum { Olib, Foster }
 
-// 效果使用的 per-instance 接口种类，供 hlsl 与绘制路径选择。
+// Shader 使用的 per-instance 接口种类，供 hlsl 与绘制路径选择。
 shader_instancing :: proc(e: Shader_Desc) -> Instancing {
 	switch {
 	case !e.instanced: return .None
@@ -127,7 +127,7 @@ shader_validate :: proc(e: Shader_Desc, schemas: []Schema) -> string {
 	return ""
 }
 
-// 单个 Pass：种类/状态、与效果其余部分的关系、参数组、目标，再检查输入和覆盖值。
+// 单个 Pass：种类/状态、与 Shader 其余部分的关系、参数组、目标，再检查输入和覆盖值。
 @(private)
 pass_validate :: proc(e: Shader_Desc, index: int, schemas: []Schema) -> string {
 	p := e.passes[index]

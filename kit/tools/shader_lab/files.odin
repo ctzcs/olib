@@ -15,7 +15,7 @@ File_Request :: struct {
 	id, generation: u64,
 	action: File_Action,
 	group, field: string,
-	shader: string, // 模型材质请求绑定整个效果，切换选中项不会重定向保存/载入。
+	shader: string, // 模型材质请求绑定整个 Shader，切换选中项不会重定向保存/载入。
 }
 
 // 返回借用描述；宿主只需保留 id/action，路径在主线程通过 file_reply 交回。

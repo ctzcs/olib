@@ -1,6 +1,6 @@
 package shader
 
-// 效果声明里的稳定引用；不持有 GPU 资源。
+// Shader 声明里的稳定引用；不持有 GPU 资源。
 import "core:strings"
 
 // distinct 保留字符串字面量写法，但禁止不同用途的已命名值互相赋值。

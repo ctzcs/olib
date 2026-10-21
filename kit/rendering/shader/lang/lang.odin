@@ -21,8 +21,8 @@ Document :: struct {
 	shader: sh.Shader_Desc,
 	// 与 schemas 一一对应，已包含参数布局、共享代码和原文件 #line。
 	// Sprite Pass 的 programs 是批量变体（foster BatcherVertex 输入，Render2D 逐个绘制用）；
-	// instanced 效果另有 instanced_programs：缓冲变体（实例记录 + 角点，常驻 Sprite_Buffer 用），只需编译顶点阶段。
-	// 其他 Pass 或非 instanced 效果对应项为空串。
+	// instanced Shader 另有 instanced_programs：缓冲变体（实例记录 + 角点，常驻 Sprite_Buffer 用），只需编译顶点阶段。
+	// 其他 Pass 或非 instanced Shader 对应项为空串。
 	programs: []string,
 	instanced_programs: []string,
 	error: string,
@@ -176,7 +176,7 @@ shader_body :: proc(p: ^Parser, name: string) -> (source: Shader_Source) {
 }
 
 // 每个 Pass 一份参数组 Schema 和候选 HLSL（参数布局 + 共享代码 + Pass 代码，带原文件 #line）。
-// 会把 Pass 的 params 指向生成的组名 `<Shader>_<Pass>`。Sprite Pass 生成批量变体，instanced 效果再生成缓冲变体。
+// 会把 Pass 的 params 指向生成的组名 `<Shader>_<Pass>`。Sprite Pass 生成批量变体，instanced Shader 再生成缓冲变体。
 @(private)
 shader_programs :: proc(source: ^Shader_Source, name, source_path: string) -> (schemas: []sh.Schema,
 	programs, instanced_programs: []string) {

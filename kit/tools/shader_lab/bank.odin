@@ -1,6 +1,6 @@
 package shader_lab
 
-// 参数包和所有效果作为一个候选整体切换；Shader/Material 地址在 bank 存活期间固定。
+// 参数包和所有 Shader 作为一个候选整体切换；Shader/Material 地址在 bank 存活期间固定。
 // 分区：资源所有权 / 候选创建 / GPU 探测与提交。
 import "core:fmt"
 import "core:strings"
@@ -85,7 +85,7 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		foster.MaterialInitWithShaders(&b.materials[i], &b.programs[i].vertex, &b.programs[i].fragment)
 		dev.configure_parameters(&b.programs[i], sh.texture_count(schema))
 	}
-	// 参数组只是 Shader 资源；每个 .oshader 创建一个效果及其 Pass 目标。
+	// 参数组只是 Shader 资源；每个 .oshader 创建一个 Shader 及其 Pass 目标。
 	b.shaders = make([]Shader_Runtime, len(build.shaders))
 	for desc, i in build.shaders {
 		e := &b.shaders[i]
@@ -110,7 +110,7 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 	return b
 }
 
-// 候选包跟随当前选择，按稳定 ID 映射；当前效果被删除后使用该工作区书签或首项。
+// 候选包跟随当前选择，按稳定 ID 映射；当前 Shader 被删除后使用该工作区书签或首项。
 bank_selected_shader :: proc(s: ^Session, b: ^Parameter_Bank) -> int {
 	if b == s.bank do return s.selected_shader
 	name := s.workspaces[s.workspace].shader
@@ -124,7 +124,7 @@ bank_selected_shader :: proc(s: ^Session, b: ^Parameter_Bank) -> int {
 	return chosen
 }
 
-// 只为选中效果分配目标、验证管线；其他 Shader 仅保留编译结果。
+// 只为选中 Shader 分配目标、验证管线；其他 Shader 仅保留编译结果。
 bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates: bool = true) -> bool {
 	if b == nil || b.candidate_failed do return false
 	if !shader_targets_prepare(s, b, selected) {
@@ -178,7 +178,7 @@ bank_apply :: proc(s: ^Session, b: ^Parameter_Bank, selected: int, apply_updates
 			bank_error(s, fmt.tprintf("%s: %s", b.parameters[i].name, program.diagnostic))
 			b.candidate_failed = true
 		}
-		// 候选包仍等待源码编译成功；未选中效果不分配目标或创建 GPU Shader。
+		// 候选包仍等待源码编译成功；未选中 Shader 不分配目标或创建 GPU 程序。
 		ready = ready && (program.status == .Live || (!b.program_used[i] && program.status == .Ready))
 	}
 	if selected >= 0 do b.shaders[selected].ready = drawable

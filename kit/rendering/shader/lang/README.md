@@ -42,7 +42,7 @@ Shader "Water"
 - `Shader` 名和 `Pass` 名是稳定标识，只接受 ASCII 字母、数字和下划线，首字符不能为数字。
   显示名称使用可选的 `Label "..."`，不改变预设或运行时身份。
 - `Properties` 是全文件共用的声明模板。**各 Pass 继承相同字段，但保有独立的实例值**，
-  对应既有的 Effect → Pass → 参数面板；当前不提供 Unity 式的跨 Pass 共享可变参数值。
+  对应既有的 Shader → Pass → 参数面板；当前不提供 Unity 式的跨 Pass 共享可变参数值。
   每个程序的参数组名为 `<Shader>_<Pass>`；重命名其中任一项会改变参数组身份。
 - 属性名必须为 `_Name`；生成器自动声明 HLSL 数值、纹理与 `_NameSampler`。
   不再手写这些资源声明，也无需 include 参数头文件。`_olib_` 前缀保留给生成器。
@@ -56,7 +56,7 @@ Shader "Water"
 - `[Instance]` 标记每对象数值字段（最多 16 个）；2D 走顶点 storage buffer，不占参数 uniform，
   不同取值仍可合批。tint 总在顶点颜色里，不需要额外标记。
 - 顶层 `Instanced` 声明生成常驻缓冲变体；当前解析器遇到 `[Instance]` 也会自动启用它。
-  底层 Effect 允许 2D 只用实例字段而不启用 instanced；3D 仍要求实例缓冲。
+  底层 Shader 允许 2D 只用实例字段而不启用 instanced；3D 仍要求实例缓冲。
 
 ### 引擎块与标准 include
 
@@ -81,7 +81,7 @@ shadercross 只接受一个 `-I`（留给项目的 shader 目录），所以 too
 把这些文件复制到临时编译目录的 `olib/`。`olib/` 因此是保留的 include 目录名，项目自己的 shader 目录里不要建 `olib/`。
 Shader Lab 只监听项目源目录，改了 olib 的 include 要重启 Shader Lab；tools/shaders 编译手写 `.hlsl` 时不提供这些文件。
 
-### 2D 效果的 HLSL 约定
+### 2D Shader 的 HLSL 约定
 
 所有 `Draw Sprite` 都用同一份输入接口，批量与常驻缓冲的差异由生成器处理：
 
@@ -118,7 +118,7 @@ float4 fragment_main(Output v) : SV_Target0
 顶点 b0 和片元 b0 由宿主填写，两种变体相同，声明在 `olib/sprite.hlsli`；片元 b1 为统一参数。
 不要手写或复用旧的精灵顶点布局。Odin 的字段标签 `instance:"true"` 对应 `[Instance]`。
 
-### instanced 效果的 HLSL 约定
+### instanced Shader 的 HLSL 约定
 
 **模型 instanced** 的 HLSL（`Draw Model`）：
 
@@ -174,7 +174,7 @@ struct Output { float4 Position : SV_Position; float3 Normal : TEXCOORD0; OlibIn
 
 `Target { Size 640 360 Scale 0.5 Format Float16 Samples 1 Depth Off Clear (0,0,0,0) }`
 对应既有 Target_Desc。Size 与 Scale 通常择一使用；Format 支持 Color/Float16/Float32，
-Samples 为 0/1/4。模型和精灵各 Pass 必须共享同一个目标描述；图像效果保持每目标单个生产者。
+Samples 为 0/1/4。模型和精灵各 Pass 必须共享同一个目标描述；全屏 Shader 保持每目标单个生产者。
 这些约束由 `sh.shader_order` 统一验证。
 
 ## 接入与发布
@@ -182,10 +182,10 @@ Samples 为 0/1/4。模型和精灵各 Pass 必须共享同一个目标描述；
 Shader Lab 自动递归发现 `Config.source_root` 下的 `.oshader`，重名拒绝。
 参数声明统一由 Properties 提供，不再读取 Odin 参数包。
 源码和 include 的变化触发整包候选验证；错误保留上一版 Shader、参数与预览。
-成功后按参数组名与字段 Id/类型迁移值。删除最后一个单文件效果后工作区变空。
+成功后按参数组名与字段 Id/类型迁移值。删除最后一个单文件 Shader 后工作区变空。
 
 `lang.parse(text, source_path)` 返回独立拥有的 `Document`，使用 `dispose` 释放。
-解析器不读文件、不执行 HLSL；返回 Schema、Effect、按 Schema 排列的完整 HLSL。
+解析器不读文件、不执行 HLSL；返回 Schema、Shader、按 Schema 排列的完整 HLSL。
 `#line` 将编译错误指回原文件；语法错误也包含原文件行列。
 
 发布使用现有工具，无需额外生成步骤：
@@ -197,7 +197,7 @@ odin run ../olib/tools/shaders -- -dir:src/shader_lab/shaders
 工具编译指定目录顶层的 `.hlsl` 和 `.oshader`，子目录需分别运行。
 每个 Pass 输出 `Compiled/<Shader>_<Pass>.<vertex|fragment>.<spv|dxil|msl>`，
 Sprite 批量变体总是生成；声明 Instanced 时还输出 `<Shader>_<Pass>.instanced.vertex.<spv|dxil|msl>`，
-片元代码共用。同时输出 `Compiled/<Shader>.shader.json`，包含 `version`、`schemas`、`effect`。
+片元代码共用。同时输出 `Compiled/<Shader>.shader.json`，包含 `version`、`schemas`、`shader`。
 `version` 是生成代码与宿主的绑定约定版本（`mat.MANIFEST_VERSION`，当前为 2）；约定变化后旧产物登记时返回
 "Compiled shader manifest is outdated; re-run tools/shaders"，重新运行上面的命令即可。
 描述中的 `schema.shader` 是不带后缀的程序资源键，不含开发机路径。
@@ -209,6 +209,6 @@ Material_Library；它与保存参数值的材质实例 JSON 是两种不同数�
 UsePass 或自动 Web GLSL。
 Zed / ZedG 的 `.oshader` 高亮见 [本地扩展](../../../../tools/zed-shader/README.md)，
 支持外层声明和嵌入 HLSL；语义补全与跨块跳转尚未提供。
-共享代码可用 HLSLINCLUDE / HLSLI；每个效果在自己的文件中声明 Pass，分别编译。
+共享代码可用 HLSLINCLUDE / HLSLI；每个 Shader 在自己的文件中声明 Pass，分别编译。
 
 检查：`odin run tools/check -- -only:kit/rendering/shader`，全仓检查为 `odin run tools/check`。

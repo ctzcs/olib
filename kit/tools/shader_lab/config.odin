@@ -46,9 +46,9 @@ Preview_Frame :: struct {
 
 Preview_Hooks :: struct {
 	user_data: rawptr,
-	// 材质效果的自定义预览：用游戏同一套 API 记录要画的东西，Shader Lab 负责提交。对每个要画的 Pass 调用一次；
+	// 材质 Shader 的自定义预览：用游戏同一套 API 记录要画的东西，Shader Lab 负责提交。对每个要画的 Pass 调用一次；
 	// 2D 记录时把 frame.pass 作为 pass_id 传入，3D 只管记录（Shader Lab 按该 Pass 提交）。sprites / models
-	// 按效果维度只给一个，另一个为 nil。返回 false 使用内置几何。非材质效果（Fullscreen、Preview_Model）总用内置几何。
+	// 按 Shader 维度只给一个，另一个为 nil。返回 false 使用内置几何。非材质 Shader（Fullscreen、Preview_Model）总用内置几何。
 	record: proc(user_data: rawptr, frame: Preview_Frame, material: ^mat.Material,
 		sprites: ^r2d.Render2D, models: ^r3d.Render3D) -> bool,
 }

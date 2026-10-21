@@ -67,7 +67,7 @@ Render3D_Record :: struct {
 	count: int,
 }
 
-// 记录时的效果与槽数一并保存：之后 material_reload 换了效果或参数组，已记录的快照仍按原布局绘制。
+// 记录时的 Shader 与槽数一并保存：之后 material_reload 换了 Shader 或参数组，已记录的快照仍按原布局绘制。
 @(private)
 Render3D_Source :: struct {
 	material: ^mat.Material,

@@ -105,7 +105,7 @@ render2d_runs_split_on_state_and_parameters :: proc(t: ^testing.T) {
 	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &atlas, selection))
 	run.quad_count = 0
 	testing.expect(t, r.snapshots[0].Fragment.Samplers[0].Texture == &atlas) // 帧贴图替换到 sprite_texture 槽
-	testing.expect_value(t, len(r.snapshots[0].Fragment.UniformBuffers[1]), 16) // .oshader 效果的参数在片元槽 1
+	testing.expect_value(t, len(r.snapshots[0].Fragment.UniformBuffers[1]), 16) // .oshader Shader 的参数在片元槽 1
 
 	testing.expect(t, !render2d_run_matches(&r, run, &material, "", &white, selection))
 	testing.expect(t, !render2d_run_matches(&r, run, &material, "outline", &atlas, selection))

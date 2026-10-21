@@ -22,16 +22,16 @@ Draw_Error :: enum {
 	Device_Mismatch,        // 材质属于另一个设备
 	Missing_Mesh,           // 没有可绘制的网格
 	Invalid_Target,         // 绘制目标尺寸无效
-	Not_Material_Shader,    // 效果不是 Sprite/Model 对象材质
-	Too_Many_Passes,        // 效果没有 Pass 或超过 MAX_PASSES
+	Not_Material_Shader,    // Shader 不是 Sprite/Model 对象材质
+	Too_Many_Passes,        // Shader 没有 Pass 或超过 MAX_PASSES
 	Unknown_Pass,           // 指定的 Pass ID 不存在
 	Wrong_Pass_Kind,        // Pass 种类与本次绘制（Sprite/Model）不符
 	Missing_Binding,        // 某个 Pass 的参数组没有绑定
 	Invalid_Binding,        // 绑定的 Shader、数值或贴图不完整
 	Missing_Sprite_Texture, // Pass 需要当前帧贴图，但没有提供或字段不是 Texture
 	Instance_Buffer_Required, // r2d/r3d.buffer 传了未创建的缓冲，或自动实例化的缓冲创建失败
-	Not_Instanced_Shader,   // 用实例缓冲绘制，但效果没有声明 instanced
-	Instance_Mismatch,      // 实例缓冲的字段数与效果的 [Instance] 字段数不一致
+	Not_Instanced_Shader,   // 用实例缓冲绘制，但 Shader 没有声明 instanced
+	Instance_Mismatch,      // 实例缓冲的字段数与 Shader 的 [Instance] 字段数不一致
 	Unsupported_Mesh,       // 网格顶点格式不是模型材质路径支持的静态格式（例如蒙皮网格）
 	Missing_View_Matrix,    // 3D 视图没有设置视矩阵（view_matrix 为零矩阵）
 	View_Globals_Too_Large, // 视图块超过 VIEW_GLOBALS_SIZE 字节

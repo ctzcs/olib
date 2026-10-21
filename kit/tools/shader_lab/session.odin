@@ -24,7 +24,7 @@ Session :: struct {
 	// 2D 材质预览：Render2D 借用这个库的设备与默认材质；sprite_mesh 是 BatcherVertex 布局的空网格，供管线探测。
 	library: mat.Material_Library,
 	render: r2d.Render2D,
-	// 材质效果的预览与游戏一样用 Render2D / Render3D 记录后提交，材质借用 bank 的 GPU 绑定（见 material_preview.odin）。
+	// 材质 Shader 的预览与游戏一样用 Render2D / Render3D 记录后提交，材质借用 bank 的 GPU 绑定（见 material_preview.odin）。
 	preview_sprites: r2d.Render2D,
 	preview_models: r3d.Render3D,
 	sprite_mesh: foster.Mesh,
@@ -42,7 +42,7 @@ Session :: struct {
 	pending_bank: ^Parameter_Bank,
 	bank_error: string,
 	selected: int,
-	// selected_shader=-1 表示工作区无效果；inspect_pass 只决定编辑哪个 Pass。
+	// selected_shader=-1 表示工作区无 Shader；inspect_pass 只决定编辑哪个 Pass。
 	selected_shader, inspect_pass: int,
 	preview_pass: int, // -1 始终看最终效果；与编辑中的 inspect_pass 分开。
 	shader_menu, preview_settings: bool,
@@ -80,7 +80,7 @@ Session :: struct {
 	request_serial, schema_generation: u64,
 	preview_hooks: Preview_Hooks,
 	custom_preview: bool,
-	pending_shader: string, // new_shader 写出的效果名，编译进 bank 后自动选中
+	pending_shader: string, // new_shader 写出的 Shader 名，编译进 bank 后自动选中
 	sidebar_width, sidebar_effective, splitter_original: f32,
 	sidebar_collapsed, compact, splitting: bool,
 	parameter_inset: f32, // 当前 Shader folder 的布局缩进，仅在构建 UI 时使用。

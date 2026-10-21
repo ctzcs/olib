@@ -29,7 +29,7 @@ Zed / ZedG 高亮见 [扩展说明](../../../../tools/zed-shader/README.md)。
 ## 候选包 API
 
 - parameters_compile(source_directory) 同步读取目录中的 .oshader，返回 Parameter_Build。
-- programs 与 schemas 按相同顺序排列，持有每个 Pass 的源码快照；effects 持有效果定义。
+- programs 与 schemas 按相同顺序排列，持有每个 Pass 的源码快照；shaders 持有 Shader 定义。
 - parameters_init(watch, source_directory) / parameters_update / parameters_take / parameters_dispose
   提供后台发现与监听。Watch 必须保持地址稳定。
 - parameters_take 返回拥有的数据；使用 parameter_build_dispose 释放。

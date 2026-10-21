@@ -11,7 +11,7 @@ import r3d "olib:kit/rendering/3d"
 import mat "olib:kit/rendering/material"
 import world "olib:kit/world"
 
-// 初始化：materials 已登记效果，mesh 已通过 mesh_upload 上传。
+// 初始化：materials 已登记 Shader，mesh 已通过 mesh_upload 上传。
 material, reason := mat.material_load(&materials, "materials/hero.json")
 renderer: r3d.Render3D
 reason = r3d.init(&renderer, &materials) // 空串成功
@@ -65,7 +65,7 @@ draw_debug 未指定时只在空 pass_id（画全部 Pass）的提交里画调�
 线宽和深度开关在 `renderer.debug.thickness / depth_test_enabled`，还有 `sphere / frustum / axis / grid / skeleton`。
 
 非空 pass_id 只选同名 Pass：不含该 ID 的材质跳过；所有模型记录都没有这个 ID 才返回 `.Unknown_Pass`，
-已声明但禁用的 Pass 不绘制。空 pass_id 按效果声明顺序画所有启用的 Pass。
+已声明但禁用的 Pass 不绘制。空 pass_id 按 Shader 声明顺序画所有启用的 Pass。
 含透明 Pass 的多 Pass 对象保留逐对象的 Pass 顺序；要全场景分阶段就显式多次 submit。
 
 **剪影**（角色被墙挡住的部分画成纯色）用 `ZTest Greater`、`ZWrite Off` 的 Pass，按 场景 → 剪影 → 角色本体 分三次提交：
@@ -118,7 +118,7 @@ Shader Lab 预览提交全零的视图块；Shader 可以按某个标记分量�
 - 深度取视矩阵下的世界盒中心，无盒时取矩阵平移点。不透明按材质和绑定快照分组，组按最近深度排列，
   组内前到后；透明全局后到前，同深度稳定。透明合批不会跨越其他对象。
 - 同网格不保证只有一次 Draw：材质快照不同、排序中的其他网格、透明多 Pass 都会形成批次边界。
-- 记录复制 CPU 实例、矩阵、bounds、材质数值/贴图绑定以及当时的效果；之后修改或重载材质只影响新记录，
+- 记录复制 CPU 实例、矩阵、bounds、材质数值/贴图绑定以及当时的 Shader；之后修改或重载材质只影响新记录，
   已记录的对象仍按原快照绘制。Mesh、Shader、纹理和常驻缓冲仍借用到 clear/dispose，**销毁这些资源前先 clear**。
 - submit 先验证候选再绘制，错误不消耗记录；空提交成功。clear 保留容量，不清颜色/深度附件。
 - **Render2D 的 submit 会清空，Render3D 的 submit 会保留**。混合绘制时由游戏安排两者的提交顺序，

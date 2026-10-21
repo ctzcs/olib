@@ -10,7 +10,7 @@ import mat "olib:kit/rendering/material"
 import sh "olib:kit/rendering/shader"
 import world "olib:kit/world"
 
-// 材质效果的预览：借用 bank 的 GPU 绑定组成材质，用 Render2D / Render3D 记录后提交到预览目标，
+// 材质 Shader 的预览：借用 bank 的 GPU 绑定组成材质，用 Render2D / Render3D 记录后提交到预览目标，
 // 渲染状态与游戏一致。Pass 启停与“只预览到第 N 个 Pass”在这里逐 Pass 处理。
 material_shader_render :: proc(s: ^Session, e: ^Shader_Runtime) -> ^foster.Texture {
 	target := &e.targets[0].buffers[0]
@@ -112,7 +112,7 @@ preview_sprite_texture :: proc(s: ^Session, e: ^Shader_Runtime) -> ^foster.Textu
 }
 
 
-// 保存整个对象效果的参数；临时借用组和数值，文件保存函数内部复制路径。
+// 保存整个对象 Shader 的参数；临时借用组和数值，文件保存函数内部复制路径。
 save_material :: proc(s: ^Session, shader: int, path: string) -> bool {
 	if shader < 0 || shader >= len(s.shaders) || !sh.shader_is_material(s.shaders[shader].desc) do return false
 	color_picker_close(s, true)

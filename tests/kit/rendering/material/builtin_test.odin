@@ -6,7 +6,7 @@ import "core:testing"
 import foster "olib:foster"
 import sh "olib:kit/rendering/shader"
 
-// 内置效果借用设备默认 Shader：没有 GPU 时用标记为已初始化的空设备检查登记逻辑。
+// 内置 Shader 借用设备默认 Shader：没有 GPU 时用标记为已初始化的空设备检查登记逻辑。
 @(test)
 builtin_shaders_register_once_with_foster_uniforms :: proc(t: ^testing.T) {
 	library: Material_Library
@@ -50,7 +50,7 @@ material_create_reports_unknown_shaders :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(library.instances), 0)
 }
 
-// Web 构建登记效果时的限制（material_register 只在 ODIN_OS == .JS 时调用它）。
+// Web 构建登记 Shader 时的限制（material_register 只在 ODIN_OS == .JS 时调用它）。
 @(test)
 web_check_rejects_unsupported_shaders :: proc(t: ^testing.T) {
 	schemas := []sh.Schema{{fields = []sh.Field{{kind = .Scalar, instance = true}}}}

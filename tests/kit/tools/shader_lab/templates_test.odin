@@ -1,7 +1,7 @@
 #+test
 package shader_lab
 
-// 新建着色器的模板必须能直接用：游戏同一解析器（含 D3D12 规则检查）通过，效果是可登记的材质。
+// 新建着色器的模板必须能直接用：游戏同一解析器（含 D3D12 规则检查）通过，Shader 是可登记的材质。
 import "core:testing"
 
 import sh "olib:kit/rendering/shader"

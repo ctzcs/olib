@@ -22,7 +22,7 @@ template_source :: proc(template: Shader_Template) -> (text, base, label: string
 	return
 }
 
-// 写出模板，返回新文件路径（临时分配）。Shader 名取 base、base2、base3… 中第一个没被文件或已有效果占用的，不覆盖文件。
+// 写出模板，返回新文件路径（临时分配）。Shader 名取 base、base2、base3… 中第一个没被文件或已有 Shader 占用的，不覆盖文件。
 new_shader :: proc(s: ^Session, template: Shader_Template) -> (path, reason: string) {
 	if !s.initialized do return "", "Shader Lab is not initialized"
 	text, base, label := template_source(template)
@@ -44,7 +44,7 @@ new_shader :: proc(s: ^Session, template: Shader_Template) -> (path, reason: str
 	return "", fmt.tprintf("No free name for %s", base)
 }
 
-// 新建的效果编译进 bank 后选中它；编译失败时继续等待，错误照常显示在面板上。
+// 新建的 Shader 编译进 bank 后选中它；编译失败时继续等待，错误照常显示在面板上。
 @(private)
 templates_update :: proc(s: ^Session) {
 	if s.pending_shader == "" do return

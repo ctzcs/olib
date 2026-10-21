@@ -14,7 +14,7 @@ Instance :: struct {
 }
 Instance_Resource :: struct {
 	version: int,
-	shader: string `json:"effect"`, // 文件里的键沿用 effect
+	shader: string `json:"effect"`, // 文件里的键仍是 "effect"
 	groups: []Resource,
 }
 

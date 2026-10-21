@@ -1,7 +1,7 @@
 package material
 
-// 内置 2D 效果：直接借用 foster 设备的默认 Shader（Batcher、Msdf），foster 已按驱动选好字节码，
-// 含 Web 的 GLSL，所以这两个效果在所有后端可用。它们沿用 foster 的 uniform 布局（Uniform_Layout.Foster）。
+// 内置 2D Shader：直接借用 foster 设备的默认 Shader（Batcher、Msdf），foster 已按驱动选好字节码，
+// 含 Web 的 GLSL，所以这两个 Shader 在所有后端可用。它们沿用 foster 的 uniform 布局（Uniform_Layout.Foster）。
 // 首次用名字创建材质（material_create）或 2D 渲染器初始化时自动登记，调用方不用手动 register。
 // 分区：名字与参数组 / 登记。
 import foster "../../../foster"
@@ -51,7 +51,7 @@ builtin_register :: proc(library: ^Material_Library, name: string) -> string {
 	entry.desc = sh.shader_clone(desc)
 	entry.schemas = make([]sh.Schema, 1)
 	entry.schemas[0] = sh.schema_clone(schemas[0])
-	// Shader 归设备所有：vertex/fragment 留空，material_effect_gpu_clear 只释放 gpu 里的 Material。
+	// GPU 程序归设备所有：vertex/fragment 留空，material_shader_gpu_clear 只释放 gpu 里的 Material。
 	entry.gpu = make([]foster.Material, 1)
 	if text {
 		foster.MaterialInitWithShaders(&entry.gpu[0], &device.Defaults.MsdfVertexShader, &device.Defaults.MsdfFragmentShader)

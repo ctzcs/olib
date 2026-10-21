@@ -1,6 +1,6 @@
 package material
 
-// 预编译 Shader 字节码：按图形驱动选择格式，并用 tools/shaders 生成的清单登记效果；
+// 预编译 Shader 字节码：按图形驱动选择格式，并用 tools/shaders 生成的清单登记 Shader；
 // 可以用 #load_directory 一次登记整个产物目录。
 // 分区：驱动与字节码选择 / 清单登记。
 import "base:runtime"
@@ -22,14 +22,14 @@ Shader_Binaries :: struct {
 }
 
 // 一个 Pass 的顶点与片元字节码，顺序与 Shader 声明里的 Schema（参数组）一致。
-// instanced_vertex 是 instanced 精灵效果的缓冲变体顶点（tools/shaders 产出的 <组名>.instanced.vertex.*），其余效果留空。
+// instanced_vertex 是 instanced 精灵 Shader 的缓冲变体顶点（tools/shaders 产出的 <组名>.instanced.vertex.*），其余 Shader 留空。
 Pass_Binaries :: struct {
 	vertex, fragment: Shader_Binaries,
 	instanced_vertex: Shader_Binaries,
 }
 
 // 驱动是否走预编译字节码（SPIR-V / DXIL / MSL）。Web（WebGL2）只有 foster 默认 Shader 的手写 GLSL，
-// 原生的 Private 驱动需要平台私有格式，两者都不在此列；内置效果借用 foster 默认 Shader，不经过这里。
+// 原生的 Private 驱动需要平台私有格式，两者都不在此列；内置 Shader 借用 foster 默认 Shader，不经过这里。
 shader_driver_supported :: proc(driver: foster.GraphicsDriver) -> bool {
 	when ODIN_OS == .JS {
 		return false
@@ -80,11 +80,11 @@ shader_format :: proc(driver: foster.GraphicsDriver) -> string {
 // 2：精灵记录首项为两条轴；精灵缓冲变体顶点 b1 为变换栈；顶点 b0 在投影/矩阵后接 Clock。
 MANIFEST_VERSION :: 2
 
-// 登记 tools/shaders 产物目录里的全部材质效果。files 直接传 #load_directory("<目录>/Compiled")，
+// 登记 tools/shaders 产物目录里的全部材质 Shader。files 直接传 #load_directory("<目录>/Compiled")，
 // 它必须作参数或变量初始化（写成 :: 常量编译不过）。每个 *.shader.json 按参数组名找当前后端的
 // <组名>.vertex / .fragment，instanced 精灵再找 <组名>.instanced.vertex；其他文件忽略。
-// 首个 Pass 不是 Model / Sprite 的效果只供 Shader Lab 预览，跳过。遇到第一个错误即返回，
-// 诊断以文件名开头，之前已登记的效果保留；一个清单都没有时报错（多半是目录写错）。
+// 首个 Pass 不是 Model / Sprite 的 Shader 只供 Shader Lab 预览，跳过。遇到第一个错误即返回，
+// 诊断以文件名开头，之前已登记的 Shader 保留；一个清单都没有时报错（多半是目录写错）。
 // 字节码借用嵌入数据，不复制。返回空串表示成功，诊断文本借用至本帧结束。
 material_register_directory :: proc(library: ^Material_Library, files: []runtime.Load_Directory_File) -> string {
 	if reason := shader_backend_check(library); reason != "" do return reason
@@ -121,7 +121,7 @@ material_register_directory :: proc(library: ^Material_Library, files: []runtime
 }
 
 // 清单由 tools/shaders 生成（schemas + shader），passes 与 schemas 一一对应。
-// 内部完成选择后端、解析、material_register 与临时数据释放；库深复制效果，字节码借用至
+// 内部完成选择后端、解析、material_register 与临时数据释放；库深复制 Shader，字节码借用至
 // material_library_dispose。返回空串表示成功，诊断文本借用至本帧结束。
 // 字节码就在 tools/shaders 的产物目录里时，用 material_register_directory 一次登记整个目录；
 // 这里用于字节码来自别处（自定义打包等）的情况。
@@ -144,7 +144,7 @@ material_register_manifest :: proc(library: ^Material_Library, manifest: []u8,
 Compiled_Manifest :: struct {
 	version: int,
 	schemas: []sh.Schema,
-	shader: sh.Shader_Desc `json:"effect"`, // 清单里的键沿用 effect
+	shader: sh.Shader_Desc `json:"effect"`, // 清单里的键仍是 "effect"
 }
 
 // 两种登记共用：设备与后端在解析清单之前检查。

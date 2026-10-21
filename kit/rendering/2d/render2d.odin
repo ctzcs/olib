@@ -18,7 +18,7 @@ RENDER2D_BATCH_QUADS :: 4096
 // 类型
 // ------------------------------------------------------------------------------
 
-// 一次提交的视图：目标与时间（写入 olib 效果的 Clock）。pointer 是归一化指针位置（Pointer.xy），业务通常不用。
+// 一次提交的视图：目标与时间（写入 olib Shader 的 Clock）。pointer 是归一化指针位置（Pointer.xy），业务通常不用。
 View :: struct {
 	target: foster.DrawableTarget,
 	time, delta_time: f32,
@@ -55,7 +55,7 @@ Render2D :: struct {
 	snapshot_count: int,
 	mesh: foster.Mesh,
 	index_quads: int, // 索引缓冲已覆盖的四边形数（索引是固定的四边形图案，只在增长时重建）
-	// 带 [Instance] 字段的效果：每个精灵一组 float4，顶点 mode 字节存它的起始偏移；[0] 保留不用。submit 时上传一次。
+	// 带 [Instance] 字段的 Shader：每个精灵一组 float4，顶点 mode 字节存它的起始偏移；[0] 保留不用。submit 时上传一次。
 	instance_values: [dynamic][4]f32,
 	instance_buffer: foster.StorageBuffer,
 	instance_ready: bool,
@@ -83,7 +83,7 @@ Render2D_Run :: struct {
 	blend: foster.BlendMode,
 	scissor: Render2D_Scissor,
 	quad_start, quad_count: int,
-	storage: bool, // 顶点从 instance_values 读两条轴和 [Instance] 字段（.oshader 效果总是）
+	storage: bool, // 顶点从 instance_values 读两条轴和 [Instance] 字段（.oshader Shader 总是）
 	pass_offsets: [sh.MAX_PASSES]u32, // 每个精灵的数值记录内，各 Pass 的 float4 偏移
 	// r2d.buffer 记录的常驻缓冲：不与其他记录合并，用缓冲变体顶点着色器实例化绘制。
 	buffer: ^Sprite_Buffer,
@@ -434,7 +434,7 @@ submit :: proc(r: ^Render2D, view: View) -> mat.Draw_Error {
 }
 
 // 记录常驻缓冲 buf 的前 count 个精灵：每个 Pass 一次实例化 Draw，帧贴图都是 texture（图集页）。
-// 材质须是 instanced 精灵效果（有缓冲变体）；[Instance] 字段以缓冲为准，统一参数来自材质。
+// 材质须是 instanced 精灵 Shader（有缓冲变体）；[Instance] 字段以缓冲为准，统一参数来自材质。
 // 当前变换栈（如相机）同样作用于这些精灵；按记录顺序与其他图元叠放，不与它们合批。
 buffer :: proc(r: ^Render2D, material: ^mat.Material, buf: ^Sprite_Buffer, count: int,
 	texture: ^foster.Texture, pass_id: mat.Pass_Id = "") -> mat.Draw_Error {
@@ -584,7 +584,7 @@ render2d_transform :: proc(r: ^Render2D, p: foster.Vec2) -> foster.Vec2 {
 	return {p.x*m[0] + p.y*m[4] + m[12], p.x*m[1] + p.y*m[5] + m[13]}
 }
 
-// 参数 uniform 所在的片元槽：内置效果（Foster 布局）在槽 0，.oshader 效果在槽 1（槽 0 是 Clock 帧块）。
+// 参数 uniform 所在的片元槽：内置 Shader（Foster 布局）在槽 0，.oshader Shader 在槽 1（槽 0 是 Clock 帧块）。
 @(private)
 render2d_param_slot :: proc(shader: sh.Shader_Desc) -> int {
 	return shader.uniforms == .Foster ? 0 : 1

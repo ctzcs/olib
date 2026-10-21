@@ -46,7 +46,7 @@ instance_fields_leave_uniform_layout_and_define_olib_instance :: proc(t: ^testin
 	testing.expect(t, strings.contains(text, "register(t0, space2)"))
 
 	testing.expect(t, !strings.contains(text, "%!")) // 格式串里的花括号不能被 fmt 吃掉
-	// 没有 instance 字段且效果不是 instanced：不 include 实例代码，只有参数块。
+	// 没有 instance 字段且 Shader 不是 instanced：不 include 实例代码，只有参数块。
 	plain := sh.Schema{name = "Plain", fields = {{id = "a", name = "a", kind = .Scalar, maximum = 1}}}
 	plain_text := sh.hlsl(plain)
 	defer delete(plain_text)
@@ -69,11 +69,11 @@ instanced_shader_rules :: proc(t: ^testing.T) {
 	pass := sh.Pass_Desc{id = "body", params = "Body", draw = .Sprite, output = "color"}
 	passes := []sh.Pass_Desc{pass}
 	shader := sh.Shader_Desc{name = "E", output = "color", passes = passes}
-	// 有 instance 字段但效果没声明 instanced。
+	// 有 instance 字段但 Shader 没声明 instanced。
 	testing.expect(t, strings.contains(sh.shader_validate(shader, schemas), "Instanced shader"))
 	shader.instanced = true
 	testing.expect_value(t, sh.shader_validate(shader, schemas), "")
-	// instanced 支持 Sprite 和 Model；图像（全屏）效果不支持。
+	// instanced 支持 Sprite 和 Model；图像（全屏）Shader 不支持。
 	model_passes := []sh.Pass_Desc{{id = "body", params = "Body", draw = .Model, output = "color"}}
 	model_schemas := []sh.Schema{instance_schema()}
 	model_schemas[0].preview = "3d"

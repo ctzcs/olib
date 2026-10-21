@@ -61,15 +61,15 @@ lab.dispose(&editor.lab)
   的 GPU 纹理。借用图集须地址稳定并活到 `dispose` 之后，工具不会释放它；图标 tint 跟随主题与选中状态。
 - `render` 的目标可以是窗口或宿主 Target。工具在区域大小的内部目标中绘制，按 1:1 合成到区域，
   非零原点和窗口 DPI 转换由输入坐标匹配。区域原点对齐整数像素，不随低分辨率场景放大 UI。
-  场景预览直接取选中 Effect 的 Pass 目标，不保留额外的单 Shader 场景目标。
-  只有当前选中效果分配 RenderTexture（包含深度、MSAA resolve 和 Previous 双缓冲）。
-  切换后在本帧 UI/缩略图提交完毕时释放旧目标，新效果在下一帧渲染开始时创建，避免悬空纹理引用。
-  无效果时直接在最终输出绘制背景；最终输出目标用于合成预览和原生像素 UI，仍保留。
+  场景预览直接取选中 Shader 的 Pass 目标，不另外保留场景目标。
+  只有当前选中 Shader 分配 RenderTexture（包含深度、MSAA resolve 和 Previous 双缓冲）。
+  切换后在本帧 UI/缩略图提交完毕时释放旧目标，新 Shader 在下一帧渲染开始时创建，避免悬空纹理引用。
+  无 Shader 时直接在最终输出绘制背景；最终输出目标用于合成预览和原生像素 UI，仍保留。
 - Texture 的 Clear、替换和参数恢复会保留本帧缩略图借用的旧纹理，最终 UI 提交后再释放。
   Clear 后恢复内置棋盘格，不让已排入绘制的图片引用失效。
 - 面板需要宽度至少 320、高度大于 180 像素；更小区域跳过绘制并取消捕获。
-  侧栏的工作区、效果选择器和详情页签位置固定；Pass 列表与详情内容分别滚动。
-  效果菜单使用浮层，展开菜单或 Shader folder 不挤动其它区域。详情滚动按工作区、效果和 Pass
+  侧栏的工作区、Shader 选择器和详情页签位置固定；Pass 列表与详情内容分别滚动。
+  Shader 菜单使用浮层，展开菜单或 Shader folder 不挤动其它区域。详情滚动按工作区、Shader 和 Pass
   的稳定 ID 记忆，预览设置单独记忆；均只保留在当前 Session。支持拖动右侧分隔条调宽、收起/面板切换。
   逻辑宽度小于 760 时使用覆盖式侧栏，
   收起后可查看完整预览。布局只保留在当前 Session，拖动时 Escape 或失焦恢复原宽度。
@@ -86,12 +86,12 @@ lab.dispose(&editor.lab)
 
 ## 预设与文件接入
 
-- 图像效果的 Save/Load 保存或读取当前 Shader 组的参数预设；模型 `.Model` 效果的同一组按钮
-  保存/载入**整个材质**（version=2：Effect 名、所有参数组及贴图），面板会显示范围提示。
+- 全屏 Shader 的 Save/Load 保存或读取当前参数组的预设；模型 `.Model` Shader 的同一组按钮
+  保存/载入**整个材质**（version=2：Shader 名、所有参数组及贴图），面板会显示范围提示。
   Reset all 仍只恢复当前参数组，每个字段右侧 R 恢复单项。
   默认值来自当前成功加载的 Properties。也可直接调用 `save_preset / load_preset / reset_defaults`。
-  整材质的显式 API 是 `save_material / load_material`，传入 Effect 索引。
-  全部参数和 GPU 贴图准备成功才原子替换；失败保留旧材质。异步文件请求同时绑定 Effect 名和布局版本。
+  整材质的显式 API 是 `save_material / load_material`，传入 Shader 索引。
+  全部参数和 GPU 贴图准备成功才原子替换；失败保留旧材质。异步文件请求同时绑定 Shader 名和布局版本。
 - 预设 JSON 由工具生成，无需手写。内容包含版本、组名、字段 ID/类型/值；图片尽量保存为相对
   预设文件的路径。加载按稳定 ID 匹配：新字段取默认值，已删除字段忽略，类型冲突拒绝加载。
   文件无效或新图片加载失败保留原值；保存使用同目录临时文件替换，失败保留原文件。
@@ -111,34 +111,34 @@ GPU 纹理、默认值和预设的直接 API 均须在主线程调用。
 
 ## 新建着色器
 
-效果菜单底部按当前工作区列出“新建精灵材质”（2D）、“新建模型材质”“新建实例化模型材质”（3D）。点击后把
+Shader 菜单底部按当前工作区列出“新建精灵材质”（2D）、“新建模型材质”“新建实例化模型材质”（3D）。点击后把
 [templates/](templates/) 里对应的 `.oshader` 写到 `source_root`（名字取 `NewSprite`、`NewSprite2`…，不覆盖已有文件），
 热重载编译后自动选中。模板已写好引擎块 include、统一顶点接口和满足 D3D12 规则的 Input / Output，只需改参数与着色；
 游戏里同样用 tools/shaders 生成产物后 `mat.material_create` 创建。宿主也可调用 `lab.new_shader(session, .Model)`。
 
 ## 宿主自定义预览
 
-通过 `Config.preview` 设置 `Preview_Hooks{user_data, record}`。材质效果（`.Model`、`.Sprite`）的预览由宿主用
+通过 `Config.preview` 设置 `Preview_Hooks{user_data, record}`。材质 Shader（`.Model`、`.Sprite`）的预览由宿主用
 游戏同一套 API 记录要画的东西，Shader Lab 负责提交到预览目标：
 
 ```odin
 record_preview :: proc(data: rawptr, frame: lab.Preview_Frame, material: ^mat.Material,
     sprites: ^r2d.Render2D, models: ^r3d.Render3D) -> bool {
     host := cast(^Editor)data
-    if models == nil do return false // 2D 效果使用内置预览
+    if models == nil do return false // 2D Shader 使用内置预览
     return r3d.model(models, &host.preview_mesh, material, host.preview_transform) == .None
 }
 ```
 
 回调对每个要画的 Pass 调用一次；2D 记录时把 `frame.pass` 作为 `pass_id` 传入，3D 只管记录，Shader Lab 按该 Pass 提交。
-`sprites` / `models` 按效果维度只给一个，返回 false 使用内置几何。材质借用到本次回调结束，宿主仍拥有网格和 `user_data`。
-`Preview_Frame` 提供 Pass ID、参数组、维度、效果时间与目标尺寸。非材质效果（`.Fullscreen`、`.Preview_Model`）
+`sprites` / `models` 按 Shader 维度只给一个，返回 false 使用内置几何。材质借用到本次回调结束，宿主仍拥有网格和 `user_data`。
+`Preview_Frame` 提供 Pass ID、参数组、维度、Shader 时间与目标尺寸。非材质 Shader（`.Fullscreen`、`.Preview_Model`）
 总用内置几何；热重载的管线探测也只用内置几何，宿主几何须是渲染器支持的同一顶点格式。
 顶部按钮可切换内置/宿主预览。
 
 ## 多 Pass 与历史帧
 
-界面统一使用 Effect → Pass → 参数。每份 .oshader 是一个效果；每个 Pass 对应独立程序和参数实例。
+界面统一使用 Shader → Pass → 参数。每份 .oshader 是一个 Shader；每个 Pass 对应独立程序和参数实例。
 Properties 声明是所有 Pass 的模板，值按各 Pass 分别保存。单 Pass 与多 Pass 共用同一流程，
 追加 Pass 时保留原 ID 可延续选中、折叠与参数值。
 
@@ -151,9 +151,9 @@ Properties 声明是所有 Pass 的模板，值按各 Pass 分别保存。单 Pa
 - Label 仅改变显示名；Shader/Pass 名与字段 Id 用于状态迁移。
 
 未连接的纹理字段使用图片选择器；已连接字段显示目标名称和缩略图。
-图像效果每个目标只有一个生产 Pass；Model / Sprite 材质的 Pass 共用同一个目标并按顺序绘制。
+全屏 Shader 每个目标只有一个生产 Pass；Model / Sprite 材质的 Pass 共用同一个目标并按顺序绘制。
 每个 Pass 写一个颜色附件，可带深度；当前不提供 MRT、Compute 或深度纹理采样。
-不同效果的目标和反馈互相独立。中文 Label 需要宿主字体包含相应字形。
+不同 Shader 的目标和反馈互相独立。中文 Label 需要宿主字体包含相应字形。
 
 ### 模型材质 / 本体 + 描边
 
@@ -161,10 +161,10 @@ Properties 声明是所有 Pass 的模板，值按各 Pass 分别保存。单 Pa
 外扩顶点、正面剔除、只读深度。二者必须使用同一个 output 和 target 描述，不接受图目标输入。
 预览与游戏的 `material3d` 示例一样用 `Render3D.model` 记录，再按 Pass `submit`。
 这里的“当前 Pass”显示从首个 Pass 累积绘制到选中 Pass 的结果，关闭某 Pass 只跳过绘制，
-不会清除其他 Pass 的颜色/深度。旧图像效果仍保留独立目标、输入拓扑和历史帧机制。
+不会清除其他 Pass 的颜色/深度。旧全屏 Shader 仍保留独立目标、输入拓扑和历史帧机制。
 
 保存后的材质 JSON 在游戏中通过 `mat.material_load` 从 Foster StorageContainer 加载，
-材质文件和贴图都归同一容器管理。游戏需要一起提供同一 Effect 定义和预编译 Shader；
+材质文件和贴图都归同一容器管理。游戏需要一起提供同一 Shader 定义和它的预编译程序；
 参数文件本身不是 Shader 包。Pass 定义、预览启停和相机不会写进材质 JSON。
 ShaderLab 的 `save_material/load_material` 仍接受桌面路径；预设使用 `save_preset/load_preset`。
 路径适配集中在 [material_files.odin](material_files.odin)，均为包内私有函数。
@@ -173,45 +173,45 @@ Storage 统一实现，ShaderLab 只处理相对贴图路径换算、编解码�
 保存失败不覆盖旧文件；这套安全保存也可直接用于游戏存档和配置。
 参数编解码在 `kit/rendering/shader`，基于 Foster StorageContainer 的材质加载在 `kit/rendering/material`；游戏不 import ShaderLab 来读资源。
 示例的描边颜色可在面板修改；宽度目前是 HLSL 常量，可以修改源码热重载，不是材质数值字段。
-3D 效果可以包含使用 2D 顶点接口的全屏模糊、合成和反馈，它们不会被拆到 2D 工作区；
-显式声明为 2D 的效果不能包含 3D 模型 Pass。`select_workspace(session, 0 / 1)` 可从宿主切换。
-首次加载默认进入 2D，打开其中第一个已声明效果；该维度没有效果则显示空工作区。
+3D Shader 可以包含使用 2D 顶点接口的全屏模糊、合成和反馈，它们不会被拆到 2D 工作区；
+显式声明为 2D 的 Shader 不能包含 3D 模型 Pass。`select_workspace(session, 0 / 1)` 可从宿主切换。
+首次加载默认进入 2D，打开其中第一个已声明 Shader；该维度没有 Shader 则显示空工作区。
 完整 Pass 列表始终在固定高度的独立区域内，点击只改变
 `inspect_pass`，不会从最终效果跳到中间输出。多个 Pass 时预览区提供“最终效果 / 当前 Pass”切换；
 只有一个 Pass 时直接展示最终效果，省略两者相同的切换按钮。
 `preview_pass=-1` 为最终效果，非负值为中间输出。在“当前 Pass”模式下，选择跟随编辑项。
-`select_effect(session, effect_index, pass_index=-1)` 选择编辑项，省略 Pass 时选择执行顺序的第一个。
+`select_shader(session, shader_index, pass_index=-1)` 选择编辑项，省略 Pass 时选择执行顺序的第一个。
 同一时间编辑一个 Pass；再点击已选 Pass 可折叠，Shader folder 也可独立折叠。
 折叠不改变执行，Pass 左侧 checkbox 才控制启停。`Disabled On` 可在 .oshader 中默认禁用，
-省略则启用。运行时切换通过 `set_pass_enabled(session, effect_index, pass_index, enabled)`，
-只改变会话预览，不自动写回 .oshader 或参数预设。热重载按效果名、Pass ID 保留启停和折叠状态；
+省略则启用。运行时切换通过 `set_pass_enabled(session, shader_index, pass_index, enabled)`，
+只改变会话预览，不自动写回 .oshader 或参数预设。热重载按 Shader 名、Pass ID 保留启停和折叠状态；
 源声明的 `disabled` 改变时以新声明为准。
 禁用 Pass 时不执行其 Shader 或宿主绘制回调：有且只有一个 Current 输入则缩放直通到自身目标，
 否则按该目标的 clear 清屏；Previous 输入不计入直通选择。下游仍能读取原输出名，启停重置反馈历史。
 
-示例的 Preview2D / Preview3D 是单 Pass 效果 ID，参数组为 Preview2D_main / Preview3D_main，显示名为“流动纹理 / 模型表面”；
-它们与拖尾等多 Pass 效果使用同一套选择和编辑流程。
+示例的 Preview2D / Preview3D 是单 Pass Shader ID，参数组为 Preview2D_main / Preview3D_main，显示名为“流动纹理 / 模型表面”；
+它们与拖尾等多 Pass Shader 使用同一套选择和编辑流程。
 “参数 / 预览设置”替换下方详情内容，不改变上方选择区的位置。
 “预览设置”中的全屏/精灵或球体/立方体只改变载体，仅显示与当前工作区兼容的选项，不切换 Shader。
 顶部播放/暂停冻结时间和 Previous；调参数仍可重新计算当前输出。
-Step 暂停并推进一次完整流程（1/60 秒），Reset history 重置该效果时间、帧号和历史。
-程序接入可调用 `select_effect / step / reset_history`；重置可从 Update 调用，GPU 清屏延迟到 Render。
-切走效果释放目标，再次选中时重新分配并重置该效果时间、帧号和 Previous 历史；参数值、
+Step 暂停并推进一次完整流程（1/60 秒），Reset history 重置该 Shader 时间、帧号和历史。
+程序接入可调用 `select_shader / step / reset_history`；重置可从 Update 调用，GPU 清屏延迟到 Render。
+切走 Shader 释放目标，再次选中时重新分配并重置该 Shader 时间、帧号和 Previous 历史；参数值、
 Pass 启停/折叠、工作区书签继续保留，不补算隐藏期间的时间。
 
 时间输入仍为片段 b0：第一个 float4 是 `time / delta_time / frame_index / sprite_flag`，
 第二个 float4 是鼠标 UV 与**当前 Pass** 的目标宽高，第三个保留为白色 Tint。
 暂停重绘保留最近一次模拟步的 delta_time；不能仅以是否发生 render 判断模拟是否推进。
-首次显示、目标 resize、Shader 成功重载、效果流程成功切换或手动重置都会清空历史。
+首次显示、目标 resize、Shader 成功重载、Shader 流程成功切换或手动重置都会清空历史。
 UI 始终在全部 Pass 完成后按最终像素绘制，不进入模糊/反馈链。
 
-源码改动仍先校验整包声明并编译 Shader，但只为当前选中效果分配候选目标、检查实际网格/格式/MSAA
-管线，成功才统一替换。候选准备期间短暂保留当前效果的新旧两套目标，以便失败时保留有效预览；
-其他效果不分配目标。编译期间继续调的参数在提交时迁移。
-未选中效果使用的 Shader 仍编译并报告源码错误，首次使用前保持 `Ready`；选中后才创建 GPU Shader
+源码改动仍先校验整包声明并编译程序，但只为当前选中 Shader 分配候选目标、检查实际网格/格式/MSAA
+管线，成功才统一替换。候选准备期间短暂保留当前 Shader 的新旧两套目标，以便失败时保留有效预览；
+其他 Shader 不分配目标。编译期间继续调的参数在提交时迁移。
+未选中 Shader 的程序仍编译并报告源码错误，首次使用前保持 `Ready`；选中后才创建 GPU 程序
 和检查实际管线。已经使用过的 Shader 资源保留共享，切换时可直接用缓存代码检查新目标配置，
-不重新编译 HLSL。切换中尚未就绪或检查失败的效果显示背景及诊断，不提交无效绘制。
-当前帧循环、未知目标/字段和重复输出会拒绝加载。参数组和效果数量不设上限，每效果最多 32 个 Pass；
+不重新编译 HLSL。切换中尚未就绪或检查失败的 Shader 显示背景及诊断，不提交无效绘制。
+当前帧循环、未知目标/字段和重复输出会拒绝加载。参数组和 Shader 数量不设上限，每 Shader 最多 32 个 Pass；
 单轴目标尺寸最多 8192，目标格式/采样组合仍受所选 GPU 后端支持范围限制。
 
 ## 项目内容与生成文件
@@ -220,7 +220,7 @@ UI 始终在全部 Pass 完成后按最终像素绘制，不进入模糊/反馈�
 发布使用 tools/shaders，同时生成材质清单与预编译字节码，不生成持久参数头文件。
 编译器候选快照在私有临时目录中创建并清理。截图归入所属项目的 library/screenshots，
 诊断副本归入 library/tmp，详见 [生成文件约定](../../../prompts/new-project.md#生成文件与目录纪律)。
-参数组和效果按源码目录实际数量分配；候选整包成功后统一切换，失败保留上一版。
+参数组和 Shader 按源码目录实际数量分配；候选整包成功后统一切换，失败保留上一版。
 
 ## 示例与检查入口
 
@@ -231,29 +231,29 @@ UI 始终在全部 Pass 完成后按最终像素绘制，不进入模糊/反馈�
 不把这些示例作为新项目默认任务；旧入口若写到其他位置，留存产物应归并到上述固定目录。
 
 检查期间只接受注入的输入，真实鼠标键盘被屏蔽，桌面上的操作不会混进自动点击。每一步都等明确状态
-（注入已被一次渲染消费、候选包提交、效果就绪、窗口尺寸生效），不按帧数或经过的时间推测。
+（注入已被一次渲染消费、候选包提交、Shader 就绪、窗口尺寸生效），不按帧数或经过的时间推测。
 失败时完整状态与事件日志写到所属项目的 `library/tmp/shader-lab-<模式>-failure.txt`，每次运行开始时删除旧报告。
 
 `features embedded d3d12` 集中检查预设往返、默认值、失败回滚、过期文件请求、图片热更新、
 自定义预览和侧栏布局；不重复 smoke 的完整故障注入。原生对话框的实际选择由手动操作验收。
 
 示例 `shaders/Trail2D.oshader` 和 `Trail3D.oshader` 定义拖尾效果：场景 → 半分辨率横向模糊 →
-纵向模糊 → 上一帧反馈。`multipass embedded d3d12` 集中检查单 Pass 效果、2D/3D、HDR/MSAA、
+纵向模糊 → 上一帧反馈。`multipass embedded d3d12` 集中检查单 Pass Shader、2D/3D、HDR/MSAA、
 反馈暂停/单步/重置/resize，以及循环依赖和错误 Shader 的回退恢复，不运行其它整套冒烟。
 
 `hierarchy embedded d3d12` 集中检查显示名、folder、checkbox、最终/中间输出独立切换、显示名热改迁移，
-效果列表只展示文件中声明的效果、显式单 Pass 扩成多 Pass 时的选择/参数保持，
+Shader 列表只展示文件中声明的 Shader、显式单 Pass 扩成多 Pass 时的选择/参数保持，
 2D/3D 列表隔离与状态恢复、浮层不挤动 Pass 列表、固定区域坐标及参数/设置滚动位置恢复，
 以及普通、125% 和窄窗口的最终截图与输入命中；不运行其它完整故障注入。
 
-`targets embedded d3d12` 集中检查仅选中效果持有目标、2D/3D 切换释放/重建、深度/MSAA、多 Pass resize、
-反馈重置与参数保留、候选包按当前选择热重载、空效果包和恢复声明，以及实际点击 Texture Clear 后恢复棋盘格；
+`targets embedded d3d12` 集中检查仅选中 Shader 持有目标、2D/3D 切换释放/重建、深度/MSAA、多 Pass resize、
+反馈重置与参数保留、候选包按当前选择热重载、空 Shader 包和恢复声明，以及实际点击 Texture Clear 后恢复棋盘格；
 不跑完整 UI 点击序列或故障注入。
 
 ### 精灵材质 / 阴影 + 本体
 
-`olib_sample` 的 `SpriteShadow.oshader` 使用 `.Sprite`：偏移阴影 + 本体。2D 工作区可选择该效果，
+`olib_sample` 的 `SpriteShadow.oshader` 使用 `.Sprite`：偏移阴影 + 本体。2D 工作区可选择该 Shader，
 预览与游戏一样用 `r2d.image` 记录后 `submit`，游戏示例在 `src/material2d`。
 `.Sprite` 和旧 `.Preview_Model` 的顶点 uniform 接口不同；不能只改 draw 类型而沿用旧 Shader。
-整材质保存/载入同时适用于 Model 和 Sprite，按 Effect 名匹配，失败保留整个旧材质。
+整材质保存/载入同时适用于 Model 和 Sprite，按 Shader 名匹配，失败保留整个旧材质。
 Shader 接口与业务接入见 [kit/rendering/2d](../../rendering/2d/README.md)。

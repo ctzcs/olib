@@ -355,7 +355,7 @@ instance_buffer_layout_and_guards :: proc(t: ^testing.T) {
 	testing.expect_value(t, model_stride(0), 80)
 	testing.expect_value(t, model_stride(2), 112)
 	testing.expect_value(t, size_of(Model_Item), model_stride(0))
-	// 槽数取自材质：没有材质、不是 instanced 效果、各参数组字段数不一致、容量为 0 都拒绝（不碰 GPU）。
+	// 槽数取自材质：没有材质、不是 instanced Shader、各参数组字段数不一致、容量为 0 都拒绝（不碰 GPU）。
 	device: foster.GraphicsDevice
 	library := mat.Material_Library{device = &device}
 	fields := []sh.Field{{id = "hue", instance = true}, {id = "glow", instance = true}}
@@ -544,7 +544,7 @@ render3d_debug_lines_follow_pass_selection :: proc(t: ^testing.T) {
 	testing.expect_value(t, submit(&r, view), mat.Draw_Error.None)
 }
 
-// 记录保存当时的效果与槽数：之后 reload 换了效果（Pass 更少），已记录的快照仍按原布局准备，不越界。
+// 记录保存当时的 Shader 与槽数：之后 reload 换了 Shader（Pass 更少），已记录的快照仍按原布局准备，不越界。
 @(test)
 render3d_records_survive_material_reload :: proc(t: ^testing.T) {
 	device: foster.GraphicsDevice
@@ -566,7 +566,7 @@ render3d_records_survive_material_reload :: proc(t: ^testing.T) {
 	mesh := foster.Mesh{GraphicsDevice = &device}
 	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
 	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
-	// 模拟 material_reload：同一指针换成单 Pass 效果和新的参数组。
+	// 模拟 material_reload：同一指针换成单 Pass Shader 和新的参数组。
 	m.shader = &one
 	m.bindings = []mat.Material_Binding{{schema = {name = "C"}, material = &gpu}}
 	m.revision += 1
@@ -575,7 +575,7 @@ render3d_records_survive_material_reload :: proc(t: ^testing.T) {
 	testing.expect_value(t, len(r.queue.items), 1)
 	testing.expect_value(t, r.sources[0].count, 1)
 	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
-	testing.expect_value(t, len(r.sources), 2) // 新效果的记录不复用旧快照
+	testing.expect_value(t, len(r.sources), 2) // 新 Shader 的记录不复用旧快照
 }
 
 // CameraPosition 由视矩阵求逆得到，顶点 b0 与片元 b0 写同一个值。

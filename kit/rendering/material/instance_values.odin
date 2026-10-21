@@ -1,6 +1,6 @@
 package material
 
-// 每个实例的 [Instance] 字段数值：按槽位（字段在效果里声明的先后）存放的小数组。
+// 每个实例的 [Instance] 字段数值：按槽位（字段在 Shader 里声明的先后）存放的小数组。
 // 它是实例化合批的数据来源，也是唯一的"每实例值"形态：
 //   - 逐个绘制时用 Instance_Values 给这一次绘制的实例设值（sprite_draw 的 values 参数）；
 //   - 缓冲里的大批量实例用平铺的 [][4]f32（每个实例 slots 个，见 instance_array_set），长度由调用方的槽数决定。
@@ -43,7 +43,7 @@ instance_slot :: proc(material: ^Material, field: string) -> Instance_Slot {
 	return {index, found}
 }
 
-// 材质效果的 [Instance] 字段数，即实例缓冲每个实例的槽数（sprite_buffer_init / model_buffer_init 用它）。
+// 材质 Shader 的 [Instance] 字段数，即实例缓冲每个实例的槽数（sprite_buffer_init / model_buffer_init 用它）。
 // 材质未加载返回 0；各参数组的字段数不一致时返回 -1（与 instance_slot 的规则一致，无法共用一个缓冲布局）。
 instance_slot_count :: proc(material: ^Material) -> int {
 	if material == nil || material.shader == nil do return 0

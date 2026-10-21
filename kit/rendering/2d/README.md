@@ -37,8 +37,8 @@ mat.material_library_dispose(&materials)
 
 ## 材质与合批
 
-先登记预编译效果，再 `material_load` 读取材质，或 `material_create` 按效果名创建默认实例。
-普通图形不用登记效果：init 自动提供 `Sprite_Default`；UI 自动创建所需的 `Text_Msdf`。
+先登记预编译 Shader，再 `material_load` 读取材质，或 `material_create` 按 Shader 名创建默认实例。
+普通图形不用登记 Shader：init 自动提供 `Sprite_Default`；UI 自动创建所需的 `Text_Msdf`。
 
 ```odin
 err := r2d.image(&renderer, frame, transform, material = material)
@@ -61,12 +61,12 @@ err = r2d.image(&renderer, frame, transform, material = material, values = &cool
 - submit 后记录与栈全部清空，失败也清空；reset 可主动丢弃。另一个目标需要重新记录。
   `renderer.draw_calls` 是最近一次提交的 Draw 数；Clock 来自提交时的 View。
 
-内置精灵和 MSDF 文字支持 Web。`.oshader` 自定义效果、`[Instance]` 和常驻实例缓冲不支持 Web；
-不支持的效果登记时返回原因，见 [材质后端](../material/README.md#内置效果与-web)。
+内置精灵和 MSDF 文字支持 Web。`.oshader` 自定义 Shader、`[Instance]` 和常驻实例缓冲不支持 Web；
+不支持的 Shader 登记时返回原因，见 [材质后端](../material/README.md#内置-shader-与-web)。
 
 ## 大量精灵：常驻缓冲
 
-长期保留大量精灵时用 `Sprite_Buffer`，效果须声明 Instanced 并提供缓冲变体。
+长期保留大量精灵时用 `Sprite_Buffer`，Shader 须声明 Instanced 并提供缓冲变体。
 每帧只记录缓冲引用，不重新上传未变化的数据。
 
 ```odin

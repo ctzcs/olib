@@ -1,6 +1,6 @@
 package rendering3d
 
-// 模型缓冲：调用方持有的 GPU 顶点缓冲（按实例步进），用于 instanced 模型效果的大批量绘制（与 Sprite_Buffer 对应）。
+// 模型缓冲：调用方持有的 GPU 顶点缓冲（按实例步进），用于 instanced 模型 Shader 的大批量绘制（与 Sprite_Buffer 对应）。
 // 库不缓存、不排序、不剔除：调用方决定哪些实例写入、分成几块（每块一个缓冲，按块剔除）、何时更新。
 // 分区：类型 / 创建与释放 / 上传。
 import "core:mem"
@@ -15,7 +15,7 @@ import world "olib:kit/world"
 // ------------------------------------------------------------------------------
 
 // 一个实例的数据：世界矩阵与 tint。
-// [Instance] 字段的数值不放在这里：个数由效果决定，由调用方另备一个平铺数组，上传时一并传入
+// [Instance] 字段的数值不放在这里：个数由 Shader 决定，由调用方另备一个平铺数组，上传时一并传入
 // （model_buffer_upload 的 values，用 mat.instance_array_set 写入）。
 // 内存布局就是 GPU 记录的前 80 字节：没有 [Instance] 字段时整块上传。
 Model_Item :: struct {
@@ -25,7 +25,7 @@ Model_Item :: struct {
 #assert(size_of(Model_Item) == 80)
 
 // 缓冲里每个实例按 世界矩阵(64B) + tint(16B) + slots × 16B 紧凑排列；
-// slots 是材质效果的 [Instance] 字段数（init 时读取）。大批量静态场景只需上传一次，动画交给着色器（Clock）。
+// slots 是材质 Shader 的 [Instance] 字段数（init 时读取）。大批量静态场景只需上传一次，动画交给着色器（Clock）。
 Model_Buffer :: struct {
 	buffer: foster.VertexBuffer,
 	slots: int,
@@ -44,7 +44,7 @@ model_stride :: proc(slots: int) -> int {
 // 创建与释放
 // ------------------------------------------------------------------------------
 
-// 为 material 的 instanced 效果预留 capacity 个实例的 GPU 空间（实际按 2 的幂向上取整）。
+// 为 material 的 instanced Shader 预留 capacity 个实例的 GPU 空间（实际按 2 的幂向上取整）。
 // 设备与槽数取自材质；成功返回空串，失败返回原因。
 // 属性位置固定为 0..4+slots（世界矩阵 4 列、tint、字段）：HLSL 里 OlibInstanceInput 须是 Input
 // 的第一个成员，绘制时网格的属性整体后移，同一缓冲可用于不同网格。

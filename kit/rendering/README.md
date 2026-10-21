@@ -24,7 +24,7 @@ r2d.dispose(&renderer)
 mat.material_library_dispose(&materials)
 ```
 
-自定义效果用 `material_register_directory(&materials, #load_directory("<目录>/Compiled"))` 登记 tools/shaders 的产物目录，
+自定义 Shader 用 `material_register_directory(&materials, #load_directory("<目录>/Compiled"))` 登记 tools/shaders 的产物目录，
 再 `material_load` 或 `material_create` 创建材质。
 不同 tint 自动合批；每个对象独立变化的材质字段用 `[Instance]` 和 `Instance_Values`。
 常驻实例缓冲继续使用平铺数值数组，见 [2D](2d/README.md) 和 [3D](3d/README.md)。
@@ -35,7 +35,7 @@ mat.material_library_dispose(&materials)
 
 | 要做什么 | 函数 / 类型 | 文件 |
 | --- | --- | --- |
-| 创建材质库、登记效果 | `Material_Library`、`material_create`、`material_register_directory`、`material_register_manifest`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
+| 创建材质库、登记 Shader | `Material_Library`、`material_create`、`material_register_directory`、`material_register_manifest`、`material_library_dispose` | [material/material_library.odin](material/material_library.odin)、[material/shader_code.odin](material/shader_code.odin) |
 | 加载材质、改参数、绑运行时贴图 | `material_load`、`material_reload`、`material_set_number`、`material_set_texture` | [material/material.odin](material/material.odin) |
 | 每个实例的值（可合批） | `Instance_Slot`、`instance_slot`、`instance_slot_count`、`Instance_Values`、`instance_values_set`、`instance_array_set`（缓冲用）、`instance_values_from` | [material/instance_values.odin](material/instance_values.odin) |
 | 绘制失败原因 | `Draw_Error`、`draw_error_text` | [material/draw.odin](material/draw.odin) |
@@ -50,7 +50,7 @@ mat.material_library_dispose(&materials)
 | 3D 网格上传 | `mesh_upload`、`mesh_dispose`、`mesh_static_format`、`mesh_skin_format` | [3d/mesh.odin](3d/mesh.odin) |
 | 3D 排序 / LOD | `Render_Queue`、`queue_*`；`Lod_Selector`、`lod_*`、`Model_Lod` | [3d/queue.odin](3d/queue.odin)、[3d/lod.odin](3d/lod.odin) |
 | 解析 `.oshader`、开发期热重载 | `lang.parse`；`dev.*` | [shader/lang/lang.odin](shader/lang/lang.odin)、[shader/dev/](shader/dev/) |
-| 效果 / 参数组描述、HLSL 生成、预设编解码（工具用） | `sh.Shader_Desc`、`sh.Schema`、`sh.hlsl`、`sh.pack`… | [shader](shader/README.md) |
+| Shader / 参数组描述、HLSL 生成、预设编解码（工具用） | `sh.Shader_Desc`、`sh.Schema`、`sh.hlsl`、`sh.pack`… | [shader](shader/README.md) |
 
 import 别名：`mat "olib:kit/rendering/material"`、`r2d "olib:kit/rendering/2d"`、`r3d "olib:kit/rendering/3d"`。
 
@@ -58,14 +58,14 @@ import 别名：`mat "olib:kit/rendering/material"`、`r2d "olib:kit/rendering/2
 
 | 目录 | 职责 | 推荐 import |
 | --- | --- | --- |
-| [material](material/README.md) | 游戏用的材质库、材质加载与修改、每实例的值、登记效果 | `mat "olib:kit/rendering/material"` |
+| [material](material/README.md) | 游戏用的材质库、材质加载与修改、每实例的值、登记 Shader | `mat "olib:kit/rendering/material"` |
 | [2d](2d/README.md) | 图集、帧动画、精灵绘制与合批 | `r2d "olib:kit/rendering/2d"` |
 | [3d](3d/README.md) | 模型绘制与实例化、Mesh、队列、LOD 与调试线 | `r3d "olib:kit/rendering/3d"` |
-| [shader](shader/README.md) | 效果、Pass、参数组的描述与校验，参数打包、HLSL 生成、材质 / 预设文件编解码 | `sh "olib:kit/rendering/shader"` |
+| [shader](shader/README.md) | Shader、Pass、参数组的描述与校验，参数打包、HLSL 生成、材质 / 预设文件编解码 | `sh "olib:kit/rendering/shader"` |
 | [shader/lang](shader/lang/README.md) | .oshader 语法解析与每个 Pass 的 HLSL，解析时不读取文件或执行 GPU 操作 | `lang "olib:kit/rendering/shader/lang"` |
 | [shader/dev](shader/dev/README.md) | 开发期编译、文件监听与热重载 | `dev "olib:kit/rendering/shader/dev"` |
 
 `rendering/` 与 `shader/` 仅组织目录，不提供转发包。2D 和 3D 都使用 material，互不依赖。
 依赖方向：shader ← material ← 2d / 3d；shader/lang、shader/dev 只依赖 shader。
-效果描述与序列化位于 [shader](shader/README.md)，供材质库、Shader 解析和编辑工具共同使用；游戏只用 material。
+Shader 描述与序列化位于 [shader](shader/README.md)，供材质库、Shader 解析和编辑工具共同使用；游戏只用 material。
 Shader Lab 仍位于 [kit/tools/shader_lab](../tools/shader_lab/README.md)。

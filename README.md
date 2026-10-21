@@ -34,11 +34,11 @@ kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
 ├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Render2D 覆盖层，不持有场景对象
 ├── rendering/   渲染：共享资源、2D/3D 绘制与 Shader 工具链
-│   ├── material/ 游戏用的材质库：材质加载与修改、每实例的值、登记效果
+│   ├── material/ 游戏用的材质库：材质加载与修改、每实例的值、登记 Shader
 │   ├── 2d/      Sprite / SpriteAtlas / 图集构建与精灵合批
 │   ├── 3d/      Render3D / Mesh / 渲染队列 / 调试线 / LOD
 │   └── shader/
-│       ├── effect/ 效果与参数组描述、参数打包、HLSL 生成、文件编解码
+│       ├── shader/ Shader 与参数组描述、参数打包、HLSL 生成、文件编解码
 │       ├── lang/ .oshader 解析与每个 Pass 的 HLSL
 │       └── dev/  开发期编译、文件监听与热重载
 ├── animation/   骨骼动画采样 / palette / 混合

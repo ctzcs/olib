@@ -1,7 +1,7 @@
 package material
 
-// 材质库：登记效果，集中持有并复用 Shader/纹理；实例见 material.odin。
-// 分区：类型与所有权 / 效果登记 / 贴图缓存。
+// 材质库：登记 Shader，集中持有并复用 Shader/纹理；实例见 material.odin。
+// 分区：类型与所有权 / Shader 登记 / 贴图缓存。
 import "core:fmt"
 import "core:strings"
 
@@ -15,7 +15,7 @@ import sh "../shader"
 // 使用当前设备后端的预编译代码；借用字节至 material_library_dispose，通常来自 #load。
 Material_Program_Code :: struct {
 	vertex, fragment: []u8,
-	instanced_vertex: []u8, // instanced 精灵效果的缓冲变体顶点，供常驻 Sprite_Buffer；其余效果为空
+	instanced_vertex: []u8, // instanced 精灵 Shader 的缓冲变体顶点，供常驻 Sprite_Buffer；其余 Shader 为空
 }
 
 Material_Library :: struct {
@@ -33,7 +33,7 @@ Material_Shader :: struct {
 	schemas: []sh.Schema,
 	code: []Material_Program_Code,
 	vertex, fragment: []foster.Shader,
-	instanced_vertex: []foster.Shader, // 只有 instanced 精灵效果有，与 gpu 同序
+	instanced_vertex: []foster.Shader, // 只有 instanced 精灵 Shader 有，与 gpu 同序
 	gpu: []foster.Material,
 	ready: bool,
 }
@@ -82,7 +82,7 @@ material_shader_gpu_clear :: proc(shader: ^Material_Shader) {
 }
 
 // ------------------------------------------------------------------------------
-// 效果登记 —— 资源初始化调用一次；深复制描述，惰性创建 GPU 资源。
+// Shader 登记 —— 资源初始化调用一次；深复制描述，惰性创建 GPU 资源。
 // ------------------------------------------------------------------------------
 
 @(private)

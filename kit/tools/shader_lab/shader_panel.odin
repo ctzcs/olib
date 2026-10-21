@@ -1,6 +1,6 @@
 package shader_lab
 
-// 效果选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 .oshader 文件。
+// Shader 选择、中间目标查看和反馈控制；没有节点编辑器，源声明仍归外部 .oshader 文件。
 import "core:fmt"
 import "core:strings"
 import foster "olib:foster"
@@ -70,7 +70,7 @@ display_name :: proc(label, id: string) -> string {
 	return label == "" ? id : label
 }
 
-// folder 只是 Shader 参数的展示分组；一个 Pass 仍只绑定一个参数组/Shader。
+// folder 只是参数组的展示分组；一个 Pass 仍只绑定一个参数组（一个程序）。
 group_folder :: proc(s: ^Session, index: int, id: string) {
 	p := &s.parameters[index]
 	name := display_name(p.live.label, p.name)
@@ -104,7 +104,7 @@ group_folder :: proc(s: ^Session, index: int, id: string) {
 	}
 }
 
-// 无论一个还是多个 Pass，只有效果这一个选择入口。
+// 无论一个还是多个 Pass，只有 Shader 这一个选择入口。
 shader_selector :: proc(s: ^Session) {
 	ui.ui_label_dim(&s.ctx, &s.small_theme, "Shader")
 	name := "选择 Shader"

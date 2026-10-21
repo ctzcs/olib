@@ -140,7 +140,7 @@ compiled_manifest_json :: proc(shader: sh.Shader_Desc, schemas: []sh.Schema, ver
 	return data
 }
 
-// 内存里的 #load_directory 结果：Model 效果、instanced Sprite 效果、只供预览的 Fullscreen 效果和无关文件。
+// 内存里的 #load_directory 结果：Model Shader、instanced Sprite Shader、只供预览的 Fullscreen Shader 和无关文件。
 @(test)
 material_register_directory_finds_compiled_files :: proc(t: ^testing.T) {
 	hero := sh.Shader_Desc{name = "Hero", output = "color", passes = []sh.Pass_Desc{

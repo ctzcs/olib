@@ -2,7 +2,7 @@ package rendering2d
 
 // 精灵实例缓冲：调用方持有、常驻显存的 GPU 缓冲，r2d.buffer 一次 Draw 画出几十万到上百万个精灵。
 // 库不缓存、不排序、不剔除：调用方决定写入哪些精灵、何时更新、分成几块。
-// 使用 instanced 精灵效果的缓冲变体（实例记录 + 角点）；逐个绘制走 Render2D 的批量变体，片元代码相同。
+// 使用 instanced 精灵 Shader 的缓冲变体（实例记录 + 角点）；逐个绘制走 Render2D 的批量变体，片元代码相同。
 // 分区：实例记录 / 缓冲创建与上传。
 import "core:mem"
 
@@ -17,7 +17,7 @@ import sh "olib:kit/rendering/shader"
 // 一个精灵的数据：2D 变换、局部矩形（已减去锚点）、UV 矩形与 tint。
 // 内存布局就是 GPU 记录的前 80 字节（与 hlsl 生成的 OlibInstanceInput 的前 5 个 float4 一致），
 // 没有 [Instance] 字段时整块上传，有字段时按块拷贝拼接，不做逐字段打包。
-// [Instance] 字段的数值不放在这里：它们的个数由效果决定，由调用方另备一个平铺数组，上传时一并传入
+// [Instance] 字段的数值不放在这里：它们的个数由 Shader 决定，由调用方另备一个平铺数组，上传时一并传入
 // （sprite_buffer_upload 的 values，用 mat.instance_array_set 写入）。
 // 一次 Draw 里所有精灵共用同一张贴图（图集页），贴图在 r2d.buffer 时指定。
 Sprite_Item :: struct {
@@ -68,8 +68,8 @@ Sprite_Buffer :: struct {
 	capacity: int,
 }
 
-// 为 material 的 instanced 效果预留 capacity 个精灵的 GPU 空间（实际按 2 的幂向上取整），用 r2d.buffer 绘制。
-// 设备与槽数（效果的 [Instance] 字段数）都取自材质。返回 "" 表示成功，否则是失败原因。
+// 为 material 的 instanced Shader 预留 capacity 个精灵的 GPU 空间（实际按 2 的幂向上取整），用 r2d.buffer 绘制。
+// 设备与槽数（Shader 的 [Instance] 字段数）都取自材质。返回 "" 表示成功，否则是失败原因。
 // 每个精灵 80 + 16×slots 字节，100 万个精灵（1 个字段）约 96 MB。
 sprite_buffer_init :: proc(buf: ^Sprite_Buffer, material: ^mat.Material, capacity: int, name := "") -> string {
 	if material == nil || material.owner == nil || material.owner.device == nil || material.shader == nil {

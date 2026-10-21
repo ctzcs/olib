@@ -24,7 +24,7 @@ r3d.model_buffer_dispose(&instances)
 
 - buffer 的 bounds 是整块实例的**世界 AABB**；只做整块剔除、排序，不读回或逐实例重排。
   透明块内部顺序由调用方负责。无盒时保留整块，并用世界原点作为排序位置。
-- count 必须在 0..capacity 内；缓冲槽数必须匹配 instanced 效果，资源必须属于同一设备。
+- count 必须在 0..capacity 内；缓冲槽数必须匹配 instanced Shader，资源必须属于同一设备。
   每个所选 Pass 绘制一次；重复 submit 不重新上传常驻数据。
 - 每实例 `80 + 16×slots` 字节。更新部分数据用 `model_buffer_upload(..., first = offset)`。
   upload 的 nil values 表示全零；model/models 的 nil values 表示材质默认值，两者不同。
@@ -70,10 +70,10 @@ Render3D 不自动选 LOD。调试线只有 Render3D 的 `line / aabb / sphere /
 CameraPosition 是 `r3d.camera_position(view.view_matrix)`：世界坐标 xyz、w = 1，视矩阵不可逆时为原点。
 vertex b0 与 fragment b0 的声明在 `#include "olib/model.hlsli"`（见 [标准 include](../shader/lang/README.md#引擎块与标准-include)）。
 手写时也可只声明用到的前缀，例如片元只读 Clock 时 `cbuffer FrameBlock { float4 Clock; }` 照常工作。
-Model 效果的 Shader 按顶点 2 个、片元 3 个 uniform 槽创建；不声明视图块的旧 Shader 不受影响。Foster 布局的内置效果没有视图块。
+Model Shader 的 Shader 按顶点 2 个、片元 3 个 uniform 槽创建；不声明视图块的旧 Shader 不受影响。Foster 布局的内置 Shader 没有视图块。
 
 model 的 Tint 为白色；非 instanced models 使用 Model_Item.tint；instanced 模型的 tint 来自实例缓冲。
-实例输入属性在前，网格属性位置后移 `5 + slots`，详见 [instanced HLSL 约定](../shader/lang/README.md#instanced-效果的-hlsl-约定)。
+实例输入属性在前，网格属性位置后移 `5 + slots`，详见 [instanced HLSL 约定](../shader/lang/README.md#instanced-shader-的-hlsl-约定)。
 普通材质不生成隐式 instanced Shader 变体。静态格式以外的网格返回 `.Unsupported_Mesh`。
 
 ## 手写一个着色器

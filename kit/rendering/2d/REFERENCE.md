@@ -28,7 +28,7 @@
 
 `push_scissor(RectInt)`、`push_blend(BlendMode)`、`push_sampler(TextureSampler)`、
 `push_mode(BatcherMode)` 各自配对 pop。裁剪在最终目标像素坐标中，不随矩阵变换。
-默认最近点/Clamp、预乘 Alpha、无裁剪、Normal mode；Normal/Wash/Fill 仅内置效果使用。
+默认最近点/Clamp、预乘 Alpha、无裁剪、Normal mode；Normal/Wash/Fill 仅内置 Shader 使用。
 材质的精灵纹理字段若写了 `[Filter]` / `[Wrap]`，写了的部分优先于采样器栈（`sh.field_sprite_sampler`）。
 submit/reset 后恢复默认，不应靠状态跨帧保留。
 
@@ -38,15 +38,15 @@ submit/reset 后恢复默认，不应靠状态跨帧保留。
 输出预乘颜色，默认无剔除和深度读写；Pass 的显式状态覆盖记录状态。
 
 - 普通顶点使用 `foster.BatcherVertex`：已套用变换栈的目标像素位置、UV、RGBA 字节色和 mode 字节。
-  .oshader 效果的 mode 存 storage buffer 中该精灵记录的起始 float4 下标（0 保留）；记录首项是两条轴，再接各 Pass 的实例字段。
+  .oshader Shader 的 mode 存 storage buffer 中该精灵记录的起始 float4 下标（0 保留）；记录首项是两条轴，再接各 Pass 的实例字段。
 - 顶点 b0/space1 为投影（64 字节）后接 Clock，共 80 字节；b1/space1 为当前 Pass 的数值偏移，
   由生成器的 olib_sprite 使用。所有精灵、所有 Pass 的记录在 submit 时一次上传。
 - Olib 片元 b0/space3 为 Clock、Pointer、白色 Tint，共 48 字节；参数在 b1/space3。
   顶点 tint 用生成的 InstanceTint；纹理和采样器在 space2。
-- 内置效果使用 Foster uniform 布局：顶点槽 0 为矩阵，MSDF 片元槽 0 为 distance_range。
+- 内置 Shader 使用 Foster uniform 布局：顶点槽 0 为矩阵，MSDF 片元槽 0 为 distance_range。
 - 缓冲变体用单位四边形和实例顶点，数值来自调用方缓冲，不使用 storage 或 Pass 偏移。
   顶点 b0 与批量变体相同；b1/space1 是记录时变换栈的 2D 仿射部分（两个 float4），olib_sprite 在 GPU 上套用，
   因此两种变体的 position 与轴都在目标像素空间。变换栈的非仿射部分在两种变体里都不使用。
 
-作者统一写 OlibSpriteInput / olib_sprite，见 [lang README](../shader/lang/README.md#2d-效果的-hlsl-约定)。
+作者统一写 OlibSpriteInput / olib_sprite，见 [lang README](../shader/lang/README.md#2d-shader-的-hlsl-约定)。
 索引缓冲按容量增长后复用，顶点与实例数值每次 submit 上传，不在图元调用中发 Draw。

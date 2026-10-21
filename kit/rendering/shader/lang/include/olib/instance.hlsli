@@ -5,7 +5,7 @@
 //   OLIB_INSTANCE_MODEL        模型实例：OlibInstanceInput 带世界矩阵，提供 olib_world
 //   OLIB_INSTANCE_SPRITE       精灵常驻缓冲：OlibInstanceInput 带精灵变换与矩形，提供 olib_sprite_vertex
 // 两者都没定义时（精灵批量变体）只声明传给片元的 OlibInstance。
-// 固定成员的语义号与 kit/rendering/shader/effect 的 INSTANCE_SEMANTIC_BASE（6）/ INSTANCE_VARYING_BASE（8）一致。
+// 固定成员的语义号与 kit/rendering/shader 的 INSTANCE_SEMANTIC_BASE（6）/ INSTANCE_VARYING_BASE（8）一致。
 #ifndef OLIB_INSTANCE_HLSLI
 #define OLIB_INSTANCE_HLSLI
 

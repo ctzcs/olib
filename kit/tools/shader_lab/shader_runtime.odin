@@ -106,7 +106,7 @@ target_clear :: proc(s: ^Session, target: ^foster.Target, color: [4]f32) {
 		foster.ClearMask.Color | foster.ClearMask.Depth)
 }
 
-// Resize 先分配整套新目标，失败保留该效果旧目标。历史目标始终两张，其余只分配一张。
+// Resize 先分配整套新目标，失败保留该 Shader 旧目标。历史目标始终两张，其余只分配一张。
 shader_targets_prepare :: proc(s: ^Session, bank: ^Parameter_Bank, selected: int) -> bool {
 	shader_targets_trim(bank, selected)
 	for &used in bank.program_used do used = false
@@ -184,7 +184,7 @@ step :: proc(s: ^Session) {
 	s.step_requested = true
 }
 
-// 非材质效果的绘制命令与热重载的管线探测都用内置几何。instanced 模型的探测与 Render3D 一样把网格属性
+// 非材质 Shader 的绘制命令与热重载的管线探测都用内置几何。instanced 模型的探测与 Render3D 一样把网格属性
 // 排在实例属性之后并绑定实例缓冲；改了属性位置的网格副本分配在临时内存里，探测在本帧内用完。
 pass_command :: proc(s: ^Session, bank: ^Parameter_Bank, index: int, draw: sh.Pass_Draw,
 	target: foster.DrawableTarget, instanced := false) -> foster.DrawCommand {

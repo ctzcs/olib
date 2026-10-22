@@ -95,6 +95,8 @@ GetShaderExtension :: proc(driver: GraphicsDriver) -> string {
 AppFlag :: enum u8 {
 	GraphicsDebugging,
 	MultiSampledBackBuffer,
+	// [olib L-020] 配置宽高按逻辑单位理解，创建窗口时按显示缩放放大（见 olib_ext.odin）。
+	LogicalWindowSize,
 }
 
 AppFlags :: distinct bit_set[AppFlag;u8]
@@ -1317,6 +1319,8 @@ window_init :: proc(
 	}
 
 	window.ID = SDL.GetWindowID(window.Handle)
+	// [olib L-020] 窗口仍隐藏，按逻辑尺寸放大并居中后再由 Run 显示。
+	window_apply_logical_size(window, config)
 }
 
 Close :: proc(window: ^Window) {

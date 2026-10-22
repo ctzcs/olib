@@ -2,8 +2,13 @@ package foster_framework
 
 // olib 对 Foster 的纯新增能力（无上游对应），每项登记于 docs/LOCAL_CHANGES.md。
 
+import "core:c"
+import "core:math"
+import SDL "vendor:sdl3"
+
 // 文件内导航
 //   Framework / App
+//   Framework / Window Logical Size
 //   Storage / Atomic Write
 //   Graphics / Texture Sampling
 
@@ -15,6 +20,39 @@ package foster_framework
 // 不做类型校验：T 必须与 AppSetUserData 传入的指针类型一致；未设置时返回 nil。
 AppGetUserDataAs :: proc(app: ^App, $T: typeid) -> ^T {
 	return cast(^T)AppGetUserData(app)
+}
+
+// ==============================================================================
+// Framework / Window Logical Size — 配置尺寸按逻辑单位
+// ==============================================================================
+
+// [olib L-020] AppFlag.LogicalWindowSize：窗口坐标在 Windows/X11 是物理像素，在 macOS/Wayland 是点。
+// 打开后按“显示缩放 ÷ 像素密度”放大配置宽高（Windows 150% 为 1.5，macOS 为 1），不超过显示器可用区域，
+// 并在所在显示器居中。只在创建时做一次；跨缩放不同的显示器移动由 SDL 处理，界面按 ContentScale 每帧跟随。
+@(private)
+window_apply_logical_size :: proc(window: ^Window, config: AppConfig) {
+	when ODIN_OS != .JS {
+		if .LogicalWindowSize not_in config.Flags || config.Fullscreen || window.Handle == nil {
+			return
+		}
+		density := SDL.GetWindowPixelDensity(window.Handle)
+		scale := SDL.GetWindowDisplayScale(window.Handle)
+		if density <= 0 || scale <= 0 || abs(scale/density - 1) < 0.01 {
+			return
+		}
+		factor := scale/density
+		w := c.int(math.round(f32(config.Width)*factor))
+		h := c.int(math.round(f32(config.Height)*factor))
+		display := SDL.GetDisplayForWindow(window.Handle)
+		usable: SDL.Rect
+		if SDL.GetDisplayUsableBounds(display, &usable) {
+			w = min(w, usable.w)
+			h = min(h, usable.h)
+		}
+		_ = SDL.SetWindowSize(window.Handle, w, h)
+		center := SDL.WINDOWPOS_CENTERED_DISPLAY(c.int(display))
+		_ = SDL.SetWindowPosition(window.Handle, center, center)
+	}
 }
 
 // ==============================================================================

@@ -5,6 +5,7 @@ package shader_lab
 // 分区：控件封装 / 控制窗口 / 预览设置与诊断。
 import "core:fmt"
 import "core:hash"
+import "core:math"
 import "core:strings"
 
 import imgui "olib:thirdparty/odin-imgui"
@@ -82,6 +83,15 @@ lab_error :: proc(text: string) {
 	imgui.PopStyleColor()
 }
 
+// 下一个图标按钮放得下就接在同一行，否则换行；宽度与 IconButton 的计算一致。
+lab_same_line :: proc(label: string, icon := true) {
+	style := imgui.GetStyle()
+	width := imgui.CalcTextSize(cstr(label)).x + style.FramePadding.x*2
+	if icon do width += math.round(imgui.GetFontSize()*1.25) + (label != "" ? style.ItemInnerSpacing.x : 0)
+	right := imgui.GetCursorScreenPos().x + imgui.GetContentRegionAvail().x
+	if imgui.GetItemRectMax().x + style.ItemSpacing.x + width <= right do imgui.SameLine()
+}
+
 // 把下一个控件推到当前行最右，宽度 width。
 align_right :: proc(width: f32) {
 	imgui.SameLine()
@@ -101,9 +111,9 @@ control_window :: proc(s: ^Session) {
 		s.paused = !s.paused
 	}
 	if s.selected_shader >= 0 {
-		imgui.SameLine()
+		lab_same_line("单步")
 		if lab_button(s, "shader-step", "单步", icon = "media/next-frame") do step(s)
-		imgui.SameLine()
+		lab_same_line("重置反馈")
 		if lab_button(s, "shader-reset", "重置反馈", icon = "ui/refresh") do reset_history(s)
 	}
 	failed := s.bank_error != "" || s.parameter_watch.status == .Error
@@ -128,7 +138,7 @@ control_window :: proc(s: ^Session) {
 		cancel(s)
 		s.preview_settings = false
 	}
-	imgui.SameLine()
+	lab_same_line("预览设置")
 	if lab_button(s, "preview-settings", "预览设置", s.preview_settings, icon = "ui/settings") {
 		cancel(s)
 		s.preview_settings = true
@@ -157,9 +167,9 @@ preview_options :: proc(s: ^Session) {
 	first := true
 	for id, i in ([4]string{"2D / Fullscreen", "2D / Sprite", "3D / Sphere", "3D / Cube"}) {
 		if model3d != (i >= 2) do continue
-		if !first do imgui.SameLine()
-		first = false
 		names := [4]string{"全屏", "精灵", "球体", "立方体"}
+		if !first do lab_same_line(names[i], icon = false)
+		first = false
 		if lab_button(s, id, names[i], s.mode == i) do s.mode = i
 	}
 	if s.preview_hooks.record != nil {
@@ -175,7 +185,7 @@ preview_options :: proc(s: ^Session) {
 	}
 	if s.selected_shader >= 0 {
 		if lab_button(s, "settings-step", "单步", icon = "media/next-frame") do step(s)
-		imgui.SameLine()
+		lab_same_line("重置反馈")
 		if lab_button(s, "settings-reset", "重置反馈", icon = "ui/refresh") do reset_history(s)
 	}
 	if lab_button(s, "retry", "重新编译", icon = "media/code") {

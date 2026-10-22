@@ -94,9 +94,9 @@ group_folder :: proc(s: ^Session, index: int, id: string) {
 	}
 	if s.file_dialogs {
 		if lab_button(s, "preset-save", "保存", icon = "ui/save") do request_file(s, index, .Save_Preset)
-		imgui.SameLine()
+		lab_same_line("载入")
 		if lab_button(s, "preset-load", "载入", icon = "media/import") do request_file(s, index, .Load_Preset)
-		imgui.SameLine()
+		lab_same_line("重置")
 	}
 	if lab_button(s, "preset-reset", "重置", icon = "editing/undo") do _ = reset_defaults(s, index)
 	if s.request.id != 0 do lab_dim("Waiting for file selection...")

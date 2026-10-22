@@ -55,7 +55,7 @@ preview_window :: proc(s: ^Session, image: ^foster.Texture) {
 	if !visible do return
 	if s.selected_shader >= 0 && len(s.shaders[s.selected_shader].desc.passes) > 1 {
 		if lab_button(s, "shader-final", "最终效果", s.preview_pass < 0, icon = "media/display") do s.preview_pass = -1
-		imgui.SameLine()
+		lab_same_line("当前 Pass")
 		if lab_button(s, "pass-preview", "当前 Pass", s.preview_pass >= 0, icon = "ui/visible") do s.preview_pass = s.inspect_pass
 		if s.preview_pass >= 0 {
 			p := s.shaders[s.selected_shader].desc.passes[s.preview_pass]

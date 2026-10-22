@@ -98,8 +98,10 @@ parameters_panel :: proc(s: ^Session, index: int) {
 	if p.error != "" do lab_error(p.error)
 	style := imgui.GetStyle()
 	reset_width := imgui.CalcTextSize("R").x + style.FramePadding.x*2
-	// 属性表：标签列约占 35%，控件填满中间，行尾是单项重置 R。
-	label_width := imgui.GetContentRegionAvail().x*0.35
+	// 属性表：标签列按本组最长的标签取宽（最多占一半），控件填满中间，行尾是单项重置 R。
+	widest := imgui.CalcTextSize("W").x + style.IndentSpacing*0.5
+	for f in p.live.fields do widest = max(widest, imgui.CalcTextSize(cstr(f.label)).x)
+	label_width := min(widest + style.ItemSpacing.x*2, imgui.GetContentRegionAvail().x*0.5)
 	for f, i in p.live.fields {
 		override, overridden := shader_value(s, index, f.id)
 		bound_texture, binding_label := shader_input(s, index, f.id)

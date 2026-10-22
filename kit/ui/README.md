@@ -26,7 +26,9 @@ theme := ui.UI_THEME_DARK
 theme.body_font_id = u16(ui.ui_register_font(&ctx, &font, texture, .MSDF))
 
 // 每帧：viewport 和鼠标位置均为渲染目标像素，布局尺寸则是逻辑像素。
-ui.ui_set_viewport(&ctx, {0, 0, pixel_width, pixel_height}, scale = 1.25)
+// scale 一般取 foster.ContentScale(&app.Window)（系统显示缩放；Web 为 devicePixelRatio）
+// 乘游戏自己的“界面大小”设置，每帧读取，窗口换到缩放不同的显示器时随之变化。
+ui.ui_set_viewport(&ctx, {0, 0, pixel_width, pixel_height}, scale = foster.ContentScale(&app.Window)*ui_size)
 ui.ui_set_pointer(&ctx, mouse_x_pixels, mouse_y_pixels, mouse_down)
 ui.ui_add_scroll(&ctx, wheel_x, wheel_y)
 ui.ui_set_navigation(&ctx, {next = tab_direction, activate = confirm_pressed})

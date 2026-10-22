@@ -56,6 +56,6 @@ update :: proc(s: ^Instance, services: ^Services, dt: f64) {
 render :: proc(s: ^Instance, services: ^Services, dt: f64, viewport := foster.Rect{}) {
 	if services.headless do return
 	command := view_draw(&s.view, &s.state.world, foster.DrawableTargetFromWindow(&services.app.Window),
-		services.input.mouse, services.input.down, services.scale, f32(dt), viewport)
+		services.input.mouse, services.input.down, ui_scale(services), f32(dt), viewport)
 	if command.add_point || command.toggle_pause || command.reset do append(&s.state.pending, command)
 }

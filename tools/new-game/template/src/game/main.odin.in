@@ -18,6 +18,8 @@ main :: proc() {
 	s.services.scale = core.has_arg("scaled") ? 1.25 : 1
 	config := foster.DefaultAppConfig("__PROJECT__", 960, 720)
 	if core.has_arg("narrow") do config.Width = 760
+	// 宽高按逻辑尺寸：系统缩放 150% 时窗口按 1.5 倍像素创建（macOS 不变，Web 忽略）。
+	config.Flags += {.LogicalWindowSize}
 	if core.has_arg("vulkan") do config.PreferredGraphicsDriver = .Vulkan
 	if core.has_arg("d3d12") do config.PreferredGraphicsDriver = .D3D12
 	app: foster.App

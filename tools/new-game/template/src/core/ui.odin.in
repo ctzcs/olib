@@ -42,6 +42,12 @@ view_dispose :: proc(v: ^View) {
 	mat.material_library_dispose(&v.materials)
 }
 
+// kit/ui 的缩放（逻辑像素到绘制像素）：系统显示缩放 × services.scale（测试参数 scaled）。
+// 每帧读取，窗口换到缩放不同的显示器时跟着变；以后加玩家“界面大小”设置也乘在这里。
+ui_scale :: proc(services: ^Services) -> f32 {
+	return foster.ContentScale(&services.app.Window)*services.scale
+}
+
 // 只读取世界，返回操作；游戏实例在下一次更新处理，不在 Render 改模拟。
 view_draw :: proc(v: ^View, w: ^World, target: foster.DrawableTarget,
 	mouse: foster.Vec2, down: bool, scale, dt: f32, region := foster.Rect{}) -> (commands: Commands) {
@@ -69,10 +75,10 @@ view_draw :: proc(v: ^View, w: ^World, target: foster.DrawableTarget,
 		ui.ui_label_dim(ctx, &v.theme, "A/D: move   Space: pause   Enter: point")
 	}
 	ui.ui_draw(ctx, &v.renderer)
-	// 世界示意与 UI 都直接输出到最终像素目标。
-	fit := min(viewport.Width/640, 1)
-	r2d.rect(&v.renderer, {viewport.X+20*fit, viewport.Y+viewport.Height-60, 600*fit, 2}, ACCENT)
-	r2d.circle(&v.renderer, {viewport.X+w.x*fit, viewport.Y+viewport.Height-80}, 12, 24, ACCENT)
+	// 世界示意与 UI 都直接输出到最终像素目标；示意按同一缩放，窄窗口再整体缩小。
+	fit := min(viewport.Width/(640*scale), 1)*scale
+	r2d.rect(&v.renderer, {viewport.X+20*fit, viewport.Y+viewport.Height-60*scale, 600*fit, 2*scale}, ACCENT)
+	r2d.circle(&v.renderer, {viewport.X+w.x*fit, viewport.Y+viewport.Height-80*scale}, 12*scale, 24, ACCENT)
 	r2d.submit(&v.renderer, {target = target})
 	return
 }

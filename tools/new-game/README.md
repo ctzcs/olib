@@ -28,6 +28,7 @@ src/
 └─ game/              Windows/Web 薄发布入口（package main）
 ```
 
+- 窗口与 UI 跟随系统显示缩放：入口打开 foster 的 `LogicalWindowSize`，游戏 UI 按 `core.ui_scale`（`foster.ContentScale` × 测试参数），编辑器 ImGui 每帧跟随。
 - `play.bat` 启动开发版；编辑面板用 Dear ImGui，默认停靠在右侧，游戏画在中央 Dock 区域，Editor 一栏可调界面字号（按显示器给建议值，存为用户目录的 editor-settings.json）；F1 收起/打开面板，可边玩边改位置、分数及暂停；F3 打开悬浮性能面板。玩家 UI 仍用 kit/ui。
 - 修改 core 的游戏代码或 core_editor 的工具 UI 后保存，自动编译一个 DLL，保留游戏进度、面板开关、Dock 布局及未处理命令。UI、ImGui 上下文和 GPU 对象重建，按住输入先等待松开，避免误触。
 - `publish.bat` 发布 Windows，`publish_web.bat` 发布 Web；两者编译 src/game、复用 core，均排除 editor、core_editor 和加载器。Web 无热重载，刷新新开一局。

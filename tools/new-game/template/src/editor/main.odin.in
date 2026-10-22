@@ -43,6 +43,8 @@ main :: proc() {
 	s.services.scale = core.has_arg("scaled") ? 1.25 : 1
 	config := foster.DefaultAppConfig("__PROJECT__ / compiling", 960, 720)
 	if core.has_arg("narrow") do config.Width = 760
+	// 宽高按逻辑尺寸：系统缩放 150% 时窗口按 1.5 倍像素创建（macOS 不变，Web 忽略）。
+	config.Flags += {.LogicalWindowSize}
 	if core.has_arg("vulkan") do config.PreferredGraphicsDriver = .Vulkan
 	if core.has_arg("d3d12") do config.PreferredGraphicsDriver = .D3D12
 	app: foster.App
@@ -128,8 +130,8 @@ render :: proc(app: ^foster.App) {
 	foster.GraphicsDeviceClear(&app.GraphicsDevice, target, {16, 23, 33, 255})
 	reload.render(&s.session, f64(app.Time.Delta))
 	feedback_draw(&s.feedback, target, reload.is_live(&s.session), s.session.revision,
-		s.services.scale, app.Time.Delta)
-	perf.draw(&s.perf, target, s.services.scale)
+		core.ui_scale(&s.services), app.Time.Delta)
+	perf.draw(&s.perf, target, core.ui_scale(&s.services))
 }
 
 check :: proc(s: ^Editor_App, ok: bool, message: string) -> bool {

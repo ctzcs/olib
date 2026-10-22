@@ -98,12 +98,14 @@ Init :: proc(owner: ^foster.App, config_flags: imgui.ConfigFlags = {.NavEnableKe
 	case .Classic: imgui.StyleColorsClassic()
 	}
 
-	// DPI: scale style + fonts from the monitor the window is on
+	// DPI: scale style + fonts from the monitor the window is on. Leave
+	// io.ConfigDpiScaleFonts off: it overwrites FontScaleDpi with the viewport
+	// DPI every frame, and this bridge never sets one (single viewport), so the
+	// fonts would silently drop back to 1x while the paddings stay scaled.
 	scale := window_content_scale(owner)
 	style := imgui.GetStyle()
 	imgui.Style_ScaleAllSizes(style, scale)
 	style.FontScaleDpi = scale
-	io.ConfigDpiScaleFonts = true
 	if font_size > 0 && !font_load_default(font_size) {
 		fmt.eprintln("imgui_impl_ofoster: olib UI font failed to load; using the ImGui default font")
 	}

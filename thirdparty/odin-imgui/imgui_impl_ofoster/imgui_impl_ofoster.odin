@@ -70,6 +70,13 @@ app:            ^foster.App
 ready:          bool
 display_size:   [2]f32 // window size in points, as seen during the last render
 framebuffer_scale: [2]f32
+// UI scale currently applied to the style (fonts + sizes), and the style the
+// host left after its own setup, captured at the first frame: scale changes
+// (e.g. the window moved to a monitor with other OS scaling) rescale from it
+style_scale:      f32
+style_base:       imgui.Style
+style_base_scale: f32
+style_captured:   bool
 
 // ---- lifecycle ----------------------------------------------------------------
 
@@ -98,14 +105,16 @@ Init :: proc(owner: ^foster.App, config_flags: imgui.ConfigFlags = {.NavEnableKe
 	case .Classic: imgui.StyleColorsClassic()
 	}
 
-	// DPI: scale style + fonts from the monitor the window is on. Leave
-	// io.ConfigDpiScaleFonts off: it overwrites FontScaleDpi with the viewport
-	// DPI every frame, and this bridge never sets one (single viewport), so the
-	// fonts would silently drop back to 1x while the paddings stay scaled.
-	scale := window_content_scale(owner)
+	// DPI: scale style + fonts by the window's UI scale; BeginRender follows
+	// later changes. Leave io.ConfigDpiScaleFonts off: it overwrites
+	// FontScaleDpi with the viewport DPI every frame, and this bridge never sets
+	// one (single viewport), so fonts would drop back to 1x while sizes stay scaled.
+	scale := window_ui_scale(owner)
 	style := imgui.GetStyle()
 	imgui.Style_ScaleAllSizes(style, scale)
 	style.FontScaleDpi = scale
+	style_scale = scale
+	style_captured = false
 	if font_size > 0 && !font_load_default(font_size) {
 		fmt.eprintln("imgui_impl_ofoster: olib UI font failed to load; using the ImGui default font")
 	}
@@ -148,6 +157,7 @@ Shutdown :: proc() {
 	}
 	last_mouse_cursor = .COUNT
 	last_draw_cursor = false
+	style_captured = false
 	imgui_sdlgpu3.Shutdown()
 	imgui.DestroyContext(nil)
 	ready = false
@@ -275,10 +285,35 @@ BeginRender :: proc(owner: ^foster.App) -> bool {
 	// pass below, so close the current one (at the ofoster level, which also
 	// resets its cached pass/pipeline state)
 	foster.GraphicsDeviceEndRenderPass(device)
+	follow_ui_scale(owner)
 
 	imgui_sdlgpu3.NewFrame()
 	imgui.NewFrame()
 	return true
+}
+
+// Rescales from the captured base style, never cumulatively, so moving
+// between monitors does not drift. Font size settings the host changes every
+// frame (FontSizeBase, FontScaleMain) are kept; other style edits made after
+// the first frame are replaced by the base on a scale change.
+@(private)
+follow_ui_scale :: proc(owner: ^foster.App) {
+	style := imgui.GetStyle()
+	if !style_captured {
+		style_base = style^
+		style_base_scale = style_scale
+		style_captured = true
+	}
+	scale := window_ui_scale(owner)
+	if abs(scale - style_scale) < 0.001 {
+		return
+	}
+	font_size, font_main := style.FontSizeBase, style.FontScaleMain
+	style^ = style_base
+	imgui.Style_ScaleAllSizes(style, scale/style_base_scale)
+	style.FontSizeBase, style.FontScaleMain = font_size, font_main
+	style.FontScaleDpi = scale
+	style_scale = scale
 }
 
 // EndRender finishes the frame opened by BeginRender and draws it over the
@@ -442,16 +477,18 @@ set_clipboard_text :: proc "c" (ctx: ^imgui.Context, text: cstring) {
 // ---- helpers ---------------------------------------------------------------------
 
 @(private)
-window_content_scale :: proc(owner: ^foster.App) -> f32 {
-	scale := f32(0)
+// UI scale in ImGui's coordinate space (window coordinates): the display
+// scale divided by the pixel density, i.e. the OS scaling on Windows (1.5 at
+// 150%) and 1 on macOS Retina, where window coordinates are already points and
+// DisplayFramebufferScale covers the pixels.
+window_ui_scale :: proc(owner: ^foster.App) -> f32 {
+	scale, density := f32(0), f32(0)
 	if owner.Window.Handle != nil {
-		scale = sdl.GetDisplayContentScale(sdl.GetDisplayForWindow(owner.Window.Handle))
+		scale = sdl.GetWindowDisplayScale(owner.Window.Handle)
+		density = sdl.GetWindowPixelDensity(owner.Window.Handle)
 	}
-	if scale <= 0 {
-		scale = sdl.GetDisplayContentScale(sdl.GetPrimaryDisplay())
+	if scale <= 0 || density <= 0 {
+		return 1
 	}
-	if scale <= 0 {
-		scale = 1
-	}
-	return scale
+	return scale/density
 }

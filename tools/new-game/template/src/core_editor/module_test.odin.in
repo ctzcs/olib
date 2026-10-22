@@ -16,6 +16,8 @@ game_and_editor_snapshot_own_state_and_commands :: proc(t: ^testing.T) {
 	a := cast(^Module_Instance)first.instance
 	a.tools.state.open = false
 	a.tools.state.layout = strings.clone("[Docking][Data]\n")
+	testing.expect_value(t, a.tools.state.font_size, FONT_SIZE_DEFAULT)
+	a.tools.state.font_size = 24
 	a.tools.owner = .Editor
 	a.tools.ready = true
 	a.tools.previous_down = true
@@ -33,6 +35,7 @@ game_and_editor_snapshot_own_state_and_commands :: proc(t: ^testing.T) {
 	testing.expect(t, !b.tools.state.open && !b.tools.ready && !b.tools.previous_down)
 	testing.expect_value(t, b.tools.owner, .Discard)
 	testing.expect_value(t, b.tools.state.layout, a.tools.state.layout)
+	testing.expect_value(t, b.tools.state.font_size, f32(24))
 	testing.expect(t, raw_data(b.tools.state.layout) != raw_data(a.tools.state.layout))
 	testing.expect(t, raw_data(b.tools.pending) != raw_data(a.tools.pending))
 	testing.expect(t, raw_data(b.game.state.pending) != raw_data(a.game.state.pending))

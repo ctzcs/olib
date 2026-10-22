@@ -1,7 +1,11 @@
 #+test
 package core_editor
 
+import "core:fmt"
+import "core:os"
 import "core:testing"
+
+import foster "olib:foster"
 
 @(test)
 pointer_ownership_survives_leaving_panel_and_cancels_on_hide :: proc(t: ^testing.T) {
@@ -23,6 +27,31 @@ pointer_ownership_survives_leaving_panel_and_cancels_on_hide :: proc(t: ^testing
 	testing.expect(t, e.owner == .Game && crossing.game_down)
 	lost := route(&e, {100, 100}, true, false, false)
 	testing.expect(t, lost.block_keys && !lost.game_down)
+}
+
+@(test)
+font_size_settings_validate_and_round_trip :: proc(t: ^testing.T) {
+	testing.expect_value(t, font_size_valid(0), FONT_SIZE_DEFAULT)
+	testing.expect_value(t, font_size_valid(100), FONT_SIZE_MAX)
+	testing.expect_value(t, font_size_valid(20.4), f32(20))
+	_, found := settings_load(nil)
+	testing.expect(t, !found)
+	testing.expect_value(t, font_size_default(nil), FONT_SIZE_DEFAULT)
+	root, err := os.make_directory_temp("", "editor_settings_", context.allocator)
+	if !testing.expect(t, err == nil) do return
+	defer delete(root)
+	defer os.remove(root)
+	storage := foster.StorageContainer{Root = root, Writable = true}
+	defer os.remove(fmt.tprintf("%s/%s", root, SETTINGS_PATH))
+	_, found = settings_load(&storage)
+	testing.expect(t, !found)
+	testing.expect(t, settings_save(&storage, {font_size = 24}))
+	settings: Settings
+	settings, found = settings_load(&storage)
+	testing.expect(t, found && settings.font_size == 24)
+	testing.expect(t, foster.WriteAllBytes(&storage, SETTINGS_PATH, transmute([]u8)string("not json")))
+	_, found = settings_load(&storage)
+	testing.expect(t, !found)
 }
 
 @(test)

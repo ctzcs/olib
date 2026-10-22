@@ -1,6 +1,7 @@
 package core_editor
 
 import "core:encoding/json"
+import "core:fmt"
 import "core:mem"
 
 import reload "olib:core/hotreload"
@@ -10,7 +11,7 @@ import "game:core"
 
 // 分区：候选生命周期 / 组合快照 / 编辑命令与帧调度。
 // 同一 DLL 拥有游戏与编辑会话；宿主只保存不透明实例，不调用普通业务函数。
-EDITOR_STATE_VERSION :: u64(2)
+EDITOR_STATE_VERSION :: u64(3)
 MODULE_STATE_VERSION :: (core.STATE_VERSION << 32) | EDITOR_STATE_VERSION
 #assert(core.STATE_VERSION <= 0xffff_ffff && EDITOR_STATE_VERSION <= 0xffff_ffff)
 Module_Instance :: struct {
@@ -42,6 +43,7 @@ module_load :: proc "c" (call: ^reload.Call, snapshot: reload.Snapshot) -> bool 
 	call.instance = s // 部分初始化失败也由 unload 完整释放。
 	s.tools.state.open = true
 	s.tools.owner = .Discard
+	s.tools.state.font_size = FONT_SIZE_DEFAULT
 	data: Module_Snapshot
 	defer delete(data.game)
 	defer delete(data.pending)
@@ -56,6 +58,7 @@ module_load :: proc "c" (call: ^reload.Call, snapshot: reload.Snapshot) -> bool 
 			if command.kind == .Set_Position && !(command.value >= 20 && command.value <= 580) do return false
 		}
 		s.tools.state = data.editor
+		s.tools.state.font_size = font_size_valid(data.editor.font_size)
 		s.tools.pending = data.pending
 		data.editor = {}
 		data.pending = nil
@@ -66,6 +69,11 @@ module_load :: proc "c" (call: ^reload.Call, snapshot: reload.Snapshot) -> bool 
 	if !ok do return false
 	if !services.headless && !init(&s.tools, services.app, services.scale) {
 		return false
+	}
+	// 首次启动读编辑器设置（只读，候选 load 不写盘）；没有设置用本显示器的建议字号。热重载以快照为准。
+	if !services.headless && snapshot.version == 0 {
+		settings, found := settings_load(services.user_storage)
+		s.tools.state.font_size = found ? settings.font_size : s.tools.font_default
 	}
 	return true
 }
@@ -133,6 +141,13 @@ module_update :: proc "c" (call: ^reload.Call, dt: f64) {
 			services.input.pause = false
 			services.input.add_point = false
 		}
+	}
+	if s.tools.settings_dirty && !services.headless {
+		// 写失败只报告一次；本次运行仍用新字号，下次修改时再写。
+		if !settings_save(services.user_storage, {font_size = s.tools.state.font_size}) {
+			fmt.eprintln("Cannot save editor settings:", SETTINGS_PATH)
+		}
+		s.tools.settings_dirty = false
 	}
 	s.game_input = services.input
 	apply_commands(&s.game.state.world, s.tools.pending[:])

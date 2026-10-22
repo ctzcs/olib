@@ -4,6 +4,7 @@
 并保留移动专用的 `Translation_Gizmo`。使用现有的 `world.Camera2D` / `world.Camera3D`，
 三维手柄使用世界空间网格与深度测试，二维手柄使用 Render2D，返回拖拽结果；不读取窗口输入、不依赖 Clay、不识别模型、
 不修改场景或保存文件。目前没有三维平面移动手柄、矩形边角编辑、吸附与负缩放。
+另有 [网格线框](#网格线框) 查看工具，用同一个三维渲染器显示模型的边、开放边界和属性缝。
 
 ## 二维操作
 
@@ -132,6 +133,39 @@ labels := gizmo.translation_draw(&renderer, target, camera, accepted_position,
 二维 `transform2d_draw` 的签名保持不变。投影命中几何仍可单独使用。
 项目事务、取消、撤销与保存统一见 [编辑工具开发约定](../../prompts/editor-guidelines.md)。
 
+## 网格线框
+
+`wireframe_draw` 把任意网格画成线框叠在场景上，用来检查面数分布、破洞和 UV/法线拆分。
+边来自 [`meshutil.edges`](../../core/meshutil/README.md)，按位置焊接，每条只画一次；
+线宽按最终像素保持（乘 UI scale），不随距离变粗变细。
+
+```odin
+import meshutil "olib:core/meshutil"
+
+// 载入或简化后构建一次；positions/edges 由调用方持有。
+positions := meshutil.primitive_positions(&primitive)
+edges, ok := meshutil.edges(positions, primitive.indices)
+stats := meshutil.stats(positions, primitive.indices) // 面数、缝、破洞等，交给自己的 UI 显示
+
+// 每帧：先画模型写入深度，再叠线框。
+gizmo.wireframe_draw(&renderer, target, camera, positions, edges, model_world, viewport, ui_scale)
+```
+
+| Edge_Kind | 默认颜色 | 含义 |
+| --- | --- | --- |
+| `.Interior` | 浅灰 | 普通共享边 |
+| `.Seam` | 蓝 | 两侧顶点不同的属性缝，每条缝都让顶点数增加 |
+| `.Border` | 橙 | 只属于一个三角形：开放边界或破洞 |
+| `.Non_Manifold` | 红 | 三个以上三角形共用 |
+
+- 深度规则同手柄：可见边正常显示，被模型或场景挡住的边（含背面）按 `style.hidden_alpha` 淡化，
+  0 不画、1 即透视全部；不画模型时所有边都可见。
+- `style.depth_offset` 沿视线把线推近若干像素，屏幕位置不变，避免与模型表面深度冲突；掠射角很大的面仍可能部分淡化。
+- 把某种边的颜色 A 设为 0 即跳过，例如只看 `.Border` 找破洞，或只看 `.Seam` 检查 UV 拆分。
+- 蒙皮模型按传入的 positions 显示（通常是绑定姿态）；动画姿态需调用方先蒙皮出位置。
+- 每帧上传 6×边数个顶点（10 万条边约 17MB），仅用于查看，关闭查看后不要继续调用。
+  `wireframe_mesh` 只生成顶点，可用于无窗口测试或自定义渲染器。
+
 ## 输入与结果
 
 - 每帧调用，包括鼠标释放、离焦、面板关闭等状态变化帧。`pressed` 是由调用方提供的按下边沿，不能连续为 true。
@@ -168,4 +202,4 @@ UI 捕获、释放事件、取消后重新开始、相机/窗口变化及非有�
 若宿主释放事件带有最后一次移动，应先以 `down=true, pressed=false` 处理该位置并接受结果，
 再传释放事件结束事务，且每次都优先处理 `cancelled`。游戏和 gizmo2d 示例已覆盖此接法。
 
-三维网格测试验证世界几何、投影命中对齐与距离补偿；SIGNAL 冒烟用 GPU 读回比较保留/清空场景深度的真实像素，验证可见和淡化两类区域。
+三维网格测试验证世界几何、投影命中对齐与距离补偿；线框测试验证像素线宽、边种类颜色、近裁面截断与越界边；SIGNAL 冒烟用 GPU 读回比较保留/清空场景深度的真实像素，验证可见和淡化两类区域。

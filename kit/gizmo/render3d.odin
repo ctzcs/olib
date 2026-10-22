@@ -186,7 +186,23 @@ transform_draw :: proc(r: ^Renderer3D, target: foster.DrawableTarget, camera: ^w
 	scale: f32 = 1, style := DEFAULT_TRANSLATION_STYLE) -> [3]Axis_Label {
 	if !r.ready do return {}
 	labels := transform_mesh(&r.vertices, camera, value, viewport, mode, state, pointer, scale, style)
-	if len(r.vertices) == 0 do return labels
+	draw_vertices(r, target, camera, viewport, 0.12)
+	return labels
+}
+
+translation_draw :: proc(r: ^Renderer3D, target: foster.DrawableTarget, camera: ^world.Camera3D,
+	position: foster.Vec3, viewport: foster.Rect, state: ^Translation_Gizmo, pointer: foster.Vec2,
+	scale: f32 = 1, style := DEFAULT_TRANSLATION_STYLE) -> [3]Axis_Label {
+	transform := Transform_Gizmo{dragging = state.dragging, axis = state.axis}
+	return transform_draw(r, target, camera, {position = position, scale = {1, 1, 1}},
+		viewport, .Translate, &transform, pointer, scale, style)
+}
+
+// 提交 r.vertices：被场景遮挡的片元按 hidden_alpha 淡化（0 不画），可见片元正常显示，都不写深度。
+@(private)
+draw_vertices :: proc(r: ^Renderer3D, target: foster.DrawableTarget, camera: ^world.Camera3D,
+	viewport: foster.Rect, hidden_alpha: f32) {
+	if len(r.vertices) == 0 do return
 	foster.MeshSetVertexCount(&r.mesh, len(r.vertices))
 	foster.MeshSetVertices(&r.mesh, raw_data(r.vertices), len(r.vertices))
 	matrix_bytes: [64]u8
@@ -205,19 +221,11 @@ transform_draw :: proc(r: ^Renderer3D, target: foster.DrawableTarget, camera: ^w
 	command.BlendMode = {ColorOperation = .Add, ColorSource = .SrcAlpha, ColorDestination = .OneMinusSrcAlpha,
 		AlphaOperation = .Add, AlphaSource = .One, AlphaDestination = .OneMinusSrcAlpha, Mask = .RGBA}
 	for occluded in ([2]bool{true, false}) {
+		if occluded && !(hidden_alpha > 0) do continue
 		tint: [16]u8
-		mat.std140_write_vec4(tint[:], 0, {1, 1, 1, occluded ? 0.12 : 1})
+		mat.std140_write_vec4(tint[:], 0, {1, 1, 1, occluded ? min(hidden_alpha, 1) : 1})
 		foster.MaterialStageSetUniformBuffer(&r.material.Fragment, tint[:], 0)
 		command.DepthCompare = occluded ? .Greater : .LessOrEqual
 		foster.GraphicsDeviceDraw(r.mesh.GraphicsDevice, &command)
 	}
-	return labels
-}
-
-translation_draw :: proc(r: ^Renderer3D, target: foster.DrawableTarget, camera: ^world.Camera3D,
-	position: foster.Vec3, viewport: foster.Rect, state: ^Translation_Gizmo, pointer: foster.Vec2,
-	scale: f32 = 1, style := DEFAULT_TRANSLATION_STYLE) -> [3]Axis_Label {
-	transform := Transform_Gizmo{dragging = state.dragging, axis = state.axis}
-	return transform_draw(r, target, camera, {position = position, scale = {1, 1, 1}},
-		viewport, .Translate, &transform, pointer, scale, style)
 }

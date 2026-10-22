@@ -21,6 +21,7 @@ core/        基础库（无引擎依赖）
 ├── encoding/  json（Value 树 + struct）/ csv（表驱动配置）
 ├── messaging/ CommandQueue（单消费者）/ BroadcastChannel（延迟一帧广播）
 ├── dasset/    .dasset 模型格式数据层（比特兼容 DragonLib v4，无渲染依赖）
+├── meshutil/  三角网格统计 / 拓扑边 / 焊接 / 压缩 / QEM 简化（LOD）
 ├── tween/     补间系统（manager / sequence / 插值原语）
 ├── debug/     Tracking_Allocator 的 defer 包装
 ├── hotreload/ 桌面游戏 DLL 热重载：后台编译、快照恢复、UI 重建与失败保留旧版
@@ -32,7 +33,7 @@ foster/      Foster 框架的 Odin 移植（原 OFoster；保留 API、源码组
 kit/         扩展层（kit）：依赖 foster/ 与 core/
 ├── asset/       资源管线：.meta 管身份、library/assets 管派生、blob 为边界、manifest 打包零改动
 ├── world/       Camera2D/Camera3D + Frustum3D/Ray3D + Matrix4 / SceneRouter
-├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Render2D 覆盖层，不持有场景对象
+├── gizmo/       2D/3D 移动、旋转、局部与等比缩放，命中与 Render2D 覆盖层，网格线框查看，不持有场景对象
 ├── rendering/   渲染：共享资源、2D/3D 绘制与 Shader 工具链
 │   ├── material/ 游戏用的材质库：材质加载与修改、每实例的值、登记 Shader
 │   ├── 2d/      Sprite / SpriteAtlas / 图集构建与精灵合批

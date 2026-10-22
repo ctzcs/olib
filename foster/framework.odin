@@ -1486,6 +1486,12 @@ window_set_title :: proc(window: ^Window, title: string) {
 }
 
 ContentScale :: proc(window: ^Window) -> f32 {
+	when ODIN_OS == .JS {
+		// [olib L-021] Web 没有 SDL 窗口：画布像素 ÷ CSS 尺寸即 devicePixelRatio，不引入 SDL 导入。
+		size := web_window_size()
+		pixels := web_window_size_in_pixels()
+		return size.X > 0 && pixels.X > 0 ? f32(pixels.X)/f32(size.X) : 1
+	}
 	if window.Handle == nil {
 		return 1
 	}

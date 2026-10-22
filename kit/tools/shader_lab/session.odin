@@ -40,6 +40,7 @@ Session :: struct {
 	selected_shader, inspect_pass: int,
 	preview_pass: int, // -1 始终看最终效果；与编辑中的 inspect_pass 分开。
 	shader_menu, preview_settings: bool,
+	shader_menu_shown: bool, // 上一次 draw 结束时 Shader 菜单浮层是否打开
 	workspace: int, // 0: 2D，1: 3D。
 	workspace_empty: bool,
 	workspaces: [2]Workspace_State,

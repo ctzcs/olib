@@ -114,7 +114,16 @@ shader_selector :: proc(s: ^Session) {
 	if lab_button(s, "shader-menu", name, s.shader_menu, true, "media/clapper") do s.shader_menu = true
 	anchor := imgui.GetItemRectMin()
 	size := imgui.GetItemRectSize()
-	if s.shader_menu && !imgui.IsPopupOpen("shader-popup") do imgui.OpenPopup("shader-popup")
+	if s.shader_menu && !imgui.IsPopupOpen("shader-popup") {
+		// 上一帧已打开、现在被 ImGui 关掉（点了浮层外面，包括这个按钮）就同步关闭，不能马上重开，
+		// 否则重开的浮层第一帧隐藏测量尺寸，看起来闪一下而且关不掉。
+		if s.shader_menu_shown {
+			s.shader_menu = false
+		} else {
+			imgui.OpenPopup("shader-popup")
+		}
+	}
+	s.shader_menu_shown = s.shader_menu
 	imgui.SetNextWindowPos({anchor.x, anchor.y + size.y + 2})
 	imgui.SetNextWindowSizeConstraints({size.x, 0}, {max(size.x, 480), 360})
 	if !imgui.BeginPopup("shader-popup") {

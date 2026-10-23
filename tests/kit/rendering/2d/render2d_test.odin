@@ -137,13 +137,21 @@ render2d_instance_values_preserve_each_pass :: proc(t: ^testing.T) {
 		{schema = schema, values = []sh.Value{{number = {0.2, 0, 0, 0}}}},
 		{schema = schema, values = []sh.Value{{number = {0.8, 0, 0, 0}}}},
 	}}
-	selection := mat.Pass_Selection{count = 2}
-	selection.passes[1], selection.bindings[1] = 1, 1
+	// 开段时每个所选 Pass 建一张表（Pass i 用绑定 i）。
+	tables := [2]mat.Instance_Table{
+		mat.instance_table_make(shader.desc.passes[0], m.bindings[0]),
+		mat.instance_table_make(shader.desc.passes[1], m.bindings[1]),
+	}
 	// 记录首项是两条轴，之后是各 Pass 的数值。
 	axes := [4]f32{2, 0, 0, 3}
-	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil, axes), 1)
+	testing.expect_value(t, render2d_record_instances(&r, tables[:], nil, axes), 1)
 	testing.expect_value(t, r.instance_values[1], axes)
 	testing.expect_value(t, r.instance_values[2][0], 0.2)
 	testing.expect_value(t, r.instance_values[3][0], 0.8)
-	testing.expect_value(t, render2d_record_instances(&r, &m, selection, nil, axes), 4)
+	// 本次覆盖只改这一个精灵的值，按字段范围钳制。
+	hue := mat.Instance_Values{}
+	hue.numbers[0], hue.set = {1.5, 0, 0, 0}, 1
+	testing.expect_value(t, render2d_record_instances(&r, tables[:], &hue, axes), 4)
+	testing.expect_value(t, r.instance_values[5][0], 1)
+	testing.expect_value(t, r.instance_values[6][0], 1)
 }

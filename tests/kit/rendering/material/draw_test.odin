@@ -223,3 +223,55 @@ material_register_directory_names_what_is_missing :: proc(t: ^testing.T) {
 	device.Driver = .None
 	testing.expect_value(t, material_register_directory(&library, no_fragment), "Unsupported shader backend")
 }
+
+// 实例值表与 material_pass_values（逐字段按名字套用的原路径）结果逐值相同：各种字段类型与范围、
+// Pass 固定值（含同一字段多次，取最后一次）、部分与全部覆盖、用到的分量非有限、未用到的分量非有限、超出槽数的掩码位。
+@(test)
+instance_table_matches_pass_values :: proc(t: ^testing.T) {
+	nan := transmute(f32)u32(0x7fc00000)
+	inf := transmute(f32)u32(0x7f800000)
+	fields := []sh.Field{
+		{id = "a", kind = .Scalar, instance = true, minimum = 0, maximum = 1},
+		{id = "gain", kind = .Scalar, maximum = 1},
+		{id = "b", kind = .Vector2, instance = true, minimum = -2, maximum = 2},
+		{id = "c", kind = .Color, instance = true, minimum = 0, maximum = 1},
+		{id = "d", kind = .Vector3, instance = true, minimum = -1, maximum = 5},
+	}
+	values := []sh.Value{{number = {0.3, 9, 9, 9}}, {number = {0.5, 0, 0, 0}}, {number = {1, -1, 7, 7}},
+		{number = {0.1, 0.2, 0.3, 0.4}}, {number = {1, 2, 3, 4}}}
+	b := Material_Binding{schema = {name = "S", fields = fields}, values = values}
+	passes := []sh.Pass_Desc{
+		{},
+		{values = []sh.Pass_Value{{field = "b", number = {0.5, 0.5, 0, 0}}}},
+		{values = []sh.Pass_Value{{field = "a", number = {0.9, 0, 0, 0}}, {field = "a", number = {0.7, 0, 0, 0}},
+			{field = "gain", number = {1, 0, 0, 0}}}},
+	}
+	overrides: [6]Instance_Values
+	overrides[1].numbers[0], overrides[1].set = {2, 0, 0, 0}, 0b0001 // 钳制
+	overrides[2].numbers = {0 = {-1, 0, 0, 0}, 1 = {3, -3, 0, 0}, 2 = {0.5, 1.5, -0.5, 2}, 3 = {6, 0, -2, 9}}
+	overrides[2].set = 0b1111
+	overrides[3].numbers[1], overrides[3].numbers[2] = {nan, 0, 0, 0}, {0.2, 0.3, 0.4, inf} // 整个值忽略
+	overrides[3].set = 0b0110
+	overrides[4].numbers[1], overrides[4].set = {1, 1, inf, 0}, 0b0010 // Vector2 不用第三个分量：照常套用
+	overrides[5].numbers[3], overrides[5].set = {4, 4, 4, 0}, 0b1000 | 1 << 10 // 超出槽数的位忽略
+	for p, pass_index in passes {
+		table := instance_table_make(p, b)
+		testing.expect_value(t, table.count, 4)
+		for &o, case_index in overrides {
+			override := case_index == 0 ? nil : &o
+			_, expected := material_pass_values(p, b, override)
+			got := material_pass_instance(p, b, override)
+			testing.expect_value(t, got.count, expected.count)
+			for slot in 0..<expected.count {
+				testing.expectf(t, got.numbers[slot] == expected.numbers[slot], "pass %d case %d slot %d: %v != %v",
+					pass_index, case_index, slot, got.numbers[slot], expected.numbers[slot])
+			}
+			// 平铺数组的写法（每个槽位都算覆盖）与带全掩码的 Instance_Values 相同。
+			if case_index == 2 {
+				out: [4][4]f32
+				instance_table_write(&table, o.numbers[:4], 0b1111, out[:])
+				for slot in 0..<4 do testing.expect(t, out[slot] == expected.numbers[slot])
+			}
+		}
+	}
+}

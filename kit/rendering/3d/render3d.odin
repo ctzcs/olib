@@ -41,9 +41,9 @@ Render3D :: struct {
 	snapshot_count: int,
 	queue: Render_Queue(int),
 	values: [dynamic][4]f32,
-	// 每个材质最近一次准备的结果（选择、快照来源与默认实例值），revision 与 Shader 不变时复用。
+	// 每个材质最近一次准备的结果（选择、快照来源与各 Pass 的实例值表），revision 与 Shader 不变时复用。
 	prepared: map[^mat.Material]Render3D_Prepared,
-	defaults: [dynamic][4]f32,
+	tables: [dynamic]mat.Instance_Table,
 	batches: [dynamic]Render3D_Batch,
 	upload: [dynamic]u8,
 	buffers: [sh.MAX_INSTANCE_FIELDS + 1]Model_Buffer, // 自动实例化的临时缓冲，按 [Instance] 字段数各一个
@@ -77,7 +77,7 @@ Render3D_Prepared :: struct {
 	revision: u64,
 	shader: ^mat.Material_Shader,
 	source: int,
-	defaults: int, // r.defaults 中的起点：各所选 Pass 依次 slots 个无覆盖的实例值
+	tables: int, // r.tables 中的起点：各所选 Pass 依次一张实例值表
 }
 
 // 记录时的 Shader 与槽数一并保存：之后 material_reload 换了 Shader 或参数组，已记录的快照仍按原布局绘制。
@@ -115,7 +115,7 @@ dispose :: proc(r: ^Render3D) {
 	queue_dispose(&r.queue)
 	delete(r.values)
 	delete(r.prepared)
-	delete(r.defaults)
+	delete(r.tables)
 	delete(r.batches)
 	delete(r.upload)
 	for &buffer in r.buffers do model_buffer_dispose(&buffer)
@@ -131,7 +131,7 @@ clear :: proc(r: ^Render3D) {
 	queue_clear(&r.queue)
 	builtin.clear(&r.values)
 	builtin.clear(&r.prepared)
-	builtin.clear(&r.defaults)
+	builtin.clear(&r.tables)
 	builtin.clear(&r.batches)
 	debug_draw_clear(&r.debug)
 }
@@ -185,16 +185,17 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 		}
 		append(&r.records, record)
 		if slots == 0 do continue
-		if flat == nil && overrides == nil {
-			append(&r.values, ..r.defaults[prepared.defaults:][:selection.count * slots])
-			continue
-		}
-		input: mat.Instance_Values
-		if flat != nil do input = mat.instance_values_from(flat[item_index*slots:(item_index+1)*slots])
+		// 按准备好的表逐 Pass 写实例值：平铺数组每个槽位都算覆盖，nil 用材质值。
+		start := len(r.values)
+		resize(&r.values, start + selection.count * slots)
 		for i in 0..<selection.count {
-			p := source.shader.desc.passes[selection.passes[i]]
-			instance := mat.material_pass_instance(p, m.bindings[selection.bindings[i]], flat != nil ? &input : overrides)
-			append(&r.values, ..instance.numbers[:slots])
+			table := &r.tables[prepared.tables + i]
+			out := r.values[start + i*slots:][:slots]
+			switch {
+			case flat != nil: mat.instance_table_write(table, flat[item_index*slots:][:slots], (1 << u32(slots)) - 1, out)
+			case overrides != nil: mat.instance_table_write(table, overrides.numbers[:], overrides.set, out)
+			case: mat.instance_table_write(table, nil, 0, out)
+			}
 		}
 	}
 	return .None
@@ -212,13 +213,13 @@ render3d_prepared :: proc(r: ^Render3D, m: ^mat.Material) -> (Render3D_Prepared,
 	selection: mat.Pass_Selection
 	if error := mat.material_select(m.shader.desc, m.bindings, .Model, "", nil, &selection);
 		error != .None do return {}, error
-	prepared := Render3D_Prepared{revision = m.revision, shader = m.shader, defaults = len(r.defaults)}
+	prepared := Render3D_Prepared{revision = m.revision, shader = m.shader, tables = len(r.tables)}
 	uniforms: [sh.MAX_PASSES][]u8
 	for i in 0..<selection.count {
 		p := m.shader.desc.passes[selection.passes[i]]
-		instance: mat.Instance_Values
-		uniforms[i], instance = mat.material_pass_values(p, m.bindings[selection.bindings[i]], nil)
-		append(&r.defaults, ..instance.numbers[:slots])
+		binding := m.bindings[selection.bindings[i]]
+		uniforms[i], _ = mat.material_pass_values(p, binding, nil)
+		append(&r.tables, mat.instance_table_make(p, binding))
 	}
 	prepared.source = render3d_source(r, m, selection, uniforms[:selection.count])
 	r.prepared[m] = prepared

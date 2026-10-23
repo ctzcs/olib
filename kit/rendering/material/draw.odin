@@ -173,17 +173,15 @@ material_binding_find :: proc(p: sh.Pass_Desc, kind: sh.Pass_Draw, sprite_textur
 
 // 一个 Pass 本次绘制的参数：参数 uniform（按 uniform_size 打包，借用 temp_allocator）与 [Instance] 字段数值。
 // 不分配内存的实例值解析，供批量记录模型逐实例使用；与 material_pass_values 的覆盖顺序相同。
+// 逐实例重复求值时先用 instance_table_make 建表，再对每个实例调 instance_table_write。
 material_pass_instance :: proc(p: sh.Pass_Desc, b: Material_Binding,
 	overrides: ^Instance_Values) -> (instance: Instance_Values) {
-	for field, i in b.schema.fields {
-		if !field.instance || instance.count >= sh.MAX_INSTANCE_FIELDS do continue
-		value := b.values[i]
-		if overrides != nil && overrides.set & (1 << u32(instance.count)) != 0 {
-			value_assign(field, &value, overrides.numbers[instance.count])
-		}
-		for fixed in p.values do if string(fixed.field) == field.id do value.number = fixed.number
-		instance.numbers[instance.count] = value.number
-		instance.count += 1
+	table := instance_table_make(p, b)
+	instance.count = table.count
+	if overrides != nil {
+		instance_table_write(&table, overrides.numbers[:], overrides.set, instance.numbers[:])
+	} else {
+		instance_table_write(&table, nil, 0, instance.numbers[:])
 	}
 	return
 }

@@ -483,7 +483,7 @@ render3d_prepared_follows_revision :: proc(t: ^testing.T) {
 	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
 	for _ in 0..<3 do testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
 	testing.expect_value(t, len(r.sources), 1)
-	testing.expect_value(t, len(r.defaults), 1) // 只准备一次
+	testing.expect_value(t, len(r.tables), 1) // 只准备一次
 	values[1].number[0] = 0.9 // 绕过接口直接改：沿用缓存
 	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
 	testing.expect_value(t, len(r.sources), 1)
@@ -503,7 +503,7 @@ render3d_prepared_follows_revision :: proc(t: ^testing.T) {
 	clear(&r)
 	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
 	testing.expect_value(t, len(r.sources), 1)
-	testing.expect_value(t, len(r.defaults), 1)
+	testing.expect_value(t, len(r.tables), 1)
 }
 
 // 绘制入口的错误码：都在提交 Draw 之前返回，不需要真实 GPU。

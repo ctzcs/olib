@@ -88,6 +88,49 @@ instance_values_from :: proc(numbers: [][4]f32) -> (values: Instance_Values) {
 	return
 }
 
+// 一个 Pass 的 [Instance] 求值表：材质值与 Pass 固定值预先合好，逐实例只剩按槽覆盖与钳制，
+// 不再按名字查字段。由 instance_table_make 构建；材质 revision 变化后需要重建。
+Instance_Table :: struct {
+	count: int, // 槽数
+	values: [sh.MAX_INSTANCE_FIELDS][4]f32, // 没有本次覆盖时的值（材质值，已套用 Pass 固定值）
+	minimum, maximum: [sh.MAX_INSTANCE_FIELDS]f32,
+	components: [sh.MAX_INSTANCE_FIELDS]u8,
+	fixed: u32, // Pass 固定值所在的槽位：本次覆盖不改它们
+}
+
+instance_table_make :: proc(p: sh.Pass_Desc, b: Material_Binding) -> (table: Instance_Table) {
+	for field, i in b.schema.fields {
+		if !field.instance || table.count >= sh.MAX_INSTANCE_FIELDS do continue
+		slot := table.count
+		table.values[slot] = b.values[i].number
+		table.minimum[slot], table.maximum[slot] = field.minimum, field.maximum
+		table.components[slot] = u8(sh.components(field.kind))
+		for fixed in p.values do if string(fixed.field) == field.id {
+			table.values[slot] = fixed.number
+			table.fixed |= 1 << u32(slot)
+		}
+		table.count += 1
+	}
+	return
+}
+
+// 写出一个实例在该 Pass 的值：numbers 是本次覆盖（下标即槽位，可以比槽数短），set 标出有覆盖的槽位。
+// 覆盖值按字段范围钳制，用到的分量有非有限值就忽略整个值，Pass 固定值优先；out 至少 table.count 个。
+// 覆盖顺序与 material_pass_values 相同：材质值 < 本次覆盖 < Pass 固定值。
+instance_table_write :: proc(table: ^Instance_Table, numbers: [][4]f32, set: u32, out: [][4]f32) {
+	copy(out[:table.count], table.values[:table.count])
+	active := set &~ table.fixed
+	if active == 0 do return
+	for slot in 0..<min(table.count, len(numbers)) {
+		if active & (1 << u32(slot)) == 0 do continue
+		n := int(table.components[slot])
+		finite := true
+		for c in 0..<n do finite = finite && !math.is_nan(numbers[slot][c]) && !math.is_inf(numbers[slot][c])
+		if !finite do continue
+		for c in 0..<n do out[slot][c] = math.clamp(numbers[slot][c], table.minimum[slot], table.maximum[slot])
+	}
+}
+
 // 把显式设置的槽位写进 values（与 schema.fields 一一对应）：非有限数值忽略，其余按字段范围钳制。
 @(private)
 instance_values_apply :: proc(overrides: ^Instance_Values, schema: sh.Schema, values: []sh.Value) {

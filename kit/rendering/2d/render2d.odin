@@ -57,6 +57,8 @@ Render2D :: struct {
 	index_quads: int, // 索引缓冲已覆盖的四边形数（索引是固定的四边形图案，只在增长时重建）
 	// 带 [Instance] 字段的 Shader：每个精灵一组 float4，顶点 mode 字节存它的起始偏移；[0] 保留不用。submit 时上传一次。
 	instance_values: [dynamic][4]f32,
+	// 每个 run 的各所选 Pass 一张实例值表，开段时按材质建一次，逐精灵按表写值。
+	instance_tables: [dynamic]mat.Instance_Table,
 	instance_buffer: foster.StorageBuffer,
 	instance_ready: bool,
 	// r2d.buffer 用的单位四边形角点网格，首次使用时创建。
@@ -85,6 +87,7 @@ Render2D_Run :: struct {
 	quad_start, quad_count: int,
 	storage: bool, // 顶点从 instance_values 读两条轴和 [Instance] 字段（.oshader Shader 总是）
 	pass_offsets: [sh.MAX_PASSES]u32, // 每个精灵的数值记录内，各 Pass 的 float4 偏移
+	tables: int, // r.instance_tables 中的起点，各所选 Pass 依次一张
 	// r2d.buffer 记录的常驻缓冲：不与其他记录合并，用缓冲变体顶点着色器实例化绘制。
 	buffer: ^Sprite_Buffer,
 	instance_count: int,
@@ -120,6 +123,7 @@ dispose :: proc(r: ^Render2D) {
 	delete(r.mode_stack)
 	delete(r.scissor_stack)
 	delete(r.instance_values)
+	delete(r.instance_tables)
 	if r.instance_ready do foster.StorageBufferDispose(&r.instance_buffer)
 	if r.corner_ready do foster.MeshDispose(&r.corner_mesh)
 	if r.library != nil do foster.MeshDispose(&r.mesh)
@@ -502,6 +506,7 @@ render2d_reset :: proc(r: ^Render2D) {
 	clear(&r.vertices)
 	clear(&r.runs)
 	clear(&r.instance_values)
+	clear(&r.instance_tables)
 	r.snapshot_count = 0
 	render2d_reset_state(r)
 }
@@ -543,7 +548,7 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 		t := r.transform
 		stacked := [4]f32{axes[0]*t[0] + axes[1]*t[4], axes[0]*t[1] + axes[1]*t[5],
 			axes[2]*t[0] + axes[3]*t[4], axes[2]*t[1] + axes[3]*t[5]}
-		offset := render2d_record_instances(r, m, selection, values, stacked)
+		offset := render2d_record_instances(r, r.instance_tables[last.tables:][:selection.count], values, stacked)
 		mode = {u8(offset), u8(offset >> 8), u8(offset >> 16), u8(offset >> 24)}
 	}
 	for i in 0..<4 {
@@ -556,15 +561,20 @@ render2d_record :: proc(r: ^Render2D, material: ^mat.Material, texture: ^foster.
 // 一个精灵的记录：首项是两条轴，随后连续存放各 Pass 的独立数值；顶点保存起点，
 // 提交时由顶点 b1 选择该 Pass 的偏移。
 @(private)
-render2d_record_instances :: proc(r: ^Render2D, m: ^mat.Material, selection: mat.Pass_Selection,
+render2d_record_instances :: proc(r: ^Render2D, tables: []mat.Instance_Table,
 	values: ^mat.Instance_Values, axes: [4]f32) -> int {
 	if len(r.instance_values) == 0 do append(&r.instance_values, [4]f32{})
 	offset := len(r.instance_values)
 	append(&r.instance_values, axes)
-	for i in 0..<selection.count {
-		p := m.shader.desc.passes[selection.passes[i]]
-		instance := mat.material_pass_instance(p, m.bindings[selection.bindings[i]], values)
-		append(&r.instance_values, ..instance.numbers[:instance.count])
+	for &table in tables {
+		start := len(r.instance_values)
+		resize(&r.instance_values, start + table.count)
+		out := r.instance_values[start:]
+		if values != nil {
+			mat.instance_table_write(&table, values.numbers[:], values.set, out)
+		} else {
+			mat.instance_table_write(&table, nil, 0, out)
+		}
 	}
 	return offset
 }
@@ -606,7 +616,7 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 	selection: mat.Pass_Selection, values: ^mat.Instance_Values) {
 	run := Render2D_Run{material = m, revision = m.revision, pass_id = pass_id, selection = selection, snapshot = r.snapshot_count,
 		texture = texture, sampler = r.sampler, blend = r.blend, scissor = {r.scissor, r.has_scissor},
-		quad_start = len(r.vertices) / 4}
+		quad_start = len(r.vertices) / 4, tables = len(r.instance_tables)}
 	slot := render2d_param_slot(m.shader.desc)
 	offset: u32
 	for i in 0..<selection.count {
@@ -614,6 +624,7 @@ render2d_run_begin :: proc(r: ^Render2D, m: ^mat.Material, pass_id: mat.Pass_Id,
 		binding := m.bindings[selection.bindings[i]]
 		run.pass_offsets[i] = offset
 		if m.shader.desc.uniforms == .Olib do offset += u32(sh.instance_count(binding.schema))
+		append(&r.instance_tables, mat.instance_table_make(p, binding))
 		if r.snapshot_count == len(r.snapshots) {
 			append(&r.snapshots, foster.Material{})
 			foster.MaterialInitWithShaders(&r.snapshots[r.snapshot_count], nil, nil)

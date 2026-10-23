@@ -439,17 +439,71 @@ render3d_instances_snapshots_and_order :: proc(t: ^testing.T) {
 	testing.expect_value(t, render3d_prepare(&r, view, ""), mat.Draw_Error.None)
 	testing.expect_value(t, render3d_batch_end(&r, 2), 3) // 透明多 Pass 不跨对象
 	testing.expect_value(t, debug_draw_line_count(&r.debug), 1)
-	// 修改参数或贴图必须新建快照；原记录仍保留先前值。
+	// 修改参数或贴图必须新建快照；原记录仍保留先前值。这里直接改数值并像
+	// material_set_number / material_set_texture 一样递增 revision。
 	values[1].number[0] = 0.8
+	m.revision += 1
 	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
 	testing.expect_value(t, len(r.sources), 2)
 	samplers[0].Texture = &other_texture
+	m.revision += 1
 	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
 	testing.expect_value(t, len(r.sources), 3)
 	testing.expect(t, r.snapshots[0].Fragment.Samplers[0].Texture == &texture)
 	testing.expect_value(t, read_vec4(r.snapshots[0].Fragment.UniformBuffers[1][:], 0)[0], f32(0.5))
 	clear(&r)
 	testing.expect_value(t, debug_draw_line_count(&r.debug), 0)
+	testing.expect_value(t, len(r.prepared), 0)
+}
+
+// 同一材质在 revision 与 Shader 不变时复用准备结果：不重新打包参数（直接改数值而不递增 revision 不会被发现，
+// 这正是文档要求只经 material_set_number 等接口修改的原因）；revision、Shader 变化或 clear 后重新准备。
+@(test)
+render3d_prepared_follows_revision :: proc(t: ^testing.T) {
+	device: foster.GraphicsDevice
+	library := mat.Material_Library{device = &device}
+	r := Render3D{library = &library}
+	defer dispose(&r)
+	vertex: foster.Shader
+	vertex.Resource = cast(type_of(vertex.Resource))uintptr(1) // 仅验证绑定；不调用 GPU
+	fragment := vertex
+	fragment.Stage = .Fragment
+	gpu: foster.Material
+	foster.MaterialInitWithShaders(&gpu, &vertex, &fragment)
+	defer foster.MaterialDispose(&gpu)
+	schema := sh.Schema{name = "Body", fields = []sh.Field{
+		{id = "hue", kind = .Scalar, instance = true, maximum = 1},
+		{id = "gain", kind = .Scalar, maximum = 1}}}
+	shader := mat.Material_Shader{schemas = []sh.Schema{schema}, desc = {instanced = true, passes = []sh.Pass_Desc{
+		{id = "body", params = "Body", draw = .Model}}}}
+	values := []sh.Value{{number = {0.2, 0, 0, 0}}, {number = {0.5, 0, 0, 0}}}
+	m := mat.Material{owner = &library, shader = &shader,
+		bindings = []mat.Material_Binding{{schema, values, &gpu, nil}}}
+	mesh := foster.Mesh{GraphicsDevice = &device}
+	mesh.VertexData.Format.Stride = dasset.DASSET_VERTEX_STRIDE_STATIC
+	for _ in 0..<3 do testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 1)
+	testing.expect_value(t, len(r.defaults), 1) // 只准备一次
+	values[1].number[0] = 0.9 // 绕过接口直接改：沿用缓存
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 1)
+	m.revision += 1 // 经接口修改后重新准备，新参数进入新快照
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 2)
+	testing.expect_value(t, read_vec4(r.snapshots[1].Fragment.UniformBuffers[1][:], 0)[0], f32(0.9))
+	values[1].number[0] = 0.5
+	m.revision += 1 // 改回原值：重新准备时按内容找到已有快照
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 2)
+	testing.expect_value(t, r.records[len(r.records)-1].source, 0)
+	other := shader // Shader 指针变化（reload 换了 Shader）也重新准备
+	m.shader = &other
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 3)
+	clear(&r)
+	testing.expect_value(t, model(&r, &mesh, &m, world.MATRIX4_IDENTITY), mat.Draw_Error.None)
+	testing.expect_value(t, len(r.sources), 1)
+	testing.expect_value(t, len(r.defaults), 1)
 }
 
 // 绘制入口的错误码：都在提交 Draw 之前返回，不需要真实 GPU。

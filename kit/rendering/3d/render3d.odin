@@ -41,6 +41,9 @@ Render3D :: struct {
 	snapshot_count: int,
 	queue: Render_Queue(int),
 	values: [dynamic][4]f32,
+	// 每个材质最近一次准备的结果（选择、快照来源与默认实例值），revision 与 Shader 不变时复用。
+	prepared: map[^mat.Material]Render3D_Prepared,
+	defaults: [dynamic][4]f32,
 	batches: [dynamic]Render3D_Batch,
 	upload: [dynamic]u8,
 	buffers: [sh.MAX_INSTANCE_FIELDS + 1]Model_Buffer, // 自动实例化的临时缓冲，按 [Instance] 字段数各一个
@@ -65,6 +68,16 @@ Render3D_Record :: struct {
 	values: int,
 	buffer: ^Model_Buffer,
 	count: int,
+}
+
+// 一个材质在当前记录集里的准备结果。材质只经 material_set_number / set_texture / reload 修改，
+// 这些都会递增 revision，所以 revision 与 Shader 指针不变时选择、参数快照和默认实例值都仍然有效。
+@(private)
+Render3D_Prepared :: struct {
+	revision: u64,
+	shader: ^mat.Material_Shader,
+	source: int,
+	defaults: int, // r.defaults 中的起点：各所选 Pass 依次 slots 个无覆盖的实例值
 }
 
 // 记录时的 Shader 与槽数一并保存：之后 material_reload 换了 Shader 或参数组，已记录的快照仍按原布局绘制。
@@ -101,6 +114,8 @@ dispose :: proc(r: ^Render3D) {
 	delete(r.source_heads)
 	queue_dispose(&r.queue)
 	delete(r.values)
+	delete(r.prepared)
+	delete(r.defaults)
 	delete(r.batches)
 	delete(r.upload)
 	for &buffer in r.buffers do model_buffer_dispose(&buffer)
@@ -115,6 +130,8 @@ clear :: proc(r: ^Render3D) {
 	r.snapshot_count = 0
 	queue_clear(&r.queue)
 	builtin.clear(&r.values)
+	builtin.clear(&r.prepared)
+	builtin.clear(&r.defaults)
 	builtin.clear(&r.batches)
 	debug_draw_clear(&r.debug)
 }
@@ -155,38 +172,57 @@ render3d_record :: proc(r: ^Render3D, mesh: ^foster.Mesh, m: ^mat.Material,
 	items: []Model_Item, bounds: ^dasset.Dasset_Bounds, flat: [][4]f32,
 	overrides: ^mat.Instance_Values) -> mat.Draw_Error {
 	if error := render3d_validate(r, mesh, m); error != .None do return error
-	slots := mat.instance_slot_count(m)
-	if slots < 0 || slots > sh.MAX_INSTANCE_FIELDS do return .Instance_Mismatch
+	prepared, error := render3d_prepared(r, m)
+	if error != .None do return error
+	source := &r.sources[prepared.source]
+	slots, selection := source.slots, source.selection
 	if flat != nil && len(flat) != len(items) * slots do return .Instance_Mismatch
-	selection: mat.Pass_Selection
-	if error := mat.material_select(m.shader.desc, m.bindings, .Model, "", nil, &selection);
-		error != .None do return error
-	if len(items) == 0 do return .None
-	uniforms: [sh.MAX_PASSES][]u8
-	defaults: [sh.MAX_PASSES]mat.Instance_Values
-	for i in 0..<selection.count {
-		p := m.shader.desc.passes[selection.passes[i]]
-		uniforms[i], defaults[i] = mat.material_pass_values(p, m.bindings[selection.bindings[i]], overrides)
-	}
-	source := render3d_source(r, m, selection, uniforms[:selection.count])
 	for item, item_index in items {
-		record := Render3D_Record{mesh = mesh, source = source, item = item,
+		record := Render3D_Record{mesh = mesh, source = prepared.source, item = item,
 			values = len(r.values), count = 1}
 		if bounds != nil {
 			record.bounds, record.has_bounds = render3d_world_bounds(bounds^, item.world)
 		}
 		append(&r.records, record)
+		if slots == 0 do continue
+		if flat == nil && overrides == nil {
+			append(&r.values, ..r.defaults[prepared.defaults:][:selection.count * slots])
+			continue
+		}
+		input: mat.Instance_Values
+		if flat != nil do input = mat.instance_values_from(flat[item_index*slots:(item_index+1)*slots])
 		for i in 0..<selection.count {
-			instance := defaults[i]
-			if flat != nil {
-				input := mat.instance_values_from(flat[item_index*slots:(item_index+1)*slots])
-				p := m.shader.desc.passes[selection.passes[i]]
-				instance = mat.material_pass_instance(p, m.bindings[selection.bindings[i]], &input)
-			}
+			p := source.shader.desc.passes[selection.passes[i]]
+			instance := mat.material_pass_instance(p, m.bindings[selection.bindings[i]], flat != nil ? &input : overrides)
 			append(&r.values, ..instance.numbers[:slots])
 		}
 	}
 	return .None
+}
+
+// 取材质的准备结果；revision 或 Shader 变了（含 reload）就重新选择 Pass、打包参数并查找快照来源。
+// 实例覆盖只影响 [Instance] 字段，不进参数 uniform，因此同一准备结果对所有覆盖都适用。
+@(private)
+render3d_prepared :: proc(r: ^Render3D, m: ^mat.Material) -> (Render3D_Prepared, mat.Draw_Error) {
+	if prepared, ok := r.prepared[m]; ok && prepared.revision == m.revision && prepared.shader == m.shader {
+		return prepared, .None
+	}
+	slots := mat.instance_slot_count(m)
+	if slots < 0 || slots > sh.MAX_INSTANCE_FIELDS do return {}, .Instance_Mismatch
+	selection: mat.Pass_Selection
+	if error := mat.material_select(m.shader.desc, m.bindings, .Model, "", nil, &selection);
+		error != .None do return {}, error
+	prepared := Render3D_Prepared{revision = m.revision, shader = m.shader, defaults = len(r.defaults)}
+	uniforms: [sh.MAX_PASSES][]u8
+	for i in 0..<selection.count {
+		p := m.shader.desc.passes[selection.passes[i]]
+		instance: mat.Instance_Values
+		uniforms[i], instance = mat.material_pass_values(p, m.bindings[selection.bindings[i]], nil)
+		append(&r.defaults, ..instance.numbers[:slots])
+	}
+	prepared.source = render3d_source(r, m, selection, uniforms[:selection.count])
+	r.prepared[m] = prepared
+	return prepared, .None
 }
 
 // 进阶：bounds 是整块实例的世界包围盒；不读回、重排或上传常驻实例。
@@ -197,17 +233,10 @@ buffer :: proc(r: ^Render3D, mesh: ^foster.Mesh, material: ^mat.Material,
 	if buf == nil || buf.capacity <= 0 do return .Instance_Buffer_Required
 	if buf.buffer.Base.GraphicsDevice != r.library.device do return .Device_Mismatch
 	if buf.slots != mat.instance_slot_count(material) || count < 0 || count > buf.capacity do return .Instance_Mismatch
-	selection: mat.Pass_Selection
-	if error := mat.material_select(material.shader.desc, material.bindings, .Model, "", nil, &selection);
-		error != .None do return error
+	prepared, error := render3d_prepared(r, material)
+	if error != .None do return error
 	if count == 0 do return .None
-	uniforms: [sh.MAX_PASSES][]u8
-	for i in 0..<selection.count {
-		p := material.shader.desc.passes[selection.passes[i]]
-		uniforms[i], _ = mat.material_pass_values(p, material.bindings[selection.bindings[i]], nil)
-	}
-	source := render3d_source(r, material, selection, uniforms[:selection.count])
-	record := Render3D_Record{mesh = mesh, source = source, buffer = buf, count = count,
+	record := Render3D_Record{mesh = mesh, source = prepared.source, buffer = buf, count = count,
 		item = {world.MATRIX4_IDENTITY, {1, 1, 1, 1}}}
 	if bounds != nil {
 		record.bounds = bounds^

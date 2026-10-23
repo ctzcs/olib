@@ -2,6 +2,7 @@ package shader_lab
 
 // 参数包和所有 Shader 作为一个候选整体切换；Shader/Material 地址在 bank 存活期间固定。
 // 分区：资源所有权 / 候选创建 / GPU 探测与提交。
+import "base:runtime"
 import "core:fmt"
 import "core:strings"
 
@@ -77,7 +78,8 @@ bank_make :: proc(s: ^Session, build: dev.Parameter_Build) -> ^Parameter_Bank {
 		view := bank_group_draws(build.shaders, schema.name, .Model) ? 1 : 0
 		_ = dev.init(&b.programs[i], source, s.device.Driver,
 			{uniform_buffers = 1 + storage + view, storage_buffers = storage}, {uniform_buffers = 2 + view})
-		b.programs[i].source_text = strings.clone(program_text)
+		// dev.Session 的源码由 heap allocator 释放，与后台编译使用同一所有者。
+		b.programs[i].source_text = strings.clone(program_text, runtime.heap_allocator())
 		if prior := bank_index(s.bank, schema.name); prior >= 0 {
 			b.programs[i].revision = s.programs[prior].revision
 			b.last_status[i] = s.last_status[prior]

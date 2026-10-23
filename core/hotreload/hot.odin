@@ -19,6 +19,9 @@ Hot_Config :: struct {
 	before_swap: proc(user_data: rawptr),
 	user_data: rawptr,
 	quiet: bool, // true 时不向终端输出 LIVE 版本号和编译错误
+	// Manual 不监听源码：启动时编译一次，之后调用 hot_retry 或修改 trigger_file 才编译。
+	mode: Watch_Mode,
+	trigger_file: string,
 }
 
 // 地址必须稳定（放在宿主堆分配状态中），不要复制。
@@ -44,12 +47,17 @@ hot_init :: proc(h: ^Hot, config: Hot_Config) -> bool {
 		command = hot_command(config),
 		working_directory = config.working_directory,
 		roots = roots[:],
+		mode = config.mode,
+		trigger_file = config.trigger_file,
 	}) {
 		_ = dispose(&h.session)
 		return false
 	}
 	h.before_swap, h.user_data, h.quiet = config.before_swap, config.user_data, config.quiet
-	if !h.quiet do fmt.printfln("hotreload: compiling %s ... edit and save to reload", config.source)
+	if !h.quiet {
+		hint := config.mode == .Manual ? "call hot_retry to reload" : "edit and save to reload"
+		fmt.printfln("hotreload: compiling %s ... %s", config.source, hint)
+	}
 	return true
 }
 
@@ -91,7 +99,7 @@ hot_error :: proc(h: ^Hot) -> string {
 	return h.watch.status == .Error ? h.watch.diagnostic : ""
 }
 
-// 重新尝试编译当前源码（例如修好了编译环境而源码没有变）。
+// 编译当前源码：Auto 用于修好编译环境而源码没变时重试，Manual 就是手动触发。
 hot_retry :: proc(h: ^Hot) {
 	watch_retry(&h.watch)
 }

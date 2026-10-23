@@ -271,6 +271,26 @@ visual_floating_ancestry_and_nested_clip_match_input :: proc(t: ^testing.T) {
 	ui_end(&ctx)
 }
 
+// 声明前查询上一帧布局；视觉变换不改变布局矩形，未声明的元素 ok=false。
+@(test)
+element_rect_reports_last_layout_without_visual :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 800, 600))
+	defer ui_dispose(&ctx)
+	_, found := ui_element_rect(&ctx, "visual-child")
+	testing.expect(t, !found)
+	v := UI_VISUAL_DEFAULT
+	v.offset = {200, 50}
+	visual_test_frame(&ctx, v)
+	rect, ok := ui_element_rect(&ctx, "visual-child")
+	testing.expect(t, ok)
+	testing.expectf(t, rect == foster.Rect{10, 10, 40, 20}, "rect=%v", rect)
+	_, missing := ui_element_rect(&ctx, "never-declared")
+	testing.expect(t, !missing)
+}
+
 // ---------------------------------------------------------------------------
 // 真实字体：CPU 烘焙与资源所有权（无 GPU）
 // ---------------------------------------------------------------------------

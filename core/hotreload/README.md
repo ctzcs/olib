@@ -99,6 +99,8 @@ olib_game_api :: proc "c" (version: u32, size: int, api: ^reload.API) -> bool {
 | 快照格式升级 | 默认拒绝；用 `.Migrate` 把旧版本快照交给新 load，或 `.Reset` 重开 |
 | 编译、API、快照或候选初始化失败 | 旧模块继续运行，诊断在 `Watch.diagnostic` / `Session.diagnostic` |
 | 编译中继续保存、Ready 后再保存 | 丢弃过期候选，重新编译最新内容 |
+| 源码监听 | 后台线程按大小和修改时间增量扫描，只读变化的文件，不占游戏帧 |
+| 不想保存即编译、项目很大 | `mode = .Manual`：不扫描源码，`hot_retry` / `watch_retry` 或修改 `trigger_file` 时才编译 |
 | Foster / 宿主协议 / 编译器升级 | 重建并重启宿主 |
 | Web、发布版本 | 保持静态入口，不接监听器和 DLL 加载 |
 

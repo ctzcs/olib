@@ -6,6 +6,7 @@ import "core:fmt"
 import "core:sync"
 import "core:testing"
 
+import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
 
 // ------------------------------------------------------------------------------
@@ -246,4 +247,95 @@ drag_threshold_click_and_drop :: proc(t: ^testing.T) {
 	ui_set_navigation(&ctx, {cancel = true})
 	cancelled := drag_frame(&ctx, 110, 25, true)
 	testing.expect(t, !cancelled.dragging)
+}
+
+// ------------------------------------------------------------------------------
+// 文本输入
+// ------------------------------------------------------------------------------
+
+@(private)
+text_frame :: proc(ctx: ^UI_Context, buffer: ^[dynamic]u8, x, y: f32, down: bool, edit: UI_Text_Edit = {},
+	width: f32 = 240, max_bytes := 16) -> UI_Text_Result {
+	theme := UI_THEME_DARK
+	ui_set_pointer(ctx, x, y, down)
+	ui_set_text_edit(ctx, edit)
+	ui_begin(ctx, 1.0 / 60)
+	result := ui_text_input(ctx, &theme, "name", buffer, "Name", width, max_bytes)
+	ui_end(ctx)
+	return result
+}
+
+@(test)
+text_input_edits_utf8_and_reports_ime_area :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	font := make_test_font()
+	defer dispose_test_font(font)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 400, 300))
+	defer ui_dispose(&ctx)
+	ui_register_font(&ctx, font, {})
+	buffer: [dynamic]u8
+	defer delete(buffer)
+	text_frame(&ctx, &buffer, -1, -1, false)
+	testing.expect(t, !ui_text_editing(&ctx))
+	bb := clay.GetElementData(clay.ID("name")).boundingBox
+	cy := bb.y + bb.height/2
+	// 按下即获得焦点；之后输入的控制字符被丢弃。
+	text_frame(&ctx, &buffer, bb.x + 20, cy, true)
+	r := text_frame(&ctx, &buffer, bb.x + 20, cy, false, {text = "AB\n\t"})
+	testing.expect(t, ui_text_editing(&ctx) && r.changed && string(buffer[:]) == "AB" && ctx.text.caret == 2)
+	testing.expect(t, ui_input_capture(&ctx).keyboard, "editing captures the keyboard")
+	text_frame(&ctx, &buffer, -1, -1, false, {left = true})
+	text_frame(&ctx, &buffer, -1, -1, false, {text = "中"})
+	testing.expect(t, string(buffer[:]) == "A中B" && ctx.text.caret == 4)
+	text_frame(&ctx, &buffer, -1, -1, false, {backspace = true})
+	testing.expect(t, string(buffer[:]) == "AB" && ctx.text.caret == 1, "backspace removes a whole rune")
+	text_frame(&ctx, &buffer, -1, -1, false, {home = true})
+	text_frame(&ctx, &buffer, -1, -1, false, {delete = true})
+	testing.expect(t, string(buffer[:]) == "B" && ctx.text.caret == 0)
+	text_frame(&ctx, &buffer, -1, -1, false, {end = true, paste = "AAAAAAAAAAAAAAAAAAAA"})
+	testing.expect(t, len(buffer) == 16 && ctx.text.caret == 16, "paste stops at max_bytes")
+	text_frame(&ctx, &buffer, -1, -1, false, {backspace = true, text = "中"})
+	testing.expect(t, len(buffer) == 15, "a multibyte rune that does not fit is not split")
+	r = text_frame(&ctx, &buffer, -1, -1, false, {submit = true})
+	testing.expect(t, r.submitted && !r.changed)
+	// 点击定位：字体缩放 16/32，A 前进 9 像素；点在第 1 个字之后附近。
+	clear(&buffer)
+	append(&buffer, "AB")
+	text_frame(&ctx, &buffer, -1, -1, false, {end = true})
+	text_frame(&ctx, &buffer, bb.x + f32(UI_THEME_DARK.padding) + 10, cy, true)
+	testing.expect_value(t, ctx.text.caret, 1)
+	text_frame(&ctx, &buffer, -1, -1, false)
+	// 输入法区域是光标的渲染目标像素矩形，含视口原点与缩放。
+	ui_set_viewport(&ctx, {100, 50, 800, 600}, 2)
+	text_frame(&ctx, &buffer, -1, -1, false)
+	text_frame(&ctx, &buffer, -1, -1, false)
+	area, ok := ui_text_input_area(&ctx)
+	bb = clay.GetElementData(clay.ID("name")).boundingBox
+	pad := f32(UI_THEME_DARK.padding)
+	testing.expect(t, ok && area == foster.Rect{100 + (bb.x + pad + 9)*2, 50 + (bb.y + pad)*2, 4, 18*2})
+	// Escape 结束编辑；下一帧不再报告编辑。
+	text_frame(&ctx, &buffer, -1, -1, false, {cancel = true})
+	testing.expect(t, !ui_text_editing(&ctx) && ctx.focused_id == 0)
+}
+
+@(test)
+text_input_scrolls_long_text_to_follow_caret :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	font := make_test_font()
+	defer dispose_test_font(font)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 400, 300))
+	defer ui_dispose(&ctx)
+	ui_register_font(&ctx, font, {})
+	buffer: [dynamic]u8
+	defer delete(buffer)
+	ui_focus(&ctx, "name")
+	// 宽 60、内边距 10：可见 40 像素；20 个 A 宽 180。
+	text_frame(&ctx, &buffer, -1, -1, false, {text = "AAAAAAAAAAAAAAAAAAAA"}, 60, 64)
+	testing.expect_value(t, ctx.text.scroll, f32(180 - 40 + 2))
+	text_frame(&ctx, &buffer, -1, -1, false, {home = true}, 60, 64)
+	testing.expect_value(t, ctx.text.scroll, f32(0))
 }

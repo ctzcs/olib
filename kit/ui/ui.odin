@@ -9,6 +9,7 @@
 //   ui_input.odin    鼠标捕获 / 导航焦点与自动滚动 / 禁用态 / 模态 / 输入消费
 //   ui_widgets.odin  主题、基础控件、图像、滑条、进度和容器
 //   ui_controls.odin 下拉框 / 虚拟列表 / 拖放
+//   ui_text_input.odin 单行文本输入 / 输入法候选框位置
 //
 // clay 只做布局与交互查询，渲染由本包翻译后经 Foster Batcher 发射；
 // 支持位图/MSDF 字体、嵌套裁剪、逻辑坐标缩放与鼠标/导航输入。
@@ -69,6 +70,8 @@ UI_Context :: struct {
 	focus_scroll: bool, // 焦点由导航或 ui_focus 改变：下一次 begin 把它滚进可见范围
 	dropdown_id: u32, // 当前展开的下拉框；同一时间只展开一个
 	drag: UI_Drag,
+	text_edit: UI_Text_Edit, // 宿主本帧传入的编辑输入，ui_end 清空
+	text: UI_Text_State,
 	input: UI_Input_Capture,
 	pool_overflow: bool,
 	error_count: int,
@@ -222,6 +225,8 @@ ui_begin :: proc(ctx: ^UI_Context, delta_time: f32) {
 	ctx.pool_overflow = false
 	ctx.scope_id = 0
 	ctx.active_seen = false
+	ctx.text.seen = false
+	ctx.text.blink += delta_time
 	ctx.input = {pointer = ctx.modal_id != 0 || ctx.active_id != 0, keyboard = ctx.modal_id != 0}
 	ctx.pointer_x = (ctx.pointer_pixels.x - ctx.viewport_origin.x) / ctx.scale
 	ctx.pointer_y = (ctx.pointer_pixels.y - ctx.viewport_origin.y) / ctx.scale
@@ -284,6 +289,12 @@ ui_end :: proc(ctx: ^UI_Context) -> clay.ClayArray(clay.RenderCommand) {
 	ctx.widgets, ctx.previous_widgets = ctx.previous_widgets, ctx.widgets
 	clear(&ctx.widgets)
 	ctx.navigation = {}
+	// 本帧没有声明正在编辑的文本框（失焦、被移除或 Escape）就结束编辑。
+	ctx.text.editing = ctx.text.seen
+	if !ctx.text.seen {
+		ctx.text.id = 0
+	}
+	ctx.text_edit = {}
 	// 松开那帧的放置已由 ui_drop_target 读取，之后结束拖动。
 	if !ctx.pointer_down {
 		ctx.drag = {}

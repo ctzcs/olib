@@ -219,7 +219,7 @@ RenderCommandData :: struct #raw_union {
 }
 
 RenderCommand :: struct {
-	// olib extension: owning layout element, including text lines and border commands.
+	// olib extension: owning layout element, including text lines, border and scissor-end commands.
 	elementId: u32,
 	boundingBox:        BoundingBox,
 	renderData:         RenderCommandData,

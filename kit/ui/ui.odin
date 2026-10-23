@@ -68,6 +68,8 @@ UI_Context :: struct {
 	scrolls: [dynamic]UI_Scroll_Entry,
 	navigation: UI_Navigation,
 	focus_scroll: bool, // 焦点由导航或 ui_focus 改变：下一次 begin 把它滚进可见范围
+	focus_style: UI_Focus_Style, // 焦点控件所用主题的焦点框样式，见 ui_focus_style
+	focus_by_pointer, focus_ring_hidden: bool,
 	dropdown_id: u32, // 当前展开的下拉框；同一时间只展开一个
 	drag: UI_Drag,
 	text_edit: UI_Text_Edit, // 宿主本帧传入的编辑输入，ui_end 清空
@@ -101,6 +103,7 @@ ui_init :: proc(ctx: ^UI_Context, width, height: f32, allocator := context.alloc
 		height = height,
 		scale = 1,
 		allocator = allocator,
+		focus_style = {color = UI_THEME_DARK.accent, width = 2},
 	}
 
 	capacity := uint(clay.MinMemorySize())
@@ -227,6 +230,7 @@ ui_begin :: proc(ctx: ^UI_Context, delta_time: f32) {
 	ctx.active_seen = false
 	ctx.text.seen = false
 	ctx.text.blink += delta_time
+	ctx.focus_ring_hidden = false
 	ctx.input = {pointer = ctx.modal_id != 0 || ctx.active_id != 0, keyboard = ctx.modal_id != 0}
 	ctx.pointer_x = (ctx.pointer_pixels.x - ctx.viewport_origin.x) / ctx.scale
 	ctx.pointer_y = (ctx.pointer_pixels.y - ctx.viewport_origin.y) / ctx.scale

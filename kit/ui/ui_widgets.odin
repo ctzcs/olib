@@ -6,7 +6,7 @@ import foster "olib:foster"
 import clay "olib:thirdparty/clay-odin"
 
 // 分区：
-//   主题 —— UI_Theme / 默认深色主题
+//   主题 —— UI_Theme / 焦点框样式 / 默认深色主题
 //   控件 —— button / heading / label / toggle / separator
 //   游戏控件 —— image / image_button / progress_bar / slider
 //   容器 —— row / column / panel / scroll / modal
@@ -14,6 +14,19 @@ import clay "olib:thirdparty/clay-odin"
 // ------------------------------------------------------------------------------
 // 主题
 // ------------------------------------------------------------------------------
+
+// 焦点框长什么样。零值是 2 像素 accent 色描边、贴着控件边缘。
+// 焦点框在绘制阶段画在焦点控件自身之后，与控件同一层、同一裁剪，不影响布局和命中。
+UI_Focus_Style :: struct {
+	color: foster.Color, // 描边颜色；零值用主题 accent
+	width: f32, // 描边宽度（逻辑像素）；0 用 2
+	offset: f32, // 相对控件边缘外扩（负数内缩）
+	// 设置后画这张九宫格贴图代替描边（圆角框、发光、角标等）；颜色作为染色，零值不染色。
+	image: foster.Subtexture,
+	image_source_border, image_border: f32, // 源图片像素 / 逻辑像素，同 ui_nine_slice_decl
+	keyboard_only: bool, // 只在导航或 ui_focus 获得的焦点上显示，鼠标点击获得的不画
+	hidden: bool,
+}
 
 UI_Theme :: struct {
 	window_bg:     foster.Color,
@@ -37,6 +50,7 @@ UI_Theme :: struct {
 	body_font_size: u16,
 	heading_font_size: u16,
 	small_font_size:   u16,
+	focus: UI_Focus_Style,
 }
 
 UI_THEME_DARK :: UI_Theme{
@@ -105,6 +119,7 @@ ui_button_ex :: proc(
 	options: UI_Widget_Options = {},
 ) -> bool {
 	state := ui_interact(ctx, id, options)
+	ui_focus_style(ctx, theme, state)
 	hovered := state.hovered && !state.disabled
 	clicked := state.clicked
 
@@ -145,8 +160,7 @@ ui_button_ex :: proc(
 				padding = clay.PaddingAll(theme.padding),
 				childAlignment = {x = .Center, y = .Center},
 			},
-			border = ui_focus_border(theme, state),
-			backgroundColor = ui_clay_color(bg),
+				backgroundColor = ui_clay_color(bg),
 			cornerRadius = clay.CornerRadiusAll(theme.corner_radius),
 		},
 	) {
@@ -193,6 +207,7 @@ ui_toggle :: proc(
 	options: UI_Widget_Options = {},
 ) -> bool {
 	state := ui_interact(ctx, id, options)
+	ui_focus_style(ctx, theme, state)
 	hovered := state.hovered && !state.disabled
 	if state.clicked {
 		value^ = !value^
@@ -210,8 +225,7 @@ ui_toggle :: proc(
 				padding = {left = 2, right = 2, top = 2, bottom = 2},
 				childAlignment = {x = value^ ? .Right : .Left, y = .Center},
 			},
-			border = ui_focus_border(theme, state),
-			backgroundColor = ui_clay_color(state.disabled ? theme.panel : track),
+				backgroundColor = ui_clay_color(state.disabled ? theme.panel : track),
 			cornerRadius = clay.CornerRadiusAll(10), // 半高 = 胶囊
 		},
 	) {
@@ -286,12 +300,20 @@ ui_panel_border_decl :: proc(theme: ^UI_Theme) -> clay.ElementDeclaration {
 // 游戏常用控件 —— 图像 / 图像按钮 / 进度 / 滑条
 // ------------------------------------------------------------------------------
 
-@(private)
-ui_focus_border :: proc(theme: ^UI_Theme, state: UI_Interaction) -> clay.BorderElementConfig {
-	if state.focused && !state.disabled {
-		return {color = ui_clay_color(theme.accent), width = {left = 2, right = 2, top = 2, bottom = 2}}
+// 控件获得焦点时登记它所用主题的焦点框样式；内置控件都会调用。自定义控件在 ui_interact 之后
+// 调用它就能用自己主题的样式，否则沿用最近一次登记的样式。
+ui_focus_style :: proc(ctx: ^UI_Context, theme: ^UI_Theme, state: UI_Interaction) {
+	if !state.focused || state.disabled {
+		return
 	}
-	return {}
+	style := theme.focus
+	if style.color == {} {
+		style.color = theme.accent
+	}
+	if style.width <= 0 {
+		style.width = 2
+	}
+	ctx.focus_style = style
 }
 
 UI_Image_Data :: struct {
@@ -359,12 +381,12 @@ ui_image_button :: proc(
 	options: UI_Widget_Options = {},
 ) -> bool {
 	state := ui_interact(ctx, id, options)
+	ui_focus_style(ctx, theme, state)
 	bg := state.active ? theme.button_press : state.hovered ? theme.button_hover : theme.button
 	if clay.UI()(clay.ElementDeclaration{
 		id = clay.ID(id),
 		layout = {padding = clay.PaddingAll(theme.padding)},
 		backgroundColor = ui_clay_color(state.disabled ? theme.panel : bg),
-		border = ui_focus_border(theme, state),
 		cornerRadius = clay.CornerRadiusAll(theme.corner_radius),
 	}) {
 		ui_image(ctx, sub, size, size, state.disabled ? theme.text_dim : foster.Color{255, 255, 255, 255})
@@ -409,6 +431,7 @@ ui_slider :: proc(
 	options: UI_Widget_Options = {},
 ) -> bool {
 	state := ui_interact(ctx, id, options)
+	ui_focus_style(ctx, theme, state)
 	before := value^
 	span := maximum - minimum
 	min_width := max(width, 24)
@@ -433,7 +456,6 @@ ui_slider :: proc(
 		},
 		backgroundColor = ui_clay_color(state.disabled ? theme.panel : theme.button),
 		cornerRadius = clay.CornerRadiusAll(12),
-		border = ui_focus_border(theme, state),
 	}) {
 		if clay.UI()(clay.ElementDeclaration{
 			layout = {sizing = {width = clay.SizingFixed(16), height = clay.SizingFixed(16)}},

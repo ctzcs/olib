@@ -33,6 +33,7 @@ ui_dropdown :: proc(
 	element := clay.ID(id)
 	popup_id := fmt.tprintf("%s#popup", id)
 	state := ui_interact(ctx, id, widget)
+	ui_focus_style(ctx, theme, state)
 	open := ctx.dropdown_id == element.id
 	if state.disabled {
 		open = false
@@ -63,7 +64,6 @@ ui_dropdown :: proc(
 			childGap = 8,
 			childAlignment = {y = .Center},
 		},
-		border = ui_focus_border(theme, state),
 		backgroundColor = ui_clay_color(bg),
 		cornerRadius = clay.CornerRadiusAll(theme.corner_radius),
 	}) {
@@ -105,7 +105,7 @@ ui_dropdown_popup :: proc(ctx: ^UI_Context, theme: ^UI_Theme, id, popup_id: stri
 		if clay.UI()(list) {
 			for option, i in options {
 				option_id := fmt.tprintf("%s#%d", id, i)
-				s := ui_interact(ctx, option_id)
+				s := ui_interact(ctx, option_id, {no_focus_ring = true}) // 选项用底色表示焦点
 				row_bg := foster.Color{}
 				if i == selected^ {
 					row_bg = theme.button

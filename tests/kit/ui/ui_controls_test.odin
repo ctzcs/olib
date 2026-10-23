@@ -339,3 +339,119 @@ text_input_scrolls_long_text_to_follow_caret :: proc(t: ^testing.T) {
 	text_frame(&ctx, &buffer, -1, -1, false, {home = true}, 60, 64)
 	testing.expect_value(t, ctx.text.scroll, f32(0))
 }
+
+// ------------------------------------------------------------------------------
+// 焦点框样式
+// ------------------------------------------------------------------------------
+
+@(private)
+focus_ring_frame :: proc(ctx: ^UI_Context, theme: ^UI_Theme, x, y: f32, down: bool, widget: UI_Widget_Options = {}) {
+	ui_set_pointer(ctx, x, y, down)
+	ui_begin(ctx, 1.0 / 60)
+	if clay.UI()(clay.ElementDeclaration{layout = {padding = clay.PaddingAll(20)}}) {
+		_ = ui_button(ctx, theme, "ring", "", widget)
+	}
+	ui_translate_into(ctx, ui_end(ctx), &ctx.ops)
+}
+
+// 焦点框的四条边：与按钮底色不同的颜色、紧跟按钮之后的 op。
+@(private)
+ring_ops :: proc(ctx: ^UI_Context, color: foster.Color) -> (count: int, x0, y0, x1, y1: f32) {
+	x0, y0 = 1e9, 1e9
+	x1, y1 = -1e9, -1e9
+	for op in ctx.ops {
+		if op.color != color || op.texture != nil {
+			continue
+		}
+		count += 1
+		x0, y0, x1, y1 = min(x0, op.x0), min(y0, op.y0), max(x1, op.x1), max(y1, op.y1)
+	}
+	return
+}
+
+@(test)
+focus_ring_follows_theme_style :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 400, 300))
+	defer ui_dispose(&ctx)
+	theme := UI_THEME_DARK
+	red := foster.Color{255, 0, 0, 255}
+	theme.focus = {color = red, width = 3, offset = 4}
+	focus_ring_frame(&ctx, &theme, -1, -1, false)
+	n, _, _, _, _ := ring_ops(&ctx, red)
+	testing.expect_value(t, n, 0)
+	ui_focus(&ctx, "ring")
+	focus_ring_frame(&ctx, &theme, -1, -1, false)
+	bb := clay.GetElementData(clay.ID("ring")).boundingBox
+	x0, y0, x1, y1: f32
+	n, x0, y0, x1, y1 = ring_ops(&ctx, red)
+	testing.expect_value(t, n, 4)
+	testing.expect(t, x0 == bb.x - 4 && y0 == bb.y - 4 && x1 == bb.x + bb.width + 4 && y1 == bb.y + bb.height + 4,
+		"ring is outset by offset without moving the layout")
+	testing.expect(t, ctx.ops[len(ctx.ops) - 1].color == red, "ring draws after the focused element")
+	// 九宫格贴图代替描边。
+	texture: foster.Texture
+	theme.focus = {image = {Texture = &texture, Frame = {0, 0, 12, 12}}, image_source_border = 4, image_border = 6}
+	focus_ring_frame(&ctx, &theme, -1, -1, false)
+	images := 0
+	for op in ctx.ops {
+		images += int(op.texture == &texture)
+	}
+	testing.expect_value(t, images, 9)
+	// hidden、no_focus_ring 与只在键盘焦点显示。
+	theme.focus = {color = red, hidden = true}
+	focus_ring_frame(&ctx, &theme, -1, -1, false)
+	n, _, _, _, _ = ring_ops(&ctx, red)
+	testing.expect_value(t, n, 0)
+	theme.focus = {color = red}
+	focus_ring_frame(&ctx, &theme, -1, -1, false, {no_focus_ring = true})
+	n, _, _, _, _ = ring_ops(&ctx, red)
+	testing.expect_value(t, n, 0)
+	theme.focus = {color = red, keyboard_only = true}
+	focus_ring_frame(&ctx, &theme, -1, -1, false)
+	n, _, _, _, _ = ring_ops(&ctx, red)
+	testing.expect_value(t, n, 4)
+	cx, cy := bb.x + bb.width/2, bb.y + bb.height/2
+	focus_ring_frame(&ctx, &theme, cx, cy, false)
+	focus_ring_frame(&ctx, &theme, cx, cy, true)
+	focus_ring_frame(&ctx, &theme, cx, cy, false)
+	n, _, _, _, _ = ring_ops(&ctx, red)
+	testing.expect(t, ctx.focused_id == clay.ID("ring").id && n == 0, "a mouse click focuses without a keyboard-only ring")
+}
+
+@(test)
+focus_ring_on_clipped_text_input_is_outside_its_own_clip :: proc(t: ^testing.T) {
+	sync.mutex_lock(&clay_test_mutex)
+	defer sync.mutex_unlock(&clay_test_mutex)
+	ctx: UI_Context
+	testing.expect(t, ui_init(&ctx, 400, 300))
+	defer ui_dispose(&ctx)
+	theme := UI_THEME_DARK
+	red := foster.Color{255, 0, 0, 255}
+	theme.focus = {color = red, offset = 3}
+	buffer: [dynamic]u8
+	defer delete(buffer)
+	ui_focus(&ctx, "name")
+	for _ in 0..<2 {
+		ui_begin(&ctx, 1.0 / 60)
+		if clay.UI()(clay.ElementDeclaration{layout = {padding = clay.PaddingAll(20)}}) {
+			ui_text_input(&ctx, &theme, "name", &buffer)
+		}
+		ui_translate_into(&ctx, ui_end(&ctx), &ctx.ops)
+	}
+	depth, ring := 0, 0
+	for op in ctx.ops {
+		switch op.kind {
+		case .Scissor_Start: depth += 1
+		case .Scissor_End: depth -= 1
+		case .Quad:
+			if op.color == red {
+				ring += 1
+				testing.expect(t, depth == 0, "ring must not sit inside the text box clip")
+			}
+		}
+	}
+	testing.expect_value(t, ring, 4)
+}

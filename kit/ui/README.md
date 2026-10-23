@@ -256,6 +256,23 @@ if clay.UI()(ui.ui_scroll_decl(&ctx, "inventory", height = 300)) {
 可运行演示：olib_sample 的 `run.bat ui_gallery controls`（`shot controls` 输出验收图）包含文本框、
 下拉框、可拖放交换的格子与一万行虚拟列表。
 
+### 焦点框样式
+
+导航或点击获得焦点的控件会画焦点框，样式在主题的 `focus: UI_Focus_Style` 里，零值是 2 像素 accent 描边：
+
+```odin
+theme.focus = {color = {255, 210, 90, 255}, width = 2, offset = 3}   // 外扩 3 像素的金色框
+theme.focus = {image = glow, image_source_border = 12, image_border = 10, offset = 6} // 九宫格贴图：圆角、发光、角标
+theme.focus.keyboard_only = true // 鼠标点击获得的焦点不画，只在 Tab/手柄导航时显示
+theme.focus.hidden = true        // 完全不画
+```
+
+焦点框在绘制阶段画在焦点控件自己的命令之后，与控件同一层（模态弹窗里也看得见）、受外层滚动区裁剪，
+但不被控件自身的裁剪裁掉；不改变布局和命中。每帧改 `theme.focus`（如颜色随时间变化）就是动画。
+描边是直角的，圆角或发光用贴图。内置控件聚焦时登记自己主题的样式；自定义控件在 `ui_interact` 之后
+调用 `ui_focus_style(&ctx, &theme, state)` 使用自己的主题。控件自己用底色等方式表示焦点时，
+传 `UI_Widget_Options{no_focus_ring = true}`（下拉框的选项就是这样）。
+
 ### 下拉框
 
 `ui_dropdown(&ctx, &theme, "quality", options, &selected, width = 250)`。点按钮展开，点选、点外面或导航

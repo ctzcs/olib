@@ -74,6 +74,7 @@ ui_text_input :: proc(
 	options := widget
 	options.trigger = .Press
 	state := ui_interact(ctx, id, options)
+	ui_focus_style(ctx, theme, state)
 	font := ui_font_of(ctx, int(theme.body_font_id))
 	size := theme.body_font_size
 	pad := f32(theme.padding)
@@ -111,10 +112,9 @@ ui_text_input :: proc(
 	}
 	scroll := editing ? t.scroll : 0
 	line := ui_text_line_height(font, size)
+	// 编辑中的外框就是焦点框（UI_Focus_Style），这里只画悬停描边。
 	border: clay.BorderElementConfig
-	if editing {
-		border = {color = ui_clay_color(theme.accent), width = {left = 2, right = 2, top = 2, bottom = 2}}
-	} else if state.hovered && !state.disabled {
+	if !editing && state.hovered && !state.disabled {
 		border = {color = ui_clay_color(theme.panel_border), width = {left = 1, right = 1, top = 1, bottom = 1}}
 	}
 	if clay.UI()(clay.ElementDeclaration{

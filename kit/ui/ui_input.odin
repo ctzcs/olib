@@ -31,6 +31,7 @@ UI_Trigger :: enum {
 UI_Widget_Options :: struct {
 	disabled: bool,
 	trigger: UI_Trigger,
+	no_focus_ring: bool, // 控件自己表示焦点（如高亮底色），不画焦点框
 }
 
 UI_Interaction :: struct {
@@ -92,6 +93,7 @@ ui_element_rect :: proc(ctx: ^UI_Context, id: string) -> (rect: foster.Rect, ok:
 ui_focus :: proc(ctx: ^UI_Context, id: string) {
 	ctx.focused_id = clay.ID(id).id
 	ctx.focus_scroll = true
+	ctx.focus_by_pointer = false
 }
 
 // 按上一帧布局，把包含焦点控件的滚动区滚到刚好完整可见（只调纵向）；控件已可见时不动。
@@ -164,6 +166,7 @@ ui_navigation_begin :: proc(ctx: ^UI_Context) {
 		if i == index {
 			ctx.focused_id = entry.id
 			ctx.focus_scroll = true
+			ctx.focus_by_pointer = false
 			break
 		}
 		i += 1
@@ -189,9 +192,13 @@ ui_interact :: proc(ctx: ^UI_Context, id: string, options: UI_Widget_Options = {
 	if state.hovered && ui_clicked(ctx) && ctx.active_id == 0 && !ctx.navigation.cancel {
 		ctx.active_id = element.id
 		ctx.focused_id = element.id
+		ctx.focus_by_pointer = true
 		state.pressed = true
 	}
 	state.focused = ctx.focused_id == element.id
+	if state.focused && options.no_focus_ring {
+		ctx.focus_ring_hidden = true
+	}
 	if ctx.active_id == element.id {
 		ctx.active_seen = true
 		ctx.input.pointer = true

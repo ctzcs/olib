@@ -56,6 +56,9 @@ ui_translate_into :: proc(
 ) {
 	clear(ops)
 
+	// 焦点框插在焦点元素最后一条命令（clay 的描边在子元素之后）之后：同一层、同一裁剪。
+	ring_at := -1
+	ring_bb: clay.BoundingBox
 	cmds := commands // 取址需要局部变量
 	for i in 0..<cmds.length {
 		cmd := clay.RenderCommandArray_Get(&cmds, i)
@@ -64,6 +67,14 @@ ui_translate_into :: proc(
 		}
 		bb := cmd.boundingBox
 		op_start := len(ops^)
+		// 带裁剪的焦点元素（如文本框）：焦点框放在它自己的裁剪结束之后，外扩部分不被裁掉。
+		focused := ctx.focused_id != 0 && cmd.elementId == ctx.focused_id && cmd.commandType != .ScissorStart
+		if focused && ring_at < 0 && cmd.commandType != .ScissorEnd {
+			ring_bb = bb
+		}
+		defer if focused {
+			ring_at = len(ops^)
+		}
 		// defer 也覆盖九宫格等提前 continue 的路径。
 		defer ui_visual_apply_ops(ctx, cmd.elementId, ops, op_start)
 
@@ -195,6 +206,45 @@ ui_translate_into :: proc(
 		case:
 		}
 	}
+	if ring_at >= 0 {
+		ui_translate_focus_ring(ctx, ops, ring_at, ring_bb)
+	}
+}
+
+@(private)
+ui_translate_focus_ring :: proc(ctx: ^UI_Context, ops: ^[dynamic]UI_Op, at: int, element: clay.BoundingBox) {
+	style := ctx.focus_style
+	if style.hidden || ctx.focus_ring_hidden || (style.keyboard_only && ctx.focus_by_pointer) {
+		return
+	}
+	bb := element
+	bb.x -= style.offset
+	bb.y -= style.offset
+	bb.width += style.offset*2
+	bb.height += style.offset*2
+	if bb.width <= 0 || bb.height <= 0 {
+		return
+	}
+	ring := make([dynamic]UI_Op, context.temp_allocator)
+	if style.image.Texture != nil && style.image.Frame.Width > 0 && style.image.Frame.Height > 0 {
+		tint := style.color == {} ? foster.White : style.color
+		if style.image_source_border > 0 {
+			ui_translate_nine_slice(&ring, bb, {sub = style.image, source_border = style.image_source_border,
+				border = style.image_border}, tint)
+		} else {
+			sub := style.image
+			append(&ring, UI_Op{x0 = bb.x, y0 = bb.y, x1 = bb.x + bb.width, y1 = bb.y + bb.height,
+				u0 = sub.TexCoords[0].x, v0 = sub.TexCoords[0].y, u1 = sub.TexCoords[2].x, v1 = sub.TexCoords[2].y,
+				texture = sub.Texture, color = tint})
+		}
+	} else {
+		w := min(max(style.width, 0), bb.width*0.5, bb.height*0.5)
+		x0, y0, x1, y1 := bb.x, bb.y, bb.x + bb.width, bb.y + bb.height
+		append(&ring, quad(x0, y0, x1, y0 + w, style.color), quad(x0, y1 - w, x1, y1, style.color),
+			quad(x0, y0 + w, x0 + w, y1 - w, style.color), quad(x1 - w, y0 + w, x1, y1 - w, style.color))
+	}
+	ui_visual_apply_ops(ctx, ctx.focused_id, &ring, 0)
+	inject_at(ops, at, ..ring[:])
 }
 
 @(private)

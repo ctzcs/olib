@@ -1066,7 +1066,8 @@ _CalculateFinalLayout :: proc "c" () {
 				}
 				// This exists because the scissor needs to end _after_ borders between elements
 				if closeClipElement {
-					_AddRenderCommand(RenderCommand{id = _HashNumber(currentElement.id, cast(u32)((cast(i32)(rootElement.childrenOrTextContent.children.length) + 11))).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_SCISSOR_END)})
+					// olib extension: the scissor end also names its clip element (backends place focus rings after it).
+					_AddRenderCommand(RenderCommand{elementId = currentElement.id, id = _HashNumber(currentElement.id, cast(u32)((cast(i32)(rootElement.childrenOrTextContent.children.length) + 11))).id, commandType = cast(RenderCommandType)(CLAY_RENDER_COMMAND_TYPE_SCISSOR_END)})
 				}
 				dfsBuffer.length -= 1
 				continue

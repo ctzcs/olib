@@ -1,5 +1,11 @@
 # Plan：降低 Render3D 每次记录与每个 Draw 的固定开销
 
+> **状态：已完成（2026-10-23）** · olib 提交 `077ca74`..`5291007`（计划 `d473343`）；olib_sample `8bc5aba`
+> 偏离：① 第 3 步的逐值对照改为与 `material_pass_values`（按名字套用的独立路径）比较：`material_pass_instance` 自身改成建表后写出，规则只剩一份。② 第 5 步分阶段计时发现 Render3D 提交里最大的一块是逐 Draw 打包 uniform（debug 1.46 µs/Draw），因此额外改了 material 的 std140 写入（小端平台整块拷贝）与 kit/world 的 `matrix4_multiply`（直接索引，累加顺序不变、结果逐位相同），视图块改为每次提交每个快照设一次；这些文件不在原计划列表里。③ 第 5 步起初把组深度写进 `Render_Item`，复测发现项从 24 字节变 32 字节使 `-o:speed` 下 4096 个单组记录的 submit 慢约 10%，追加提交 `39f8922` 改为按下标的数组（组键过大或为负时退回 map），`Render_Item` 保持原样。④ 第 6、7 步对调：先复测，文档直接写最终数字。⑤ “Render3D 自身 submit”用临时计时 GraphicsDeviceDraw 的方式测得（与背景表同口径），未作为常驻功能提交。
+> 验收：每步提交前完整 `odin run tools/check` 105 项通过。material3d（默认、views、swarm、models）与 stylized3d（默认、flat）截图与改动前（`d473343` 构建）逐字节一致。
+> 实测（本机 D3D12，1100×720，4x MSAA，预热 10 帧后 120 帧平均，两次取平均；毫秒）：142 个非实例化对象（284 Draw）debug 记录 0.437 → 0.090（3.08 → 0.63 µs/次），submit 0.88 → 0.585，其中 Render3D 自身 0.566 → 0.261（1.99 → 0.92 µs/Draw），foster 约 0.32 不变；`-o:speed` 记录 0.068 → 0.011，submit 0.27 → 0.19，Render3D 自身 0.124 → 0.045。4096 个实例逐个 `model`：debug 记录 6.0 → 1.37、submit 1.39 → 1.19；speed 记录 0.90 → 0.18、submit 0.34 → 0.31。model + models 4096：speed 记录 0.40 → 0.10，submit 与基线持平（交替 A/B 0.283–0.291 对 0.288–0.294）。GPU 时间未测。
+> 两个仓库都在 `render3d-record-cost` 分支，未合并、未推送；olib 工作区里他人未提交的 new-game 模板与 prompts 改动未动。Proj_first 的复测（Signal.exe profile 的 scene）留给该项目。
+
 ## 背景
 
 Proj_first 实测（debug，D3D12，1280×720，MSAA4）：draw_scene 每帧 2.8 ms，142 次 `r3d.model` 共用一个材质，

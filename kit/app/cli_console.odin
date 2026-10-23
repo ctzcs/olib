@@ -1,23 +1,28 @@
 // app —— CLI 参数与后台调试控制台（对位 DragonLib CliConsole）。
 //
-// 后台线程读 stdin，命令经 Command_Queue 转到主线程——游戏每帧调一次
+// 后台线程读 stdin，原始行经加锁的待处理列表转到主线程——游戏每帧调一次
 // cli_update（在 UpdateProc 里），handler 里可以安全读写游戏状态。
+//
+// 线程边界：读取线程只做"克隆一行、加锁入列"，不读命令表；查找命令、
+// 转小写和未知命令提示都在主线程。跨线程的字符串与列表固定用 init 时记下的
+// runtime.heap_allocator（线程安全），不用任一侧的 context.allocator——
+// 调用方的 Tracking_Allocator 等不是线程安全的，也不认另一线程分配的内存。
 //
 // 与 DragonLib 的差异：
 //   - 不走 App.RunOnMainThread（Foster 的 AppCallback 无 userdata 参数），
-//     改用 olib:messaging 的单消费者队列 + 每帧 drain，语义相同；
-//   - cli_open / cli_register_quit 可把 quit 接到 foster.Exit；
-//   - 单实例：thread.create 无 data 参数，控制台指针走包级 active 指针。
+//     改用互斥锁保护的待处理列表 + 每帧取出执行，语义相同；
+//   - cli_open / cli_register_quit 可把 quit 接到 foster.Exit。
 //
 // 本文件还带包内的 CLI 参数判断（has_arg）。
 package app
 
+import "base:runtime"
 import "core:fmt"
 import "core:os"
 import "core:strings"
+import "core:sync"
 import "core:thread"
 
-import msg "olib:core/messaging"
 import foster "olib:foster"
 
 // ------------------------------------------------------------------------------
@@ -74,25 +79,27 @@ Cli_Command :: struct {
 	userdata:    rawptr,
 }
 
-// 一条待主线程执行的命令行；name/args 为队列拥有的克隆字符串，
-// cli_update 执行完释放。
-Cli_Line :: struct {
-	name: string,
-	args: string,
-}
-
 Cli_Console :: struct {
-	commands: map[string]Cli_Command, // key 为小写命令名（克隆）
+	commands: map[string]Cli_Command, // key 为小写命令名（克隆）；只在主线程读写
 
-	queue:   msg.Command_Queue(Cli_Line),
-	thread:  ^thread.Thread,
-	running: bool,
+	// 以下四项跨线程，由 mutex 保护；pending 及其字符串归 allocator。
+	mutex:     sync.Mutex,
+	allocator: runtime.Allocator, // 零值表示未初始化或已 dispose，入列直接丢弃
+	pending:   [dynamic]string,   // 读取线程送来、尚未执行的原始行
+	accepting: bool,              // cli_stop 后不再接收，读取线程随下一行退出
+
+	executing: [dynamic]string, // 主线程独占：cli_update 与 pending 交换后逐条执行
+	started:   bool,            // 读取线程已启动（线程自清理，不 join）
 }
 
 cli_init :: proc(console: ^Cli_Console) {
-	console^ = {
-		commands = make(map[string]Cli_Command),
-	}
+	heap := runtime.heap_allocator()
+	console.commands = make(map[string]Cli_Command)
+	console.allocator = heap
+	console.pending = make([dynamic]string, heap)
+	console.executing = make([dynamic]string, heap)
+	console.accepting = true
+	console.started = false
 	cli_register(console, "help", "列出全部命令", cli_builtin_help, console)
 	cli_register(console, "quit", "退出程序（游戏应覆盖注册真正的退出）", cli_builtin_quit, nil)
 }
@@ -116,22 +123,32 @@ cli_register_quit :: proc(console: ^Cli_Console, app: ^foster.App) {
 	cli_register(console, "quit", "退出程序", cli_quit_app, app)
 }
 
+// 释放全部资源。读取线程可能仍阻塞在 stdin 上：它之后送来的行被丢弃，
+// 线程随即退出。mutex 不清零，console 须保持地址有效直到进程退出或线程结束。
 cli_dispose :: proc(console: ^Cli_Console) {
-	cli_stop(console)
-	msg.queue_clear(&console.queue) // 未执行的命令直接丢弃
-	msg.queue_dispose(&console.queue)
-	for key in console.commands {
-		delete(key, context.allocator)
+	sync.mutex_lock(&console.mutex)
+	allocator := console.allocator
+	for line in console.pending {
+		delete(line, allocator)
 	}
-	for _, cmd in console.commands {
+	delete(console.pending)
+	console.pending = nil
+	console.allocator = {}
+	console.accepting = false
+	sync.mutex_unlock(&console.mutex)
+
+	delete(console.executing)
+	console.executing = nil
+	for key, cmd in console.commands {
+		delete(key, context.allocator)
 		delete(cmd.description, context.allocator)
 	}
 	delete(console.commands)
-	console^ = {}
+	console.commands = nil
+	console.started = false
 }
 
-// 注册命令（名字大小写不敏感，重复注册覆盖）。需在 cli_start 前或
-// 主线程里调用（注册表无锁）。
+// 注册命令（名字大小写不敏感，重复注册覆盖）。只在主线程调用。
 cli_register :: proc(console: ^Cli_Console, name: string, description: string, handler: Cli_Handler, userdata: rawptr = nil) {
 	lower, _ := strings.to_lower(name, context.allocator)
 	if previous, had := console.commands[lower]; had {
@@ -156,76 +173,98 @@ cli_register :: proc(console: ^Cli_Console, name: string, description: string, h
 // 生命周期 —— start / stop
 // ------------------------------------------------------------------------------
 
-// 启动后台读取线程（幂等）。stdin 不可用的环境直接返回 false。
+// 启动后台读取线程（幂等）。stdin 不可用或未 init 时返回 false。
 cli_start :: proc(console: ^Cli_Console) -> bool {
-	if console.thread != nil do return true
-	if os.stdin == nil do return false
-
-	active_cli_console = console
-	console.running = true
-	console.thread = thread.create(cli_reader_loop)
-	if console.thread == nil {
-		console.running = false
-		active_cli_console = nil
+	if console.started do return true
+	if os.stdin == nil || console.allocator.procedure == nil do return false
+	// 自清理：线程退出时释放自身，dispose 不必 join 阻塞中的 stdin 读取。
+	if thread.create_and_start_with_data(console, cli_reader_loop, self_cleanup = true) == nil {
 		return false
 	}
-	thread.start(console.thread)
+	console.started = true
 	fmt.println("[cli] CLI 调试控制台已启动，输入 help 查看命令")
 	return true
 }
 
-// 停止读取线程。注意：阻塞中的 stdin 读取要等到下一行输入或 EOF 才返回；
-// 进程退出时线程随进程结束。
+// 停止接收输入。阻塞中的 stdin 读取要等到下一行输入或 EOF 才返回，
+// 那一行被丢弃，线程随即退出；进程退出时线程随进程结束。
 cli_stop :: proc(console: ^Cli_Console) {
-	console.running = false
+	sync.mutex_lock(&console.mutex)
+	console.accepting = false
+	sync.mutex_unlock(&console.mutex)
 }
 
 // ------------------------------------------------------------------------------
 // 主线程消费 —— cli_update
 // ------------------------------------------------------------------------------
 
-// 每帧调用：执行已入队的命令（执行完释放条目的字符串）。
+// 每帧调用：取出读取线程送来的行，在主线程逐条执行。
+// 只处理本次开始时已送达的行；handler 期间新到的留到下一次。
 cli_update :: proc(console: ^Cli_Console) {
-	_ = msg.queue_drain(&console.queue, cli_execute, console)
+	sync.mutex_lock(&console.mutex)
+	allocator := console.allocator
+	console.pending, console.executing = console.executing, console.pending
+	sync.mutex_unlock(&console.mutex)
+
+	for line in console.executing {
+		cli_execute(console, line)
+		delete(line, allocator)
+	}
+	clear(&console.executing)
 }
 
+// 主线程：解析一行，查找命令并执行；未知命令提示。
 @(private)
-cli_execute :: proc(line: Cli_Line, ud: rawptr) {
-	console := (^Cli_Console)(ud)
-	if cmd, ok := console.commands[line.name]; ok {
-		if cmd.handler != nil {
-			cmd.handler(line.args, cmd.userdata)
-		}
+cli_execute :: proc(console: ^Cli_Console, line: string) {
+	trimmed := strings.trim_space(line)
+	if len(trimmed) == 0 do return
+	name, args, ok := cli_parse_line(trimmed)
+	if !ok do return
+
+	lower, _ := strings.to_lower(name, context.allocator)
+	defer delete(lower, context.allocator)
+	cmd, known := console.commands[lower]
+	if !known {
+		fmt.eprintf("[cli] 未知命令 '%s'，输入 help 查看命令列表\n", name)
+		return
 	}
-	delete(line.name, context.allocator)
-	delete(line.args, context.allocator)
+	if cmd.handler != nil {
+		cmd.handler(args, cmd.userdata)
+	}
 }
 
 // ------------------------------------------------------------------------------
 // 后台读取线程
 // ------------------------------------------------------------------------------
 
-// thread.create 无 data 参数，控制台指针走包级 active 指针（单实例）。
-@(private)
-active_cli_console: ^Cli_Console
+// 任意线程：克隆一行送给主线程（line 只借用）。控制台未初始化、已 stop
+// 或已 dispose 时丢弃并返回 false。
+cli_enqueue_line :: proc(console: ^Cli_Console, line: string) -> bool {
+	sync.mutex_lock(&console.mutex)
+	defer sync.mutex_unlock(&console.mutex)
+	if !console.accepting || console.allocator.procedure == nil do return false
+	owned, _ := strings.clone(line, console.allocator)
+	append(&console.pending, owned)
+	return true
+}
 
 @(private)
-cli_reader_loop :: proc(t: ^thread.Thread) {
-	console := active_cli_console
+cli_reader_loop :: proc(data: rawptr) {
+	console := (^Cli_Console)(data)
 
+	// 行缓冲只在本线程使用，走本线程默认的 context.allocator。
 	buf: [256]u8
 	pending: [dynamic]u8
 	defer delete(pending)
 
-	for console.running {
+	for {
 		n, err := os.read(os.stdin, buf[:])
 		if err != nil || n <= 0 {
-			break // stdin 关闭（管道结束 / 无控制台）
+			return // stdin 关闭（管道结束 / 无控制台）
 		}
 		for i in 0..<n {
 			if buf[i] == '\n' {
-				line := clone_owned(string(pending[:]))
-				cli_dispatch_line(console, line)
+				if !cli_enqueue_line(console, string(pending[:])) do return
 				clear(&pending)
 				continue
 			}
@@ -234,30 +273,6 @@ cli_reader_loop :: proc(t: ^thread.Thread) {
 			}
 		}
 	}
-}
-
-// 解析一行输入：已知命令克隆入队，未知命令当场提示（读取线程侧）。
-@(private)
-cli_dispatch_line :: proc(console: ^Cli_Console, line: string) {
-	defer delete(line)
-	trimmed := strings.trim_space(line)
-	if len(trimmed) == 0 do return
-
-	name, args, ok := cli_parse_line(trimmed)
-	if !ok do return
-
-	lower, _ := strings.to_lower(name, context.allocator)
-	if _, known := console.commands[lower]; !known {
-		fmt.eprintf("[cli] 未知命令 '%s'，输入 help 查看命令列表\n", name)
-		delete(lower, context.allocator)
-		return
-	}
-
-	// 入队存小写名（注册表的键即小写），所有权转移给队列条目
-	msg.queue_enqueue(&console.queue, Cli_Line{
-		name = lower,
-		args = clone_owned(args),
-	})
 }
 
 // ------------------------------------------------------------------------------

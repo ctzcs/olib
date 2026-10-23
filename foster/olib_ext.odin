@@ -8,7 +8,7 @@ import SDL "vendor:sdl3"
 
 // 文件内导航
 //   Framework / App
-//   Framework / Window Logical Size
+//   Framework / Window Logical Size / Text Input Area
 //   Storage / Atomic Write
 //   Graphics / Texture Sampling
 
@@ -52,6 +52,22 @@ window_apply_logical_size :: proc(window: ^Window, config: AppConfig) {
 		_ = SDL.SetWindowSize(window.Handle, w, h)
 		center := SDL.WINDOWPOS_CENTERED_DISPLAY(c.int(display))
 		_ = SDL.SetWindowPosition(window.Handle, center, center)
+	}
+}
+
+// [olib L-022] 告诉系统输入法光标所在的矩形，候选框跟着它。rect 用渲染目标像素（与 SizeInPixels 同一坐标），
+// 这里换算成 SDL 窗口坐标。在 StartTextInput / SetTextInput 打开文字输入后调用，光标移动时再调用；Web 无操作。
+SetTextInputArea :: proc(window: ^Window, rect: Rect) {
+	when ODIN_OS != .JS {
+		if window.Handle == nil {
+			return
+		}
+		size, pixels := Size(window), SizeInPixels(window)
+		sx := pixels.X > 0 ? f32(size.X)/f32(pixels.X) : 1
+		sy := pixels.Y > 0 ? f32(size.Y)/f32(pixels.Y) : 1
+		area := SDL.Rect{c.int(math.round(rect.X*sx)), c.int(math.round(rect.Y*sy)),
+			c.int(max(math.round(rect.Width*sx), 1)), c.int(max(math.round(rect.Height*sy), 1))}
+		_ = SDL.SetTextInputArea(window.Handle, &area, 0)
 	}
 }
 

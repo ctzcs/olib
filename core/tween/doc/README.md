@@ -5,7 +5,7 @@
 - 基础补间：单条 `Tween(T)` 的插值、delay、loop、pingpong
 - 运行时管理：`Tween_Manager` 统一驱动、暂停、重播、回收
 - 编排：`Sequence` 支持 `Append / Join / Insert / Prepend / Callback / Interval`
-- 目标追随：`approach`（指数逼近）与 `smooth_damp`（临界阻尼弹簧），无节点、每帧追向可变目标
+- 目标追随：`approach`（指数逼近）、`smooth_damp`（临界阻尼）与 `spring`（可调弹性的阻尼弹簧），无节点、每帧追向可变目标
 
 这份文档只介绍当前已经实现并验证过的 API 和最小用法。
 
@@ -22,7 +22,7 @@
 - `managed_sequence.odin`
   - Sequence 编排和便捷接口
 - `damp.odin`
-  - `approach` / `smooth_damp`：拖动归位、悬停抬起、容器伸缩等目标随状态变化的动画
+  - `approach` / `smooth_damp` / `spring`：拖动归位、悬停抬起、按压回弹、容器伸缩等目标随状态变化的动画
 - `test.odin`
   - 当前最小可运行示例
 

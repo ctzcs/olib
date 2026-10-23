@@ -304,6 +304,19 @@ render3d_source :: proc(r: ^Render3D, m: ^mat.Material, selection: mat.Pass_Sele
 @(private)
 render3d_world_bounds :: proc(bounds: dasset.Dasset_Bounds,
 	transform: world.Matrix4) -> (result: dasset.Dasset_Bounds, valid: bool) {
+	if transform.c3 == {0, 0, 0, 1} {
+		// 仿射矩阵：中心照常变换，半长按各输出分量系数的绝对值累加，与 8 个角点的外包盒相同。
+		center := (bounds.min + bounds.max) * 0.5
+		extent := (bounds.max - bounds.min) * 0.5
+		for &e in extent do e = abs(e) // 反向的盒与角点算法一致
+		for axis, j in ([3]world.Vec4{transform.c0, transform.c1, transform.c2}) {
+			mid := center[0]*axis[0] + center[1]*axis[1] + center[2]*axis[2] + axis[3]
+			half := extent[0]*abs(axis[0]) + extent[1]*abs(axis[1]) + extent[2]*abs(axis[2])
+			if math.is_nan(mid) || math.is_inf(mid) || math.is_nan(half) || math.is_inf(half) do return {}, false
+			result.min[j], result.max[j] = mid - half, mid + half
+		}
+		return result, true
+	}
 	for corner, i in aabb_corners(bounds) {
 		point, ok := world.matrix4_transform_point(transform, corner)
 		if !ok do return {}, false // 非仿射或无效盒保守保留

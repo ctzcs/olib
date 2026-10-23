@@ -675,3 +675,52 @@ material_blocks_follow_model_include_layout :: proc(t: ^testing.T) {
 	testing.expect_value(t, floats(frame[:], 32), [4]f32{0.5, 0.5, 0.5, 1})
 	testing.expect_value(t, floats(frame[:], 48), [4]f32{4, 5, 6, 1})
 }
+
+// 仿射矩阵的包围盒走中心/半长快速路径，结果与 8 个角点的外包盒一致；非仿射矩阵仍逐角点变换。
+@(test)
+world_bounds_affine_matches_corners :: proc(t: ^testing.T) {
+	corners_bounds :: proc(bounds: dasset.Dasset_Bounds, m: world.Matrix4) -> (result: dasset.Dasset_Bounds) {
+		for corner, i in aabb_corners(bounds) {
+			p, _ := world.matrix4_transform_point(m, corner)
+			if i == 0 {
+				result.min, result.max = p, p
+			} else {
+				for axis in 0..<3 {
+					result.min[axis] = min(result.min[axis], p[axis])
+					result.max[axis] = max(result.max[axis], p[axis])
+				}
+			}
+		}
+		return
+	}
+	boxes := []dasset.Dasset_Bounds{
+		{min = {-1, -1, -1}, max = {1, 1, 1}},
+		{min = {0.2, -3, 4}, max = {2.5, 1, 9}},
+		{min = {1, 1, 1}, max = {-1, -2, -3}}, // 反向的盒
+	}
+	for i in 0..<40 {
+		a := f32(i) * 0.37
+		q := [4]f32{math.sin(a) * 0.6, math.cos(a*1.3) * 0.5, math.sin(a*0.7) * 0.4, math.cos(a)}
+		length := math.sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3])
+		q /= length
+		scale := world.matrix4_scaling(0.5 + f32(i % 3), 2 - f32(i % 2), 0.25 + f32(i % 5))
+		m := world.matrix4_multiply(world.matrix4_multiply(scale, world.matrix4_from_quaternion(q)),
+			world.matrix4_translation(f32(i) - 20, f32(i % 7), -f32(i) * 0.5))
+		for box in boxes {
+			got, ok := render3d_world_bounds(box, m)
+			expected := corners_bounds(box, m)
+			testing.expect(t, ok)
+			for axis in 0..<3 {
+				testing.expectf(t, math.abs(got.min[axis] - expected.min[axis]) < 1e-4 &&
+					math.abs(got.max[axis] - expected.max[axis]) < 1e-4, "matrix %d axis %d: %v vs %v", i, axis, got, expected)
+			}
+		}
+	}
+	// 非仿射（透视）矩阵仍按角点变换，结果不变。
+	perspective := world.matrix4_multiply(world.matrix4_translation(0, 0, -10), world.matrix4_perspective_fov(1, 1.5, 0.1, 100))
+	got, ok := render3d_world_bounds(boxes[0], perspective)
+	testing.expect(t, ok && got == corners_bounds(boxes[0], perspective))
+	nan := transmute(f32)u32(0x7fc00000)
+	_, finite := render3d_world_bounds({min = {nan, 0, 0}, max = {1, 1, 1}}, world.MATRIX4_IDENTITY)
+	testing.expect(t, !finite) // 非有限的盒保守保留
+}

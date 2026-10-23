@@ -56,7 +56,7 @@ queue_sort_buckets_and_depth :: proc(t: ^testing.T) {
 		testing.expect(t, item.payload == expected[i])
 	}
 
-	// 两组最近深度相同（都是 3）时按 group 键排列，组内仍前到后；组深度写进了各项。
+	// 两组最近深度相同（都是 3）时按 group 键排列，组内仍前到后。
 	queue_clear(&q)
 	queue_submit(&q, 0, 9, false, 7)
 	queue_submit(&q, 1, 3, false, 7)
@@ -66,8 +66,16 @@ queue_sort_buckets_and_depth :: proc(t: ^testing.T) {
 	queue_sort(&q, grouped = true)
 	tied := [5]int{4, 3, 2, 1, 0}
 	for item, i in q.items do testing.expectf(t, item.payload == tied[i], "第 %d 项是 %d", i, item.payload)
-	testing.expect_value(t, q.items[1].group_depth, f32(3))
-	testing.expect_value(t, q.items[0].group_depth, f32(1))
+	// 组键超出数组范围（负数或很大）时走 map，排序结果相同。
+	queue_clear(&q)
+	queue_submit(&q, 0, 9, false, 7_000_000)
+	queue_submit(&q, 1, 3, false, 7_000_000)
+	queue_submit(&q, 2, 5, false, -2)
+	queue_submit(&q, 3, 3, false, -2)
+	queue_submit(&q, 4, 1, false, 9)
+	queue_sort(&q, grouped = true)
+	sparse := [5]int{4, 3, 2, 1, 0}
+	for item, i in q.items do testing.expectf(t, item.payload == sparse[i], "第 %d 项是 %d", i, item.payload)
 }
 
 @(test)

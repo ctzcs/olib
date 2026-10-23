@@ -23,13 +23,14 @@ Render_Item :: struct($T: typeid) {
 	view_depth:  f32,  // 排序键：到相机的视空间深度（submit 时算好）
 	transparent: bool, // true 进透明桶（后到前）
 	group:       int,  // 可选的不透明分组；同深度组按此键排序
-	group_depth: f32,  // queue_sort(grouped = true) 填写：所在不透明组的最近深度
 }
 
 Render_Queue :: struct($T: typeid) {
 	items: [dynamic]Render_Item(T),
 	scratch: [dynamic]Render_Item(T),
 	group_depths: map[int]f32,
+	// 组键都是不大的非负整数时（Render3D 用来源下标）按下标存组深度，比较时不查 map。
+	dense_depths: [dynamic]f32,
 }
 
 // ------------------------------------------------------------------------------
@@ -50,14 +51,32 @@ queue_submit :: proc(q: ^Render_Queue($T), payload: T, view_depth: f32, transpar
 // grouped 时不透明组按最近深度排列，组内前到后；透明始终全局后到前。
 queue_sort :: proc(q: ^Render_Queue($T), grouped: bool = false) {
 	builtin.clear(&q.group_depths)
+	dense := false
 	if grouped {
+		// 组键都在 0..4n+64 内时用数组记各组最近深度，否则退回 map；比较只在组不同时取组深度。
+		limit := -1
+		dense = true
 		for item in q.items {
 			if item.transparent do continue
-			depth, exists := q.group_depths[item.group]
-			if !exists || item.view_depth < depth do q.group_depths[item.group] = item.view_depth
+			if item.group < 0 || item.group > 4 * len(q.items) + 64 {
+				dense = false
+				break
+			}
+			limit = max(limit, item.group)
 		}
-		// 组深度写进各项，比较时不再查 map。
-		for &item in q.items do if !item.transparent do item.group_depth = q.group_depths[item.group]
+		if dense {
+			resize(&q.dense_depths, limit + 1)
+			for &depth in q.dense_depths do depth = math.INF_F32
+			for item in q.items {
+				if !item.transparent do q.dense_depths[item.group] = min(q.dense_depths[item.group], item.view_depth)
+			}
+		} else {
+			for item in q.items {
+				if item.transparent do continue
+				depth, exists := q.group_depths[item.group]
+				if !exists || item.view_depth < depth do q.group_depths[item.group] = item.view_depth
+			}
+		}
 	}
 	resize(&q.scratch, len(q.items))
 	for width := 1; width < len(q.items); width *= 2 {
@@ -66,7 +85,7 @@ queue_sort :: proc(q: ^Render_Queue($T), grouped: bool = false) {
 			end := min(start + 2 * width, len(q.items))
 			a, b := start, mid
 			for i in start..<end {
-				if a < mid && (b == end || !render_item_less(q.items[b], q.items[a], grouped)) {
+				if a < mid && (b == end || !render_item_less(q, q.items[b], q.items[a], grouped, dense)) {
 					q.scratch[i] = q.items[a]
 					a += 1
 				} else {
@@ -87,6 +106,7 @@ queue_dispose :: proc(q: ^Render_Queue($T)) {
 	delete(q.items)
 	delete(q.scratch)
 	delete(q.group_depths)
+	delete(q.dense_depths)
 	q^ = {}
 }
 
@@ -102,7 +122,7 @@ queue_view_depth :: proc(camera: ^world.Camera3D, world_matrix: world.Matrix4) -
 }
 
 @(private)
-render_item_less :: proc(a, b: Render_Item($T), grouped: bool) -> bool {
+render_item_less :: proc(q: ^Render_Queue($T), a, b: Render_Item(T), grouped, dense: bool) -> bool {
 	if a.transparent != b.transparent {
 		return !a.transparent // 不透明排前面
 	}
@@ -110,7 +130,9 @@ render_item_less :: proc(a, b: Render_Item($T), grouped: bool) -> bool {
 		return a.view_depth > b.view_depth // 透明：远者先画（后到前）
 	}
 	if grouped && a.group != b.group {
-		if a.group_depth != b.group_depth do return a.group_depth < b.group_depth
+		da := dense ? q.dense_depths[a.group] : q.group_depths[a.group]
+		db := dense ? q.dense_depths[b.group] : q.group_depths[b.group]
+		if da != db do return da < db
 		return a.group < b.group
 	}
 	return a.view_depth < b.view_depth // 不透明：近者先画（前到后）

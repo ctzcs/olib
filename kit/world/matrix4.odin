@@ -141,18 +141,17 @@ matrix4_perspective_fov :: proc(fov_, aspect, near_, far_: f32) -> Matrix4 {
 
 // 复合矩阵 a*b：行向量约定下先应用 a 再应用 b。
 matrix4_multiply :: proc(a, b: Matrix4) -> Matrix4 {
-	result: Matrix4
+	// 按存储直接索引（[列][分量]），不逐元素调用 matrix4_c；累加顺序不变，结果逐位相同。
+	ac := transmute([4][4]f32)a
+	bc := transmute([4][4]f32)b
+	result: [4][4]f32
 	for j in 0..<4 {
 		for i in 0..<4 {
-			sum: f32 = 0
-			for k in 0..<4 {
-				// a 的行 i = 各列 c_k 的第 i 分量；b 的列 j
-				sum += matrix4_c(a, k)[i] * matrix4_c(b, j)[k]
-			}
-			matrix4_set(&result, j, i, sum)
+			// a 的行 i = 各列 c_k 的第 i 分量；b 的列 j
+			result[j][i] = ac[0][i]*bc[j][0] + ac[1][i]*bc[j][1] + ac[2][i]*bc[j][2] + ac[3][i]*bc[j][3]
 		}
 	}
-	return result
+	return transmute(Matrix4)result
 }
 
 // 一般 4x4 求逆（伴随法）。不可逆返回 identity + false。

@@ -23,6 +23,7 @@ Render_Item :: struct($T: typeid) {
 	view_depth:  f32,  // 排序键：到相机的视空间深度（submit 时算好）
 	transparent: bool, // true 进透明桶（后到前）
 	group:       int,  // 可选的不透明分组；同深度组按此键排序
+	group_depth: f32,  // queue_sort(grouped = true) 填写：所在不透明组的最近深度
 }
 
 Render_Queue :: struct($T: typeid) {
@@ -55,6 +56,8 @@ queue_sort :: proc(q: ^Render_Queue($T), grouped: bool = false) {
 			depth, exists := q.group_depths[item.group]
 			if !exists || item.view_depth < depth do q.group_depths[item.group] = item.view_depth
 		}
+		// 组深度写进各项，比较时不再查 map。
+		for &item in q.items do if !item.transparent do item.group_depth = q.group_depths[item.group]
 	}
 	resize(&q.scratch, len(q.items))
 	for width := 1; width < len(q.items); width *= 2 {
@@ -63,8 +66,7 @@ queue_sort :: proc(q: ^Render_Queue($T), grouped: bool = false) {
 			end := min(start + 2 * width, len(q.items))
 			a, b := start, mid
 			for i in start..<end {
-				if a < mid && (b == end || !render_item_less(q.items[b], q.items[a],
-					q.group_depths, grouped)) {
+				if a < mid && (b == end || !render_item_less(q.items[b], q.items[a], grouped)) {
 					q.scratch[i] = q.items[a]
 					a += 1
 				} else {
@@ -100,7 +102,7 @@ queue_view_depth :: proc(camera: ^world.Camera3D, world_matrix: world.Matrix4) -
 }
 
 @(private)
-render_item_less :: proc(a, b: Render_Item($T), depths: map[int]f32, grouped: bool) -> bool {
+render_item_less :: proc(a, b: Render_Item($T), grouped: bool) -> bool {
 	if a.transparent != b.transparent {
 		return !a.transparent // 不透明排前面
 	}
@@ -108,7 +110,7 @@ render_item_less :: proc(a, b: Render_Item($T), depths: map[int]f32, grouped: bo
 		return a.view_depth > b.view_depth // 透明：远者先画（后到前）
 	}
 	if grouped && a.group != b.group {
-		if depths[a.group] != depths[b.group] do return depths[a.group] < depths[b.group]
+		if a.group_depth != b.group_depth do return a.group_depth < b.group_depth
 		return a.group < b.group
 	}
 	return a.view_depth < b.view_depth // 不透明：近者先画（前到后）

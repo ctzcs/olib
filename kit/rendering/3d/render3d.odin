@@ -92,6 +92,7 @@ Render3D_Source :: struct {
 	selected: [sh.MAX_PASSES]int,
 	count: int,
 	transparent: bool,
+	checked: bool, // 本次 submit 的预检已查过这个来源的材质与快照
 }
 
 // ------------------------------------------------------------------------------
@@ -157,13 +158,24 @@ models :: proc(r: ^Render3D, mesh: ^foster.Mesh, material: ^mat.Material,
 @(private)
 render3d_validate :: proc(r: ^Render3D, mesh: ^foster.Mesh,
 	m: ^mat.Material) -> mat.Draw_Error {
+	if error := render3d_validate_material(r, m); error != .None do return error
+	return render3d_validate_mesh(r, mesh)
+}
+
+@(private)
+render3d_validate_material :: proc(r: ^Render3D, m: ^mat.Material) -> mat.Draw_Error {
 	if r.library == nil || r.library.device == nil do return .Missing_Device
 	if m == nil || m.owner == nil || m.shader == nil do return .Missing_Material
 	if m.owner.device != r.library.device do return .Device_Mismatch
+	if !sh.shader_is_material(m.shader.desc) do return .Not_Material_Shader
+	return .None
+}
+
+@(private)
+render3d_validate_mesh :: proc(r: ^Render3D, mesh: ^foster.Mesh) -> mat.Draw_Error {
 	if mesh == nil do return .Missing_Mesh
 	if mesh.GraphicsDevice != r.library.device do return .Device_Mismatch
 	if mesh.VertexData.Format.Stride != dasset.DASSET_VERTEX_STRIDE_STATIC do return .Unsupported_Mesh
-	if !sh.shader_is_material(m.shader.desc) do return .Not_Material_Shader
 	return .None
 }
 
@@ -342,6 +354,7 @@ render3d_prepare :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id) -> mat.
 	for &source in r.sources {
 		source.count = 0
 		source.transparent = false
+		source.checked = false
 		shader := source.shader.desc
 		for p in shader.passes do if p.id == pass_id do found = true
 		for i in 0..<source.selection.count {
@@ -392,12 +405,16 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 	globals: [mat.VIEW_GLOBALS_SIZE]u8
 	if !mat.view_globals_pack(&globals, view.globals) do return .View_Globals_Too_Large
 	if error := render3d_prepare(r, view, pass_id); error != .None do return error
-	// 完整预检后再发 Draw；错误保留所有记录。
+	// 完整预检后再发 Draw；错误保留所有记录。材质与快照每个来源查一次，网格在相邻记录换网格时查。
+	last_mesh: ^foster.Mesh
 	for item in r.queue.items {
 		record := &r.records[item.payload]
 		source := &r.sources[record.source]
-		if error := render3d_validate(r, record.mesh, source.material); error != .None do return error
-		if record.mesh.VertexData.Base.Resource == nil do return .Missing_Mesh
+		if record.mesh != last_mesh {
+			if error := render3d_validate_mesh(r, record.mesh); error != .None do return error
+			if record.mesh.VertexData.Base.Resource == nil do return .Missing_Mesh
+			last_mesh = record.mesh
+		}
 		if record.buffer != nil {
 			buf := record.buffer
 			if buf.buffer.Base.Resource == nil || buf.capacity < record.count do return .Instance_Buffer_Required
@@ -406,6 +423,9 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 		} else if source.shader.desc.instanced && !render3d_instance_buffer(r, source.slots) {
 			return .Instance_Buffer_Required // 临时实例缓冲创建失败
 		}
+		if source.checked do continue
+		source.checked = true
+		if error := render3d_validate_material(r, source.material); error != .None do return error
 		for i in source.selected[:source.count] {
 			snapshot := &r.snapshots[source.snapshot + i]
 			if snapshot.Vertex.Shader.Resource == nil || snapshot.Fragment.Shader.Resource == nil do return .Invalid_Binding
@@ -430,6 +450,15 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 		foster.VertexBufferUpload(&buf.buffer, &r.upload[bases[slots]], count)
 	}
 	camera := camera_position(view.view_matrix)
+	// 视图块整次提交相同：每个用到的快照只设一次，不逐 Draw 复制 1 KB。
+	for &source in r.sources {
+		if source.count == 0 || source.shader.desc.uniforms != .Olib do continue
+		for i in source.selected[:source.count] {
+			snapshot := &r.snapshots[source.snapshot + i]
+			foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, globals[:], mat.MODEL_VIEW_VERTEX_SLOT)
+			foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, globals[:], mat.MODEL_VIEW_FRAGMENT_SLOT)
+		}
+	}
 	for batch in r.batches {
 		record := &r.records[r.queue.items[batch.start].payload]
 		source := &r.sources[record.source]
@@ -439,7 +468,7 @@ submit :: proc(r: ^Render3D, view: View, pass_id: mat.Pass_Id = "") -> mat.Draw_
 			if buf == nil && source.shader.desc.instanced {
 				buf, count, first = &r.buffers[source.slots], n, batch.first + k*n
 			}
-			render3d_draw(r, record, source, pass, view, camera, globals[:], buf, count, first)
+			render3d_draw(r, record, source, pass, view, camera, buf, count, first)
 		}
 	}
 	if draw_debug && len(r.debug.vertices) > 0 do debug_draw_submit(&r.debug, view)
@@ -525,10 +554,10 @@ render3d_instance_buffer :: proc(r: ^Render3D, slots: int) -> bool {
 }
 
 // first 是实例缓冲中的起始实例（自动实例化的批次偏移；常驻缓冲为 0）。
-// globals 是已补零到 VIEW_GLOBALS_SIZE 的视图块，每次 submit 打包一次。
+// 视图块（globals）由 submit 每个快照设一次，这里只写随 Draw 变化的矩阵块与帧块。
 @(private)
 render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_Source,
-	i: int, view: View, camera: [4]f32, globals: []u8, buf: ^Model_Buffer, count, first: int) {
+	i: int, view: View, camera: [4]f32, buf: ^Model_Buffer, count, first: int) {
 	snapshot := &r.snapshots[source.snapshot + i]
 	matrices: [MATERIAL_VERTEX_BLOCK_SIZE]u8
 	frame: [MATERIAL_FRAME_BLOCK_SIZE]u8
@@ -542,19 +571,22 @@ render3d_draw :: proc(r: ^Render3D, record: ^Render3D_Record, source: ^Render3D_
 	foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, matrices[:])
 	if source.shader.desc.uniforms == .Olib {
 		foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, frame[:])
-		foster.MaterialStageSetUniformBuffer(&snapshot.Vertex, globals, mat.MODEL_VIEW_VERTEX_SLOT)
-		foster.MaterialStageSetUniformBuffer(&snapshot.Fragment, globals, mat.MODEL_VIEW_FRAGMENT_SLOT)
 	}
 	command: foster.DrawCommand
-	foster.DrawCommandFromMesh(&command, view.target, record.mesh, snapshot)
-	defer foster.DrawCommandDispose(&command)
 	shifted: foster.VertexBuffer
+	{
+		// 命令的动态数组与平移后的顶点格式只活到这次 Draw：在 temp 上分配，不逐 Draw 走堆。
+		// 只包住构建命令这一段，GraphicsDeviceDraw 里可能新建的管线等缓存仍用调用方的分配器。
+		context.allocator = context.temp_allocator
+		foster.DrawCommandFromMesh(&command, view.target, record.mesh, snapshot)
+		if buf != nil do model_instanced_command(&command, record.mesh, buf, &shifted)
+	}
+	defer foster.DrawCommandDispose(&command)
+	defer if buf != nil do foster.VertexFormatDispose(&shifted.Format)
 	if buf != nil {
-		model_instanced_command(&command, record.mesh, buf, &shifted)
 		command.InstanceCount = count
 		command.InstanceOffset = first
 	}
-	defer if buf != nil do foster.VertexFormatDispose(&shifted.Format)
 	command.CullMode = .Back
 	command.BlendMode = foster.BlendModeDisabled
 	command.DepthTestEnabled = true

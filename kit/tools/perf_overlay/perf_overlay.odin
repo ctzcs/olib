@@ -2,6 +2,7 @@
 //
 // 宿主每帧调用 frame 记录帧时间，用自己的按键切换 visible，最后在所有 UI 之上调用 draw。
 // 面板是被动浮层：不读取窗口输入、不捕获指针，也不影响宿主的输入分配。
+// ImGui 画法见子包 perf_overlay/imgui；只用它时不调用 init，Overlay 零值即可采样。
 //
 // 分区：
 //   数据 —— Overlay 与统计结果
@@ -284,8 +285,7 @@ graph_bars :: proc(o: ^Overlay, bars: int, top: f32) {
 	}) {}
 }
 
-// 第 age 帧之前的帧时间，0 为最新。
-@(private)
+// 第 age 帧之前的帧时间，0 为最新；age < count 时有效。
 history_at :: proc(o: ^Overlay, age: int) -> f32 {
 	return o.history[(o.head - 1 - age + HISTORY * 2) % HISTORY]
 }
@@ -303,7 +303,7 @@ cell :: proc(o: ^Overlay, text: string, width: f32, color: foster.Color) {
 	}
 }
 
-@(private)
+// 按 60 FPS 预算着色：绿 ≤ 1 帧，黄 ≤ 2 帧，红更慢。
 rating_color :: proc(ms: f32) -> foster.Color {
 	if ms <= TARGET_MS * 1.05 do return {96, 214, 120, 255}
 	if ms <= TARGET_MS * 2.05 do return {236, 196, 82, 255}

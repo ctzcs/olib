@@ -170,4 +170,4 @@ Shader 的模块归属、源码与 `Compiled/` 分层及统一编译入口见 [S
 可嵌入编辑器的 Shader 工具见 [kit/tools/shader_lab](kit/tools/shader_lab/README.md)，底层热重载见
 [kit/rendering/shader/dev](kit/rendering/shader/dev/README.md)。在同级 olib_sample 运行 `run.bat shader_lab`，保存 `.oshader` 即可更新 2D/3D 预览。
 
-悬浮性能面板见 [kit/tools/perf_overlay](kit/tools/perf_overlay/README.md)：FPS、帧时间曲线与 profiler 作用域耗时，新游戏开发版按 F3 打开。
+悬浮性能面板见 [kit/tools/perf_overlay](kit/tools/perf_overlay/README.md)：FPS、帧时间曲线与 profiler 作用域耗时，可用 kit/ui 或 ImGui 绘制，由宿主选择接入；新游戏开发版默认接 kit/ui 版，按 F3 打开。

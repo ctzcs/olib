@@ -102,6 +102,9 @@ r2d.sprite_buffer_upload(&buffer, items, values = values)
 - 内存与槽数成正比：值数组每个实例 `16 × slots` 字节，GPU 记录同理；`Sprite_Item` / `Model_Item` 本身不含字段数值，
   不会因为上限变大而变大。
 - `Instance_Values`（逐个绘制用）是固定大小的小结构，最多容纳 16 个槽位。
+- 逐实例重复求值时（渲染器、手写批量路径）先用 `instance_table_make(pass, binding)` 把材质值与 Pass 固定值合成一张表，
+  再对每个实例调 `instance_table_write(&table, numbers, set, out)`，不再按名字查字段；规则与上面的覆盖优先级相同。
+  材质 revision 变化后重建表。
 
 ## 约定
 

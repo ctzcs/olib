@@ -124,6 +124,31 @@ Shader Lab 预览提交全零的视图块；Shader 可以按某个标记分量�
 - **Render2D 的 submit 会清空，Render3D 的 submit 会保留**。混合绘制时由游戏安排两者的提交顺序，
   UI 在最终输出像素尺寸绘制。
 
+## 性能
+
+成本分两块：记录（model/models/buffer）和每个 Draw（submit 里打包矩阵与帧块，再交给 foster）。
+
+- **记录**：每个材质在 revision 与 Shader 不变时只准备一次（Pass 选择、参数快照、实例值表），之后每次记录只剩
+  包围盒变换和追加数据。在同一材质的两次记录之间调用 `material_set_number / material_set_texture` 会递增 revision，
+  下一次记录重新准备并新建快照；每帧在记录前改一次没有问题，逐对象来回改会让每次记录都重新准备。
+- **Draw 数**：非实例化材质每个记录、每个所选 Pass 一个 Draw，foster 每个 Draw 的成本是下限。大量重复网格把材质声明
+  `Instanced`，自动实例化会把排序后相邻的同网格、同快照记录合成一个 Draw；静态的百万级实例用 `r3d.buffer`。
+- **每帧变化的视图级数据**（太阳方向、雾、点光位置）放 `View.globals`，不要每帧对每个材质 `material_set_number`。
+- `models` 仍是每个实例一条记录：逐实例剔除、排序和切批是它的语义；只想整块剔除时用 `buffer`。
+
+olib_sample `material3d` 的 `objects=N`、`models each count=N` 配合 `shot` 分别输出记录与 submit 的 CPU 时间。
+2026-10-23 本机 D3D12、1100×720、4x MSAA，预热 10 帧后 120 帧平均（毫秒；foster 指 GraphicsDeviceDraw 本身）：
+
+| 场景 | 构建 | 记录 | submit | 其中 foster |
+| --- | --- | ---: | ---: | ---: |
+| 142 个对象，非实例化两个 Pass（284 Draw） | `-o:none -debug` | 0.090 | 0.585 | 0.324 |
+| 同上 | `-o:speed` | 0.011 | 0.19 | 0.147 |
+| 4096 个实例逐个 `model`（1 Draw） | `-o:none -debug` | 1.37 | 1.19 | — |
+| 同上 | `-o:speed` | 0.18 | 0.31 | — |
+
+优化前（[计划](../../../docs/plans/archive/render3d-record-cost.md)）同口径为：142 个对象 debug 记录 0.437、submit 0.88；
+4096 个实例 debug 记录 6.0。
+
 常驻 `Model_Buffer`、手写 `Render_Queue`、LOD 和 Shader Lab 集成见 [REFERENCE](REFERENCE.md)。
 材质登记/重载见 [公共材质资源](../material/README.md#公共材质资源)。
 可运行示例：olib_sample 的 `material3d`；手写光照渲染器：`forward3d`。

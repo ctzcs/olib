@@ -35,6 +35,18 @@ r3d.model_buffer_dispose(&instances)
   （Foster L-017，即 SDL first_instance）取各自那一段，上传只在提交开头打断一次渲染通道。
   生成的 Shader 不使用 SV_InstanceID，自己写的 instanced Shader 也不要依赖它。
 
+## 记录缓存与 revision
+
+Render3D 按材质指针缓存准备结果：Pass 选择、参数 uniform 快照（来源）和各 Pass 的实例值表（`mat.Instance_Table`）。
+命中条件是 `material.revision` 与 Shader 指针都没变；clear 时清空。`material_set_number / material_set_texture /
+material_reload` 成功时都会递增 revision，所以只经这些接口修改材质时缓存总是对的；
+绕过它们直接改 bindings 或数值不会被发现，已记录与之后记录的对象都沿用旧快照（Render2D 的合批规则相同）。
+缓存失效时按 uniform 内容查找已有快照，改回原值会复用原来的快照。
+
+实例值表把材质值与 Pass 固定值预先合好，逐实例只按槽位覆盖与钳制；手写渲染器需要同样规则时用
+`mat.instance_table_make(pass, binding)` 建表、`mat.instance_table_write(&table, numbers, set, out)` 逐实例写出，
+结果与 `mat.material_pass_values` 的实例值相同。
+
 ## 手写队列、LOD 与独立调试线
 
 ```odin

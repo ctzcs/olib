@@ -1,5 +1,8 @@
 # kit/ui 状态驱动动效
 
+> **状态：已完成（2026-10-23）** · 提交 `ee3f55e`..`28c4ca5`；olib_sample `fba2849`
+> 偏离：前置的 damp.odin 单独提交为 `634892d`；core/tween 文档随 spring 提交而非第 3 步；文档另更新了 docs/ROADMAP.md 与 prompts/new-project.md 的控件表；示例的回弹冲击打在卡牌内层元素上（外层仍是拖动姿态与 Sequence），槽满摇晃与 GUARD 改用冲击，其余 Sequence 保留；截图仍由示例写到 build/，验收图复制到 olib_sample/library/screenshots。动效手感未经用户实机验收。
+
 ## 背景
 
 kit/ui 已有 `ui_set_visual`（子树位移/缩放/旋转/透明度）和 `core/tween`，但常见 UI 动效写起来样板多：

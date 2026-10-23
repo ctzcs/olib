@@ -55,6 +55,58 @@ err := r2d.submit(&renderer, {target = target})
 的结果由调用者 `delete`。`ui_translate_into` 可以复用自有缓冲。
 不要在 `ui_end` 之后再调用 `ui_draw`，它会重复结束布局。
 
+## 动效原语
+
+悬停、按压、选中、进出场这类常见动效用按 ID 保存状态的原语：每帧声明“现在应该是什么样”，
+库按 `ui_begin` 的 dt 用阻尼弹簧（`core/tween` 的 `spring`）追过去。状态存在 `UI_Context` 里，
+本帧未声明的 ID 在 `ui_end` 回收；调用方不持有指针、不管理 Tween 句柄，目标中途改变时保留速度、不跳变。
+
+```odin
+// 手感参数集中写成常量（如游戏 core/motion.odin），改完热重载即可看效果。
+MOTION_SNAPPY :: ui.UI_Motion{time = 0.12}
+MOTION_POP    :: ui.UI_Motion{time = 0.35, bounce = 0.45}
+POPUP_EXIT    :: ui.UI_Motion{time = 0.15}
+LIFT          :: ui.UI_Visual{offset = {0, -6}, scale = {1.04, 1.04}, pivot = {0.5, 1}, opacity = 1}
+
+ui.ui_begin(&ctx, ui_dt) // UI 时间独立于暂停的世界时间
+// 追随：目标由状态决定；pivot 等字段也一起插值，目标两态保持相同 pivot 更直观。
+ui.ui_motion(&ctx, "play", hovered ? LIFT : ui.UI_VISUAL_DEFAULT, MOTION_POP)
+if ui.ui_button(&ctx, &theme, "play", "PLAY") {
+    // 冲击：给速度（单位/秒），弹簧自己回到目标。
+    ui.ui_motion_kick(&ctx, "play", {scale = {-3, -3}})
+}
+
+// 进出场：t 为 0..1 进度（弹性时可过冲），怎么映射由调用方决定。
+if alive, t := ui.ui_presence(&ctx, "reward", reward_open, MOTION_POP, POPUP_EXIT); alive {
+    hidden := ui.UI_VISUAL_DEFAULT
+    hidden.offset = {0, 24}
+    hidden.scale = {0.9, 0.9}
+    hidden.opacity = 0
+    ui.ui_set_visual(&ctx, "reward", ui.ui_visual_lerp(hidden, ui.UI_VISUAL_DEFAULT, t))
+    // 声明 reward 弹窗……
+}
+```
+
+- `UI_Motion{time, bounce}`：`time` 约为到位秒数，0 为立即到位；`bounce` 0 不过冲，越接近 1 越弹。
+- `ui_motion` 首次出现的 ID 直接取目标，不播放入场；入场用 `ui_presence`。它注册视觉并返回当前值，
+  同一 ID 本帧之后的 `ui_set_visual` 仍会覆盖（最后一次生效）。
+- `ui_motion_kick` 只作用于已经由 `ui_motion` 声明过的 ID，下一帧推进时生效。
+  `ui_motion_state` 读取当前值和速度，可在原语结果上再加工。
+- `ui_presence` 在关闭后继续返回 `alive = true` 直到退回 0；退场期间该 ID 的整个子树从下一帧起
+  不接受指针、不参与键盘导航（外观不变，不是禁用态），点击会落到下面。`alive` 为 false 后停止声明，
+  再次打开从 0 入场。用 presence 的 ID 必须是本帧声明的元素 ID。
+- 一个元素同时需要通用动效和定制动画时，套一层容器：外层用原语，内层自己 `ui_set_visual`，
+  父子变换自动合成。
+
+原语只是便利层，写不进去的动效按需下沉，可与原语混用：
+
+| 层 | 适合 | 用法 |
+| --- | --- | --- |
+| 原语 | 悬停、按压、选中、进出场 | `ui_motion` / `ui_motion_kick` / `ui_presence` |
+| 自算 `UI_Visual` | 呼吸、摇摆、沿曲线、跟随游戏数据的程序化动画 | 任意计算后 `ui_set_visual` |
+| 时间轴 | 多段编排、精确节奏 | `core/tween` 的 Tween / Sequence，见下一节 |
+| 非变换数值 | 颜色、打字机、进度填充、数字滚动、特效 | `approach` / `spring` / Tween 算出数值，传给控件参数或在 `ui_draw` 后自绘 |
+
 ## 子树视觉变换与 Tween
 
 `ui_set_visual` 对稳定 ID 对应的整个子树应用位移、二维缩放、旋转与透明度。
@@ -95,7 +147,7 @@ ui.ui_draw(&ctx, &renderer)
 - 点击沿用上一帧布局，并使用上一帧显示变换的逆矩阵；保留 Clay 浮层遮挡和模态规则。
   内置滑条也使用逆变换指针，自定义拖动控件可调用 `ui_pointer_local`。
   `ui_element_rect` 在声明前返回元素上一帧的布局矩形（不含视觉变换），用于浮层跟随布局槽位和拖放命中；
-  追随动画可配合 `core/tween` 的 `approach` / `smooth_damp`。
+  追随动画优先用上文的 `ui_motion`，也可直接用 `core/tween` 的 `approach` / `smooth_damp` / `spring`。
   零缩放和零透明度不接受指针命中；键盘焦点与业务可交互性仍由 `disabled` / 模态控制。
 - 裁剪仍是屏幕轴对齐矩形。平移/轴对齐缩放后的裁剪准确；旋转裁剪容器使用变换后的
   **轴对齐包围盒**，不支持精确旋转遮罩。固定滚动窗口中的内容可以自由旋转。
@@ -403,7 +455,7 @@ if show_dialog {
 
 目前支持矩形嵌套裁剪、统一圆角填充；裁剪不是圆角遮罩，独立四角半径和圆角描边
 仍未完整实现。输入框/IME、Dropdown、富文本、拖放数据协议、列表虚拟化、精确旋转遮罩
-和自动布局过渡仍属于后续功能。视觉变换与显式 Tween 动画见上文。
+和自动布局过渡仍属于后续功能。动效原语、视觉变换与显式 Tween 动画见上文。
 
 ## 验证
 

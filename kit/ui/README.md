@@ -94,6 +94,8 @@ ui.ui_draw(&ctx, &renderer)
   每个图元的预乘 RGB 与 alpha 同步衰减；这不是离屏合成的组透明度。
 - 点击沿用上一帧布局，并使用上一帧显示变换的逆矩阵；保留 Clay 浮层遮挡和模态规则。
   内置滑条也使用逆变换指针，自定义拖动控件可调用 `ui_pointer_local`。
+  `ui_element_rect` 在声明前返回元素上一帧的布局矩形（不含视觉变换），用于浮层跟随布局槽位和拖放命中；
+  追随动画可配合 `core/tween` 的 `approach` / `smooth_damp`。
   零缩放和零透明度不接受指针命中；键盘焦点与业务可交互性仍由 `disabled` / 模态控制。
 - 裁剪仍是屏幕轴对齐矩形。平移/轴对齐缩放后的裁剪准确；旋转裁剪容器使用变换后的
   **轴对齐包围盒**，不支持精确旋转遮罩。固定滚动窗口中的内容可以自由旋转。
@@ -230,6 +232,10 @@ UI 的线性采样不是场景抗锯齿，文字清晰也不意味着 3D 画面�
 | `ui_panel_decl` | 竖排面板；gap、固定宽度可配置 |
 | `ui_scroll_decl` | 固定高度、滚轮滚动、双轴裁剪的列容器 |
 | `ui_modal_decl` | 全屏浮动遮罩，配合模态输入作用域使用 |
+| `ui_dropdown` | 下拉选择；点开后按钮下方浮层列出选项，返回是否改了 selected |
+| `ui_text_input` | 单行文本输入，UTF-8 写入调用方 buffer；需宿主接入文字编辑输入（见下文） |
+| `ui_virtual_range / ui_virtual_spacer` | 固定行高长列表只声明可见行 |
+| `ui_drag_source / ui_drop_target / ui_dragging / ui_drag_position` | 拖放，载荷为调用方定义的 int |
 
 声明函数返回普通 `clay.ElementDeclaration`，可在传给 `clay.UI()` 前继续修改尺寸、
 padding、对齐等属性。不要把 `clay.UI()` 包进普通函数后返回给外层使用，
@@ -246,6 +252,73 @@ if clay.UI()(ui.ui_scroll_decl(&ctx, "inventory", height = 300)) {
 }
 // 整张贴图可先转为 foster.SubtextureFromTexture(&texture)。
 ```
+
+可运行演示：olib_sample 的 `run.bat ui_gallery controls`（`shot controls` 输出验收图）包含文本框、
+下拉框、可拖放交换的格子与一万行虚拟列表。
+
+### 下拉框
+
+`ui_dropdown(&ctx, &theme, "quality", options, &selected, width = 250)`。点按钮展开，点选、点外面或导航
+`cancel` 关闭，同一时间只展开一个；用 `activate` 打开时焦点落到当前项，`next` 在选项间移动。
+超过 6 项时浮层可滚动。选项 ID 为 `"<id>#<下标>"`。
+
+### 长列表虚拟化
+
+行高固定（含行间距）时，只声明可见的几行，滚动范围仍按完整列表计算：
+
+```odin
+r := ui.ui_virtual_range(&ctx, "log", len(entries), 28, 330)
+if clay.UI()(ui.ui_scroll_decl(&ctx, "log", 330, gap = 0)) { // 必须 gap = 0
+    ui.ui_virtual_spacer(r.before)
+    for i in r.first..<r.last { /* 声明第 i 行，高 28 */ }
+    ui.ui_virtual_spacer(r.after)
+}
+```
+
+### 拖放
+
+```odin
+state := ui.ui_interact(&ctx, id)
+dragging := ui.ui_drag_source(&ctx, id, state, slot_index) // 按下后移动超过 4 逻辑像素才开始
+payload, hovered, dropped := ui.ui_drop_target(&ctx, id)  // 声明元素前调用，松开那帧 dropped
+if dropped do swap(slot_index, payload)
+// 声明 id 元素；dragging 时可隐藏原图标，hovered 时高亮。
+```
+
+拖动结束的那次松开是放置，不算点击；导航 `cancel` 取消拖动。跟随指针的预览用
+`ui_drag_position` 画在 `floating = {attachTo = .Root, pointerCaptureMode = .Passthrough}` 浮层里，
+Passthrough 让下面的目标仍能判定悬停。
+
+### 文本输入与输入法
+
+`ui_text_input(&ctx, &theme, "name", &buffer, "Type a name", width = 250, max_bytes = 24)` 是单行输入，
+返回 `changed / submitted`。按下即获得焦点并按点击位置放光标，也可用导航移入；Escape 或导航
+`cancel` 结束编辑；文字过长时水平滚动跟随光标。不支持选区、多行与密码掩码。键盘输入由宿主每帧接入：
+
+```odin
+keyboard := &app.Input.State.Keyboard
+ui.ui_set_text_edit(&ctx, {
+    text = keyboard.Text, // 本帧键入文字，含输入法提交
+    backspace = foster.PressedOrRepeated(keyboard, .Backspace),
+    delete = foster.PressedOrRepeated(keyboard, .Delete),
+    left = foster.PressedOrRepeated(keyboard, .Left),
+    right = foster.PressedOrRepeated(keyboard, .Right),
+    home = foster.KeyboardPressed(keyboard, .Home),
+    end = foster.KeyboardPressed(keyboard, .End),
+    submit = foster.KeyboardPressed(keyboard, .Enter),
+    cancel = foster.KeyboardPressed(keyboard, .Escape),
+    paste = ctrl_v ? clipboard : "", // foster.GetClipboardString，用完释放
+})
+ui.ui_begin(&ctx, dt)
+// ... 声明 UI 与 ui_draw ...
+foster.SetTextInput(&app.Window, ui.ui_text_editing(&ctx)) // 编辑时才打开系统文字输入
+if area, editing := ui.ui_text_input_area(&ctx); editing {
+    foster.SetTextInputArea(&app.Window, area) // 输入法候选框跟随光标（渲染目标像素）
+}
+```
+
+编辑期间 `ui_input_capture(&ctx).keyboard` 为真，字母、空格、方向键不要再交给游戏；Escape
+应先交给 UI（`ui_text_editing` 为真时不要把它当作退出）。
 
 ## 交互和游戏输入
 

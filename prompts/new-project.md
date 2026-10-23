@@ -284,8 +284,10 @@ Odin 没有 GC，所有权必须显式：
 | 文本 | `ui_heading`、`ui_label`、`ui_label_dim`、`ui_label_ex` |
 | 布局与容器 | `ui_row_decl`、`ui_column_decl`、`ui_panel_decl`、`ui_scroll_decl`、`ui_modal_decl` |
 | 图片与皮肤 | `ui_image`、`ui_image_decl`、`ui_nine_slice_decl` |
+| 选择与输入 | `ui_dropdown`、`ui_text_input`（宿主需接 `ui_set_text_edit` 与输入法区域，见 kit/ui README） |
+| 长列表与拖放 | `ui_virtual_range` / `ui_virtual_spacer`、`ui_drag_source` / `ui_drop_target` |
 
-kit/ui 目前**没有**文本输入/IME、Dropdown、富文本、拖放和列表虚拟化（见 olib `docs/ROADMAP.md`）。玩家 UI 第一版需要这些时，先评估能否用现有控件组合替代；编辑器和调试工具直接用 odin-imgui。不要假定它们存在。
+kit/ui 目前**没有**富文本与字体回退、文本框选区与多行、按二维位置的方向导航（见 olib `docs/ROADMAP.md`）。玩家 UI 第一版需要这些时，先评估能否用现有控件组合替代；编辑器和调试工具直接用 odin-imgui。不要假定它们存在。
 
 帧流程（在 `RenderProc` 中）：设置 viewport 与指针 → `ui_set_navigation` → `ui_begin` → 声明 UI → 绘制世界 → `ui_draw` 叠加 UI → `ui_input_capture` 决定本帧鼠标/键盘是否还交给世界。读取 capture 之后再处理世界点击，避免穿透。
 

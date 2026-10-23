@@ -6,8 +6,9 @@
 //   ui_font_bake.odin Foster Font -> 位图图集、字形表与纹理
 //   ui_backend.odin  clay RenderCommand -> UI_Op 翻译（CPU 可测）+ Batcher 发射
 //   ui_visual.odin    子树视觉变换 / Tween 插值 / 变换命中
-//   ui_input.odin    鼠标捕获 / 导航焦点 / 禁用态 / 模态 / 输入消费
+//   ui_input.odin    鼠标捕获 / 导航焦点与自动滚动 / 禁用态 / 模态 / 输入消费
 //   ui_widgets.odin  主题、基础控件、图像、滑条、进度和容器
+//   ui_controls.odin 下拉框 / 虚拟列表 / 拖放
 //
 // clay 只做布局与交互查询，渲染由本包翻译后经 Foster Batcher 发射；
 // 支持位图/MSDF 字体、嵌套裁剪、逻辑坐标缩放与鼠标/导航输入。
@@ -65,6 +66,9 @@ UI_Context :: struct {
 	previous_widgets: [dynamic]UI_Focus_Entry,
 	scrolls: [dynamic]UI_Scroll_Entry,
 	navigation: UI_Navigation,
+	focus_scroll: bool, // 焦点由导航或 ui_focus 改变：下一次 begin 把它滚进可见范围
+	dropdown_id: u32, // 当前展开的下拉框；同一时间只展开一个
+	drag: UI_Drag,
 	input: UI_Input_Capture,
 	pool_overflow: bool,
 	error_count: int,
@@ -222,6 +226,7 @@ ui_begin :: proc(ctx: ^UI_Context, delta_time: f32) {
 	ctx.pointer_x = (ctx.pointer_pixels.x - ctx.viewport_origin.x) / ctx.scale
 	ctx.pointer_y = (ctx.pointer_pixels.y - ctx.viewport_origin.y) / ctx.scale
 	ui_navigation_begin(ctx)
+	ui_focus_scroll(ctx)
 	clay.SetPointerState({ctx.pointer_x, ctx.pointer_y}, ctx.pointer_down)
 	// 拖动由控件捕获；列表使用滚轮，避免按按钮时同时拖动父滚动区。
 	// 模态切换帧的命中仍基于旧布局，禁止滚轮穿过刚打开/关闭的遮罩。
@@ -279,6 +284,10 @@ ui_end :: proc(ctx: ^UI_Context) -> clay.ClayArray(clay.RenderCommand) {
 	ctx.widgets, ctx.previous_widgets = ctx.previous_widgets, ctx.widgets
 	clear(&ctx.widgets)
 	ctx.navigation = {}
+	// 松开那帧的放置已由 ui_drop_target 读取，之后结束拖动。
+	if !ctx.pointer_down {
+		ctx.drag = {}
+	}
 	for i := len(ctx.scrolls) - 1; i >= 0; i -= 1 {
 		if !ctx.scrolls[i].seen {
 			unordered_remove(&ctx.scrolls, i)

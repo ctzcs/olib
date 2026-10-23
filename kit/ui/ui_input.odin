@@ -79,8 +79,55 @@ ui_block_pointer :: proc(ctx: ^UI_Context, id: string) {
 	}
 }
 
+// 最近一次 ui_end 的布局矩形（逻辑坐标，不含 ui_set_visual 变换）；元素未声明过时 ok=false。
+// 声明前调用：浮动元素跟随布局槽位、拖放目标命中等需要先知道别处的位置。
+ui_element_rect :: proc(ctx: ^UI_Context, id: string) -> (rect: foster.Rect, ok: bool) {
+	clay.SetCurrentContext(ctx.clay_context)
+	data := clay.GetElementData(clay.ID(id))
+	bb := data.boundingBox
+	return {bb.x, bb.y, bb.width, bb.height}, bool(data.found)
+}
+
+// 设置焦点；包含它的滚动区在下一次 ui_begin 滚到能看见它。
 ui_focus :: proc(ctx: ^UI_Context, id: string) {
 	ctx.focused_id = clay.ID(id).id
+	ctx.focus_scroll = true
+}
+
+// 按上一帧布局，把包含焦点控件的滚动区滚到刚好完整可见（只调纵向）；控件已可见时不动。
+// 判断包含关系用矩形：控件横向落在容器内、纵向落在容器的内容范围内。
+@(private)
+ui_focus_scroll :: proc(ctx: ^UI_Context) {
+	if !ctx.focus_scroll || ctx.focused_id == 0 {
+		ctx.focus_scroll = false
+		return
+	}
+	ctx.focus_scroll = false
+	target := clay.GetElementData(clay.ElementId{id = ctx.focused_id})
+	if !target.found {
+		return
+	}
+	bb := target.boundingBox
+	for scroll in ctx.scrolls {
+		container := clay.GetElementData(clay.ElementId{id = scroll.id})
+		data := clay.GetScrollContainerData(clay.ElementId{id = scroll.id})
+		if !container.found || !data.found || data.scrollPosition == nil {
+			continue
+		}
+		view := container.boundingBox
+		top := view.y + data.scrollPosition.y
+		if bb.x < view.x - 0.5 || bb.x + bb.width > view.x + view.width + 0.5 ||
+		   bb.y < top - 0.5 || bb.y + bb.height > top + data.contentDimensions.height + 0.5 {
+			continue
+		}
+		next := data.scrollPosition.y
+		if bb.y < view.y {
+			next += view.y - bb.y
+		} else if bb.y + bb.height > view.y + view.height {
+			next -= bb.y + bb.height - (view.y + view.height)
+		}
+		data.scrollPosition.y = clamp(next, -max(0, data.contentDimensions.height - view.height), 0)
+	}
 }
 
 @(private)
@@ -88,6 +135,8 @@ ui_navigation_begin :: proc(ctx: ^UI_Context) {
 	if ctx.navigation.cancel {
 		ctx.active_id = 0
 		ctx.focused_id = 0
+		ctx.dropdown_id = 0
+		ctx.drag = {}
 		ctx.input.keyboard = true
 		return
 	}
@@ -114,6 +163,7 @@ ui_navigation_begin :: proc(ctx: ^UI_Context) {
 		}
 		if i == index {
 			ctx.focused_id = entry.id
+			ctx.focus_scroll = true
 			break
 		}
 		i += 1
@@ -148,6 +198,10 @@ ui_interact :: proc(ctx: ^UI_Context, id: string, options: UI_Widget_Options = {
 		state.active = ctx.pointer_down
 		state.released = ui_released(ctx)
 		state.clicked = options.trigger == .Press ? state.pressed : state.released && state.hovered
+		// 拖动结束的那次松开是放置，不算点击。
+		if ctx.drag.dragging && ctx.drag.source == element.id {
+			state.clicked = state.clicked && options.trigger == .Press
+		}
 	}
 	if state.focused && (ctx.navigation.activate || ctx.navigation.adjust != 0) {
 		ctx.input.keyboard = true

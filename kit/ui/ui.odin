@@ -6,6 +6,7 @@
 //   ui_font_bake.odin Foster Font -> 位图图集、字形表与纹理
 //   ui_backend.odin  clay RenderCommand -> UI_Op 翻译（CPU 可测）+ Batcher 发射
 //   ui_visual.odin    子树视觉变换 / Tween 插值 / 变换命中
+//   ui_motion.odin   按 ID 的状态驱动动效：追随 / 冲击 / 进出场
 //   ui_input.odin    鼠标捕获 / 导航焦点与自动滚动 / 禁用态 / 模态 / 输入消费
 //   ui_widgets.odin  主题、基础控件、图像、滑条、进度和容器
 //   ui_controls.odin 下拉框 / 虚拟列表 / 拖放
@@ -45,6 +46,10 @@ UI_Context :: struct {
 	visuals: map[u32]UI_Visual,
 	visual_elements: map[u32]UI_Visual_Element,
 	visual_layout: [dynamic]clay.LayoutElementInfo,
+	motions: map[u32]UI_Motion_State,
+	presences: map[u32]UI_Presence_State,
+	inert: map[u32]struct{}, // 本帧退场中的 ID；快照时按子树继承
+	delta_time: f32, // ui_begin 传入，动效推进用
 
 	// 帧内 TextElementConfig bump 池：clay 把文本配置存裸指针、EndLayout
 	// 才回读，调用侧栈上 config 会悬垂（v1 踩过的坑），必须由 ctx 保活。
@@ -170,6 +175,9 @@ ui_dispose :: proc(ctx: ^UI_Context, allocator := context.allocator) {
 	delete(ctx.visuals)
 	delete(ctx.visual_elements)
 	delete(ctx.visual_layout)
+	delete(ctx.motions)
+	delete(ctx.presences)
+	delete(ctx.inert)
 	delete(ctx.image_pool, ctx.allocator)
 	delete(ctx.text_config_pool, ctx.allocator)
 	delete(ctx.arena_memory, ctx.allocator)
@@ -225,6 +233,8 @@ ui_begin :: proc(ctx: ^UI_Context, delta_time: f32) {
 	ctx.text_config_len = 0 // 文本配置池按帧重置（池内存跨帧保活，见结构体注释）
 	ctx.image_len = 0
 	clear(&ctx.visuals)
+	clear(&ctx.inert)
+	ctx.delta_time = delta_time
 	ctx.pool_overflow = false
 	ctx.scope_id = 0
 	ctx.active_seen = false
@@ -278,6 +288,7 @@ ui_end :: proc(ctx: ^UI_Context) -> clay.ClayArray(clay.RenderCommand) {
 	commands := clay.EndLayout()
 	clay.SetCullingEnabled(!culling_disabled)
 	ui_visual_snapshot(ctx)
+	ui_motion_end(ctx)
 	if !ctx.pointer_down || !ctx.active_seen {
 		ctx.active_id = 0
 	}

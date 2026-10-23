@@ -48,6 +48,7 @@ UI_Visual_Element :: struct {
 	info: clay.LayoutElementInfo,
 	transform: foster.Matrix3x2,
 	opacity: f32,
+	inert: bool, // 位于退场中的 presence 子树：不命中、不参与导航
 	resolved, resolving: bool,
 }
 
@@ -61,7 +62,7 @@ UI_VISUAL_IDENTITY :: foster.Matrix3x2{1, 0, 0, 1, 0, 0}
 @(private)
 ui_visual_snapshot :: proc(ctx: ^UI_Context) {
 	clear(&ctx.visual_elements)
-	if len(ctx.visuals) == 0 {
+	if len(ctx.visuals) == 0 && len(ctx.inert) == 0 {
 		return
 	}
 	count := clay.GetLayoutElementInfo(nil)
@@ -89,6 +90,7 @@ ui_visual_resolve :: proc(ctx: ^UI_Context, id: u32) -> UI_Visual_Element {
 	parent := ui_visual_resolve(ctx, e.info.parentId)
 	e.transform = parent.transform
 	e.opacity = parent.opacity
+	e.inert = parent.inert || id in ctx.inert
 	if v, ok := ctx.visuals[id]; ok {
 		bb := e.info.boundingBox
 		pivot := foster.Vec2{bb.x + bb.width * v.pivot.x, bb.y + bb.height * v.pivot.y}
@@ -170,7 +172,7 @@ ui_visual_hit :: proc "c" (
 	bounds := bounds_arg
 	ctx := cast(^UI_Context)userdata
 	p := foster.Vec2{position[0], position[1]}
-	if !ui_visual_inside(p, {0, 0, ctx.width, ctx.height}) {
+	if !ui_visual_inside(p, {0, 0, ctx.width, ctx.height}) || ui_visual_inert(ctx, id) {
 		return false
 	}
 	if clip {

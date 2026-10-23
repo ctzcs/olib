@@ -176,6 +176,13 @@ ui_navigation_begin :: proc(ctx: ^UI_Context) {
 // 自定义控件也可复用；每个 ID 每帧只调用一次，且 ID 必须唯一、帧间稳定。
 ui_interact :: proc(ctx: ^UI_Context, id: string, options: UI_Widget_Options = {}) -> UI_Interaction {
 	element := clay.ID(id)
+	// 退场中的子树：不是禁用态（不改外观），只是不再交互。
+	if ui_visual_inert(ctx, element.id) {
+		if ctx.active_id == element.id {
+			ctx.active_id = 0
+		}
+		return {}
+	}
 	allowed := ctx.modal_id == 0 || ctx.scope_id == ctx.modal_id
 	state := UI_Interaction{disabled = options.disabled || !allowed}
 	state.hovered = allowed && clay.PointerOver(element)

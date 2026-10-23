@@ -4,6 +4,7 @@ import "core:encoding/json"
 import "core:math"
 
 import foster "olib:foster"
+import r2d "olib:kit/rendering/2d"
 import imgui "olib:thirdparty/odin-imgui"
 import imgui_foster "olib:thirdparty/odin-imgui/imgui_impl_ofoster"
 
@@ -24,6 +25,10 @@ FONT_SIZE_MAX :: f32(32)
 SETTINGS_PATH :: "editor-settings.json"
 // ImGuiDockNodeFlags_DockSpace 是 imgui_internal.h 的私有位，绑定里没有生成。
 DOCK_NODE_DOCKSPACE :: transmute(imgui.DockNodeFlags)i32(1 << 10)
+// 面板用到的 olib 内置图标（名称见 olib assets/icons/game-icons.xml）。新增按钮图标时加进这里。
+ICON_NAMES :: [?]string{"symbols/minus", "symbols/plus", "media/play", "media/pause", "ui/refresh"}
+// 图标表每格像素：约为默认字号下 IconButton 绘制尺寸的 2 倍，调大字号或高 DPI 时仍够用。
+ICON_CELL :: 48
 Edit_Kind :: enum { Set_Position, Score_Down, Score_Up, Toggle_Pause }
 Edit_Command :: struct { kind: Edit_Kind, value: f32 }
 Preview :: struct { x: f32, score: i64, paused: bool }
@@ -48,6 +53,7 @@ Session :: struct {
 	owner: Pointer_Owner,
 	previous_down, ready: bool,
 	gui: bool, // 本 DLL 的 ImGui 上下文与后端已创建
+	icons: imgui_foster.Icons, // 从内置图集挑出 ICON_NAMES 的小图标表，随 DLL 重建
 	font_edit: f32, // 拖动字号滑条时的临时值，松开才生效，避免控件边拖边变大
 	font_default: f32, // 本显示器的建议字号，Reset 回到它
 	font_editing, settings_dirty: bool,
@@ -73,10 +79,17 @@ init :: proc(e: ^Session, app: ^foster.App, scale: f32) -> bool {
 	if e.state.layout != "" {
 		imgui.LoadIniSettingsFromMemory(cstring(raw_data(e.state.layout)), uint(len(e.state.layout)))
 	}
-	return true
+	// 解码整张内置图集（约 64 MiB 临时像素），挑出的图标表建好后立即释放。
+	image, rects, decoded := r2d.builtin_icons_decode()
+	if !decoded do return false
+	defer delete(image.Pixels)
+	defer r2d.kenney_rects_dispose(rects)
+	names := ICON_NAMES
+	return imgui_foster.IconsInit(&e.icons, &app.GraphicsDevice, image, rects^, names[:], ICON_CELL)
 }
 
 dispose :: proc(e: ^Session) {
+	imgui_foster.IconsDispose(&e.icons)
 	if e.gui do imgui_foster.Shutdown()
 	e.gui = false
 	delete(e.state.layout)
@@ -213,11 +226,16 @@ panel :: proc(e: ^Session, w: ^Preview) {
 		}
 		imgui.Text("Score: %lld", w.score)
 		imgui.SameLine()
-		if imgui.Button("-1") do append(&e.pending, Edit_Command{kind = .Score_Down})
+		if imgui_foster.IconButton(&e.icons, "score-down", "symbols/minus") {
+			append(&e.pending, Edit_Command{kind = .Score_Down})
+		}
 		imgui.SameLine()
-		if imgui.Button("+1") do append(&e.pending, Edit_Command{kind = .Score_Up})
-		// ### 后是固定 ID，文字切换时控件身份不变。
-		if imgui.Button(w.paused ? "Resume###pause" : "Pause###pause") {
+		if imgui_foster.IconButton(&e.icons, "score-up", "symbols/plus") {
+			append(&e.pending, Edit_Command{kind = .Score_Up})
+		}
+		// id 固定，图标和文字切换时控件身份不变。
+		if imgui_foster.IconButton(&e.icons, "pause", w.paused ? "media/play" : "media/pause",
+			w.paused ? "Resume" : "Pause") {
 			append(&e.pending, Edit_Command{kind = .Toggle_Pause})
 		}
 	}
@@ -229,7 +247,9 @@ panel :: proc(e: ^Session, w: ^Preview) {
 		e.font_editing = imgui.IsItemActive()
 		if imgui.IsItemDeactivatedAfterEdit() do font_size_set(e, e.font_edit)
 		imgui.SameLine()
-		if imgui.Button("Reset##font-size") do font_size_set(e, e.font_default)
+		if imgui_foster.IconButton(&e.icons, "font-size-reset", "ui/refresh", "Reset") {
+			font_size_set(e, e.font_default)
+		}
 	}
 }
 

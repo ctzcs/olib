@@ -103,7 +103,7 @@ cd ../MyGame
 
 开发入口 `src/editor` 编译成常驻 EXE，运行时把 `src/core_editor` 及它导入的 core 编译成一个 DLL。游戏代码放 core，编辑器实现放 core_editor，两个入口 editor/game 只负责启动与生命周期；不另建 host、editor/play、src/tools/editor 或根目录宿主。普通玩法和工具 UI 不需要逐函数导出。静态发布入口 `src/game` 只导入 core；仅做 Web 时可省略 editor 与 core_editor，保留 game/core。
 
-`src/core_editor/editor.odin` 提供用 ImGui 实现的编辑面板，默认停靠右侧，F1 收起/打开，游戏绘制到中央 Dock 区域，自带界面字号设置（建议值按显示器计算，作为编辑器偏好存进用户存储的独立文件，不写内容文档）；游戏与编辑器 UI 一起热重载。DLL 拥有游戏实例、编辑会话、ImGui 上下文、UI 与待处理命令，常驻入口只保留窗口、资源和不透明模块实例。组合快照保留游戏状态、面板开关、Dock 布局（ImGui ini 文本）与待处理命令；UI 对象和瞬时输入重建，按住的鼠标须先松开才允许新操作。监听 core_editor 与 core（含子包）；editor 入口、core/services.odin 的服务协议/资源初始化、core/args_native.odin、olib 或工具链变化需重启。服务协议结构变化还须升级 SERVICES_VERSION。core 和 game 不导入 core_editor 或 editor；任何包都不能导入入口。内容文档、保存和撤销遵循 [编辑工具开发约定](editor-guidelines.md)。
+`src/editor/main.odin` 默认开启开发控制台（`kit/app` 的 `Cli_Console`）：开发版是控制台程序，窗口旁的终端可输入命令，自带 status/retry/perf/quit，项目在 `console_open` 中注册更多宿主命令；`src/game` 不引用 `kit/app` 的控制台，发布用 `-subsystem:windows`。`src/core_editor/editor.odin` 提供用 ImGui 实现的编辑面板，按钮默认使用 olib 内置图标（`ICON_NAMES` + `imgui_foster.IconButton`），默认停靠右侧，F1 收起/打开，游戏绘制到中央 Dock 区域，自带界面字号设置（建议值按显示器计算，作为编辑器偏好存进用户存储的独立文件，不写内容文档）；游戏与编辑器 UI 一起热重载。DLL 拥有游戏实例、编辑会话、ImGui 上下文、UI 与待处理命令，常驻入口只保留窗口、资源和不透明模块实例。组合快照保留游戏状态、面板开关、Dock 布局（ImGui ini 文本）与待处理命令；UI 对象和瞬时输入重建，按住的鼠标须先松开才允许新操作。监听 core_editor 与 core（含子包）；editor 入口、core/services.odin 的服务协议/资源初始化、core/args_native.odin、olib 或工具链变化需重启。服务协议结构变化还须升级 SERVICES_VERSION。core 和 game 不导入 core_editor 或 editor；任何包都不能导入入口。内容文档、保存和撤销遵循 [编辑工具开发约定](editor-guidelines.md)。
 
 文件装载起步可按文件放在 `core`；需要给独立工具复用时再提取配置和装载包，依赖方向按 dod-guidelines 第 2 节。根目录 `tools/` 保留给无界面的构建期工具；独立交互工具入口需要时放 `src/tools/<name>`。
 

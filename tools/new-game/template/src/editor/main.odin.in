@@ -7,6 +7,7 @@ import "core:strings"
 
 import reload "olib:core/hotreload"
 import foster "olib:foster"
+import kit_app "olib:kit/app"
 import r2d "olib:kit/rendering/2d"
 import mat "olib:kit/rendering/material"
 import perf "olib:kit/tools/perf_overlay"
@@ -25,6 +26,8 @@ Editor_App :: struct {
 	watch: reload.Watch,
 	feedback: Feedback,
 	perf: perf.Overlay, // F3 悬浮性能面板，常驻宿主，热重载不清空历史
+	// 开发控制台：读窗口旁终端的输入，命令在 update 中于主线程执行。只在本入口，发布入口不引用。
+	console: kit_app.Cli_Console,
 	root, sources, library: string,
 	status: reload.Build_Status,
 	failed: bool,
@@ -82,12 +85,31 @@ startup :: proc(app: ^foster.App) {
 	}), "watch initialization") {
 		return
 	}
+	console_open(s)
 	fmt.println("Save src/core or src/core_editor for game and Editor UI reload. F1 panel; F3 perf; F5 retry; Escape exit.")
+}
+
+// 没有 stdin（重定向关闭或无终端）时不开启，编辑器照常运行。
+console_open :: proc(s: ^Editor_App) {
+	c := &s.console
+	if !kit_app.cli_open(c, s.services.app) do return
+	kit_app.cli_register(c, "retry", "立即重新编译 DLL（同 F5）", proc(_: string, ud: rawptr) {
+		reload.watch_retry(&(^Editor_App)(ud).watch)
+	}, s)
+	kit_app.cli_register(c, "perf", "显示/隐藏性能面板（同 F3）", proc(_: string, ud: rawptr) {
+		s := (^Editor_App)(ud)
+		s.perf.visible = !s.perf.visible
+	}, s)
+	kit_app.cli_register(c, "status", "打印编译状态与已加载版本", proc(_: string, ud: rawptr) {
+		s := (^Editor_App)(ud)
+		fmt.printfln("status=%v revision=%d live=%v", s.watch.status, s.session.revision, reload.is_live(&s.session))
+	}, s)
 }
 
 shutdown :: proc(app: ^foster.App) {
 	s := foster.AppGetUserDataAs(app, Editor_App)
 	_ = SDL.WaitForGPUIdle(app.GraphicsDevice.Device)
+	kit_app.cli_dispose(&s.console)
 	check(s, reload.dispose(&s.session), "module disposal")
 	reload.watch_dispose(&s.watch)
 	feedback_dispose(&s.feedback)
@@ -98,6 +120,7 @@ shutdown :: proc(app: ^foster.App) {
 update :: proc(app: ^foster.App) {
 	s := foster.AppGetUserDataAs(app, Editor_App)
 	if s.failed do return
+	kit_app.cli_update(&s.console)
 	k := &app.Input.State.Keyboard
 	if foster.KeyboardPressed(k, .Escape) do foster.Exit(app)
 	if foster.KeyboardPressed(k, .F5) do reload.watch_retry(&s.watch)
